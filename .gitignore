@@ -1,0 +1,12 @@
+node_modules/
+client/node_modules/
+client/dist/
+.DS_Store
+*.log
+npm-debug.log*
+.env
+.env.*
+!.env.example
+
+# ไฟล์ตัวละคร (รูป/วิดีโอ/เพลง) ย้ายไปเก็บบน Cloudflare R2 แล้ว ไม่ track ใน git อีกต่อไป
+client/public/characters/
