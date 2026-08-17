@@ -12,7 +12,10 @@ const YUNA_NAME = "ยูนะ";
 const YUNA_IMG = "/characters/yuna/yuna.png";
 const YUNA_VIDEO = "/characters/yuna/YuNa_open.mp4";
 const YUNA_COLOR = "#c9a7ff";
-const YUNA_INTRO_SECONDS = 12; // วีดีโอจริงยาว ~10.2 วิ + เผื่อจังหวะ Persona build-up ฝั่ง client ~1.2 วิ
+// วีดีโอจริงวัดแล้วยาว 10.21 วิ (ffprobe) + build-up ฝั่ง client 1.2 วิ ก่อนวีดีโอเริ่ม mount+เล่น = ต้องการอย่างน้อย ~11.4 วิ
+//  ค่าเดิม 12 วิ เหลือ margin แค่ ~0.6 วิ (ยิ่งแคบลงอีกตอนที่วีดีโอโหลดจาก Cloudflare R2 แทน localhost — ดีเลย์เครือข่ายกินเข้าไปอีก)
+//  เผื่อ margin ให้กว้างขึ้นเป็น ~1.5 วิ กัน CDN/decode latency ตัดวีดีโอสั้นก่อนจบจริง
+const YUNA_INTRO_SECONDS = 13;
 
 const YUNA_MUSIC = { longing: "yuna_longing", delete: "yuna_delete", smile: "yuna_smile", beatbark: "yuna_beatbark" };
 const YUNA_CUTSCENE_TITLE = { longing: "Longing", delete: "Delete", smile: "Smile for You", beatbark: "Break Beat Bark!" };

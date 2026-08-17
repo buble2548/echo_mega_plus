@@ -130,7 +130,9 @@ function YunaCutscene({ cs }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black overflow-hidden">
-      <AnimatePresence mode="wait">
+      {/* mode="wait" ออก — เดิมรอให้สเตจ 0 เฟดออกจบก่อน (250ms) ค่อยmountวีดีโอ กินเวลาจากงบรวมเพิ่มโดยไม่จำเป็น
+          ตอนนี้วีดีโอ mount+เริ่มโหลด/เล่นทันทีตอนสเตจเปลี่ยน ซ้อนทับช่วงเฟดออกของสเตจ 0 แทน */}
+      <AnimatePresence>
         {stage === 0 ? (
           <motion.div key="buildup" className="absolute inset-0 grid place-items-center overflow-hidden" exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
             <div className="p-curtain">
@@ -986,19 +988,35 @@ function StatusChips({ p, left, compact, max = 5 }) {
   const overflow = compact ? items.length - shown.length : 0;
   return (
     <div className={`flex flex-wrap gap-1 ${left ? "justify-start" : "justify-center"} mt-1`}>
-      {shown.map((it) => (
-        <span
-          key={it.key}
-          title={`${it.label}${it.amt > 0 ? ` +${it.amt}` : ""}${it.v > 1 ? ` x${it.v}` : ""} — ${it.desc}`}
-          className={
-            compact
-              ? `w-5 h-5 grid place-items-center text-[11px] rounded-[4px] font-bold border border-black/25 shadow shrink-0 ${it.cls}`
-              : `text-xs px-1.5 py-0.5 rounded-md font-bold border border-black/25 shadow ${it.cls}`
-          }
-        >
-          {compact ? it.icon : <>{it.icon}{it.label}{it.amt > 0 ? ` +${it.amt}` : ""}{it.v > 1 ? ` ${it.v}` : ""}</>}
-        </span>
-      ))}
+      {shown.map((it) => {
+        // เลขจำนวนสถานะทับซ้อน — โชว์ทั้งโหมด compact (การ์ดผู้เล่นอื่น) ด้วย ไม่ใช่แค่แผงตัวเอง
+        //  เดิม compact = ไอคอนล้วน ผู้เล่นอื่นมองไม่เห็นว่าสถานะทับซ้อนกี่ชั้น ต้องแตะดูรายละเอียดถึงจะรู้
+        const num = it.amt > 0 ? it.amt : (it.v > 1 ? it.v : null);
+        return (
+          <span
+            key={it.key}
+            title={`${it.label}${it.amt > 0 ? ` +${it.amt}` : ""}${it.v > 1 ? ` x${it.v}` : ""} — ${it.desc}`}
+            className={
+              compact
+                ? `relative w-5 h-5 grid place-items-center text-[11px] rounded-[4px] font-bold border border-black/25 shadow shrink-0 ${it.cls}`
+                : `text-xs px-1.5 py-0.5 rounded-md font-bold border border-black/25 shadow ${it.cls}`
+            }
+          >
+            {compact ? (
+              <>
+                {it.icon}
+                {num != null && (
+                  <span className="absolute -bottom-1 -right-1 text-[8px] font-black bg-black text-white rounded-full min-w-[12px] h-[12px] px-0.5 grid place-items-center leading-none border border-white/40">
+                    {num}
+                  </span>
+                )}
+              </>
+            ) : (
+              <>{it.icon}{it.label}{it.amt > 0 ? ` +${it.amt}` : ""}{it.v > 1 ? ` ${it.v}` : ""}</>
+            )}
+          </span>
+        );
+      })}
       {overflow > 0 && (
         <span
           className="w-5 h-5 grid place-items-center text-[10px] font-black rounded-[4px] bg-black/65 border border-white/25 text-white shrink-0"
@@ -3015,7 +3033,10 @@ export default function Game({ state, lowQ }) {
           {/* หมายเหตุ: ตามคำขอผู้ใช้ — เอาแถบข้อความแจ้งเตือน/สถานะเทิร์นออกทั้งหมดแล้ว ห้ามมีข้อความ
               โผล่ตรงจุดนี้อีก (เดิมเคยมี noDraw/atCap/done/ATTACK/skill-lock ฯลฯ) */}
 
-          <div className="w-full max-w-[1580px] mx-auto flex items-end justify-between gap-2 sm:gap-3 flex-wrap lg:flex-nowrap">
+          {/* บั๊กเดิม: lg:flex-nowrap บังคับแถวเดียวตั้งแต่จอกว้าง 1024px ขึ้นไป แต่เนื้อหาจริงต้องการพื้นที่ ~1500px+ ถึงจะพอไม่ล้น
+              ทำให้จอ 1024-1480px (ความละเอียดโน้ตบุ๊คที่พบบ่อยมาก เช่น 1366x768) กลุ่มขวา (กระเป๋า/ร้านค้า) ถูกดันล้นออกนอกจอขวาไปเลย มองไม่เห็น
+              เอา lg:flex-nowrap ออก — ปล่อยให้ wrap ตามธรรมชาติ (ตัด/ล้นเฉพาะตอนพื้นที่ไม่พอจริงๆ ไม่ใช่บังคับตายตัวตามความกว้างจอ) */}
+          <div className="w-full max-w-[1580px] mx-auto flex items-end justify-between gap-2 sm:gap-3 flex-wrap">
             {/* ซ้าย: ตัวละคร + เลือด/เกราะ + สถานะ — ไม่มีกล่องพื้นหลังทึบ ใช้ text-hard คุมความคมชัด */}
             <div className="flex items-start gap-2 shrink-0">
               <button
