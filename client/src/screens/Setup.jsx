@@ -73,7 +73,7 @@ export default function Setup({ taken, initialName = "", initialPos = null, onNe
           >
             By Phujim@ru
             <br />
-            เวอร์ชัน 3.0
+            เวอร์ชัน 3.0 beta
           </p>
         </div>
       </div>

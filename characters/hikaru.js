@@ -51,7 +51,7 @@ module.exports = {
   activateMonster(engine, p) {
     engine.triggerCutscene(p, "monster");
     const healed = engine.healArmor(p, HIKARU_MONSTER_ARMOR_HEAL);
-    engine.log(`🛡️ ${p.name} MonsterLive — เพดานเกราะ +2 และฟื้นเกราะ +${healed} (คงอยู่ ${HIKARU_MONSTER_TURNS} เทิร์น — เกราะที่เสียจะฟื้นเป็นเลือดแทน และความเสียหายที่ได้รับ -1)`);
+    engine.log(`🛡️ ${p.name} MonsterLive — เพดานเกราะ +2 และฟื้นเกราะ +${healed} (คงอยู่ ${HIKARU_MONSTER_TURNS} เทิร์น — เกราะที่เสียจะฟื้นเป็นเลือดแทน)`);
   },
 
   // เรียกจาก useSkill() ในส่วน effect — Ultlive Ultraman Ginga (สกิลรอง 1): แปลงร่าง Ginga ทันทีก่อนเปิดไพ่

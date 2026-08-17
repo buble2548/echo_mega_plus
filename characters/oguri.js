@@ -7,8 +7,8 @@
 //  damage-sum, useSkill's ultimate-selection gate) — เปิดผ่าน engine.oguriGoldStacks(p) ฯลฯ แทน
 // ============================================================
 
-const OGURI_CHARGE_GAIN_MIN = 8;   // Stamina ชาร์จ: ได้รับทุกเทิร์น 8-16 หน่วย (สุ่ม)
-const OGURI_CHARGE_GAIN_MAX = 16;
+const OGURI_CHARGE_GAIN_MIN = 6;   // Stamina ชาร์จ: ได้รับทุกเทิร์น 6-12 หน่วย (สุ่ม) — Rework: เดิม 8-16
+const OGURI_CHARGE_GAIN_MAX = 12;
 const OGURI_CHARGE_CAP_MAX_BONUS = 48; // Training: เพิ่มความจุได้สูงสุดสะสม +48 (รวมเพดานสูงสุด 100 — engine.oguriChargeCapOf(p) คำนวณเพดานจริง)
 const OGURI_GOLD_TURNS = 6;        // ยุคทอง อยู่ 6 เทิร์น (รีเฟรชเมื่อได้แต้มใหม่)
 const OGURI_GRAYBEAST_SP_TURNS = 2; // GrayBeast: แต้มสกิล +1 ทุก 2 เทิร์น (Energy +1 ได้ทุกเทิร์น)
@@ -18,8 +18,8 @@ const OGURI_BURNOUT_DECAY_TURNS = 2; // Burnout: มอบสถานะผุ�
 const OGURI_BREAKFAST_HEAL = 1;    // Breakfast: ฟื้นเลือด 1
 const OGURI_BREAKFAST_ENERGY = 4;  // Breakfast: Energy +4 ปกติ (Burnout ลดเหลือ +2)
 const OGURI_TRAIN_ENERGY_COST = 4; // Training: หัก Energy 4
-const OGURI_TRAIN_CAP_GAIN_MIN = 4; // Training: เพิ่มความจุ Stamina ชาร์จ 4-8 หน่วย (สุ่ม)
-const OGURI_TRAIN_CAP_GAIN_MAX = 8;
+const OGURI_TRAIN_CAP_GAIN_MIN = 3; // Training: เพิ่มความจุ Stamina ชาร์จ 3-7 หน่วย (สุ่ม) — Rework: เดิม 4-8
+const OGURI_TRAIN_CAP_GAIN_MAX = 7;
 const OGURI_TRAIN_BASE = 0.6;      // โอกาสฝึกฝนสำเร็จพื้นฐาน 60%
 const OGURI_TRAIN_BONUS_RATE = 0.8; // บัฟ Bonus ทำงานอยู่: โอกาสสำเร็จเพิ่มเป็น 80%
 const OGURI_TRAIN_FAIL_DMG = 1;    // ฝึกฝนล้มเหลว: ดาเมจ 1 หน่วยไม่สนเกราะ
@@ -88,12 +88,12 @@ module.exports = {
       }
       engine.log(`🐴 ${p.name} GrayBeast — Energy +1 (${p.oguriEnergy}/${engine.OGURI_ENERGY_MAX})${spMsg}`);
     }
-    // Energy หมด + ไม่มียุคทอง -> เข้าสู่ร่างหมดแรง (Burnout) 2 เทิร์น
-    if ((p.oguriEnergy || 0) <= 0 && engine.oguriGoldStacks(p) <= 0) {
+    // Energy หมด -> เข้าสู่ร่างหมดแรง (Burnout) 2 เทิร์น (Rework: ไม่เช็คยุคทองอีกต่อไป — แม้อยู่ร่าง Zone ก็เข้าได้ถ้า Energy หมด)
+    if ((p.oguriEnergy || 0) <= 0) {
       const wasOn = (p.statuses.burnout || 0) > 0;
       p.statuses.burnout = OGURI_BURNOUT_TURNS;
       p.statuses.decay = Math.max(p.statuses.decay || 0, OGURI_BURNOUT_DECAY_TURNS);
-      if (!wasOn) engine.log(`🐴💦 ${p.name} Energy หมดและไม่มียุคทอง — เข้าสู่ร่างหมดแรง (Burnout)! Breakfast ได้ Energy ลดลง -${OGURI_BURNOUT_ENERGY_PENALTY} และติดผุพัง ${OGURI_BURNOUT_DECAY_TURNS} เทิร์น`);
+      if (!wasOn) engine.log(`🐴💦 ${p.name} Energy หมด — เข้าสู่ร่างหมดแรง (Burnout)! Breakfast ได้ Energy ลดลง -${OGURI_BURNOUT_ENERGY_PENALTY} และติดผุพัง ${OGURI_BURNOUT_DECAY_TURNS} เทิร์น`);
     }
     // Sunny Day: ได้รับโชคลาภ +1 ทุกเทิร์นที่มีบัฟนี้
     if ((p.statuses.sunny || 0) > 0) {
@@ -126,8 +126,9 @@ module.exports = {
     if (Math.random() < successRate) {
       engine.addSkill(p, 1);
       p.statusAmt = p.statusAmt || {};
+      const wasGoldMaxed = (p.statusAmt.goldenera || 0) >= engine.OGURI_GOLD_MAX; // Rework: เต็ม 3 อยู่แล้วก่อนหน้า -> ไม่ต่อเวลาให้อีก กันร่าง Zone ค้างถาวร
       p.statusAmt.goldenera = Math.min(engine.OGURI_GOLD_MAX, (p.statusAmt.goldenera || 0) + 1);
-      p.statuses.goldenera = OGURI_GOLD_TURNS; // รีเฟรชเวลาทุกครั้งที่ได้แต้มใหม่
+      if (!wasGoldMaxed) p.statuses.goldenera = OGURI_GOLD_TURNS; // รีเฟรชเวลาเฉพาะตอนยังไม่เต็ม 3 (รวมครั้งที่เพิ่งครบ 3 พอดี)
       // ฝึกฝนสำเร็จ: โอกาส 25% ได้บัฟเสริมเพิ่มอีก 1 อัน — Flow 40% / Bonus 40% / Sunny Day 20%
       let extraMsg = "";
       if (Math.random() < OGURI_TRAIN_EXTRA_ROLL) {

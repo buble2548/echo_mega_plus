@@ -24,7 +24,7 @@ export default function Splash({ onEnter }) {
           แตะที่รูปภาพเพื่อเริ่ม
         </div>
         <div className="absolute bottom-8 right-4 text-white font-bold text-sm drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
-          เวอร์ชัน 2.2.2 full
+          เวอร์ชัน 3.0 beta
         </div>
       </button>
     </div>

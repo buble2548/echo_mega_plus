@@ -572,8 +572,8 @@ const OGURI_ENERGY_START = 8;      // Energy: เริ่มเกมได้�
 const OGURI_ENERGY_MAX = 16;       // Energy สะสมสูงสุด
 const OGURI_CHARGE_BASE_CAP = 52;  // Stamina ชาร์จ: ความจุพื้นฐาน
 const OGURI_CHARGE_CAP_MAX_BONUS = 48; // Training: เพิ่มความจุได้สูงสุดสะสม +48 (รวมเพดานสูงสุด 100)
-const OGURI_CHARGE_GAIN_MIN = 8;   // Stamina ชาร์จ: ได้รับทุกเทิร์น 8-16 หน่วย (สุ่ม)
-const OGURI_CHARGE_GAIN_MAX = 16;
+const OGURI_CHARGE_GAIN_MIN = 6;   // Stamina ชาร์จ: ได้รับทุกเทิร์น 6-12 หน่วย (สุ่ม) — Rework: เดิม 8-16 (ค่าจริงที่ใช้คำนวณอยู่ใน characters/oguri.js)
+const OGURI_CHARGE_GAIN_MAX = 12;
 const OGURI_GOLD_MAX = 3;          // ยุคทอง สะสมสูงสุด (Rework: เดิม 2 -> 3)
 const OGURI_GOLD_TURNS = 6;        // ยุคทอง อยู่ 6 เทิร์น (รีเฟรชเมื่อได้แต้มใหม่)
 const OGURI_GOLD_ATK_PER = 1;      // ยุคทอง: พลังโจมตีพื้นฐาน +1 ทุกๆแต้มที่ติดอยู่บนตัว
@@ -586,8 +586,8 @@ const OGURI_BURNOUT_DECAY_TURNS = 2; // Burnout: มอบสถานะผุ�
 const OGURI_BREAKFAST_HEAL = 1;    // Breakfast: ฟื้นเลือด 1
 const OGURI_BREAKFAST_ENERGY = 4;  // Breakfast: Energy +4 ปกติ (Burnout ลดเหลือ +2)
 const OGURI_TRAIN_ENERGY_COST = 4; // Training: หัก Energy 4 (เดิมหัก Stamina)
-const OGURI_TRAIN_CAP_GAIN_MIN = 4; // Training: เพิ่มความจุ Stamina ชาร์จ 4-8 หน่วย (สุ่ม)
-const OGURI_TRAIN_CAP_GAIN_MAX = 8;
+const OGURI_TRAIN_CAP_GAIN_MIN = 3; // Training: เพิ่มความจุ Stamina ชาร์จ 3-7 หน่วย (สุ่ม) — Rework: เดิม 4-8 (ค่าจริงที่ใช้คำนวณอยู่ใน characters/oguri.js)
+const OGURI_TRAIN_CAP_GAIN_MAX = 7;
 const OGURI_TRAIN_BASE = 0.6;      // โอกาสฝึกฝนสำเร็จพื้นฐาน 60%
 const OGURI_TRAIN_BONUS_RATE = 0.8; // บัฟ Bonus ทำงานอยู่: โอกาสสำเร็จเพิ่มเป็น 80%
 const OGURI_TRAIN_FAIL_DMG = 1;    // ฝึกฝนล้มเหลว: ดาเมจ 1 หน่วยไม่สนเกราะ
@@ -604,7 +604,7 @@ const OGURI_ULT_CHARGE_COST = 35;  // The Beat of Victory: Stamina ชาร์�
 const OGURI_ULT_ATK_BONUS = 2;     // ชนะ: พลังโจมตีพื้นฐาน +2 (ซ้อนทับกับยุคทองได้)
 const OGURI_ULT_NOREGEN_TURNS = 2; // เป้าหมาย: เกินเยียวยา 2 เทิร์น
 const OGURI_ULT_STAGGER_TURNS = 2; // เป้าหมาย: ชะงัก 2 เทิร์น (ฟื้นฟูแต้มสกิลไม่ได้)
-const OGURI_ULT2_CHARGE_COST = 75; // Ashen Trail: Stamina ชาร์จ 75 (ต้องมียุคทองครบด้วย)
+const OGURI_ULT2_CHARGE_COST = 80; // Ashen Trail: Stamina ชาร์จ 80 (ต้องมียุคทองครบด้วย) — Rework: เดิม 75
 const OGURI_ASHEN_DRAWS = 2;     // Ashen Trail: บังคับทุกคนจั่วเพิ่ม 2 ใบ
 const OGURI_ASHEN_DMG = 2;       // Ashen Trail: โจมตีทุกคนที่ไพ่แตกหลังเปิดไพ่
 const OGURI_ASHEN_CARD_BONUS = 8; // Ashen Trail: คู่ต่อสู้ทุกคนบวกแต้มการ์ด +8
@@ -1364,7 +1364,6 @@ function resetCombat(p) {
   p.tempHp = 0;           // แกมเบลอร์: เลือดชั่วคราวจากฮีลล้น
   p.tempHpTurns = 0;      // เลือดชั่วคราวหายเองเมื่อครบ 2 เทิร์น
   p.anataTargets = null;  // เป้าหมาย ANATA WAAAAAAAA (ลับจนกว่าจะเปิดไพ่)
-  p.nightmareTarget = null; // เป้าหมายฝันร้ายยามค่ำคืน (โอเบรอน — ทำงานหลังเปิดไพ่)
   p.sunriseDrop = 0; // โอเบรอน: จำนวนเทิร์นที่พลังชีวิตจะลดลงเทิร์นละ 1 อัตโนมัติ (หลังโดนฮีล 5)
   p.sleepFresh = false; // หลับไหล: เทิร์นที่เพิ่งโดนกล่อมยังไม่เริ่มนับ/ยังโจมตีได้
   p.appleItem = "drink"; // Apple guy: ของส่งมอบที่เลือกอยู่ (ค่าเริ่มต้น เครื่องดื่มชูกำลัง)
@@ -1989,7 +1988,6 @@ function dealRound() {
     // เทเปา (patch 2.2 new): ทำอาหาร/ครุ่นคิด/ฉากหลังไม้ตาย นับถอยหลังที่ endTurn() แทน (ต้องอ่านค่าก่อนลดเพื่อรู้ "เทิร์นสุดท้าย" ให้ตรง)
     p.bardNotesUsed = 0;      // Bard: นับโน้ตใหม่ทุกเทิร์น (จำกัด 2 — มิติวิญญาณไม่จำกัด)
     p.anataTargets = null;
-    p.nightmareTarget = null;
     p.hakunoLowDraw = false; // ข้าขอบัญชา (หญิง คิชินามิ ฮาคุโนะ): จำกัดจั่ว 2/3 แต้ม เฉพาะเทิร์นที่ใช้เท่านั้น
     // ห้ามจั่วการ์ดเพิ่มที่ตั้งไว้จากเทิร์นก่อน (ทงคัสสึ / กำไรเท่าตัวโว้ย) — noDrawNext เป็นจำนวนเทิร์น
     if (p.noDrawNext) {
@@ -2382,6 +2380,8 @@ function useSkill(id, tier, targets, item) {
   const isVictoryBeat = isOguri && tier === "ultimate" && !isAshenTrail;
   if (isOguriTrain && (p.oguriEnergy || 0) < OGURI_TRAIN_ENERGY_COST) return; // Energy ไม่พอ
   if (isVictoryBeat && (p.stamina || 0) < OGURI_ULT_CHARGE_COST) return;  // Stamina ชาร์จไม่พอ
+  // ยุคทองครบ 3 แต้ม: Training ใช้แต้มสกิลลดลง -1 (ใช้งานได้บ่อยขึ้น)
+  if (isOguriTrain && oguriGoldStacks(p) >= OGURI_GOLD_MAX) cost = Math.max(0, cost - 1);
   // ---------- ซาโตรุ อาเคฟุ (characters/satoru.js) ----------
   const isSatoru = p.characterId === "satoru";
   if (isSatoru && tier === "ultimate") return; // Wonder of U ทำงานอัตโนมัติ — กดเองไม่ได้
@@ -2463,19 +2463,16 @@ function useSkill(id, tier, targets, item) {
   if (p.characterId === "miyako" && tier === "basic" && (p.statuses.miyakoHeal || 0) > 0) return;
   // เพลงหมัด อาริมะ (อาริมะ มิยาโกะ): กดซ้ำไม่ได้จนกว่าจะได้โจมตี
   if (p.characterId === "miyako" && tier === "secondary" && (p.statuses.miyakoCombo || 0) > 0) return;
-  // รุ่งอรุณแห่งวันใหม่ / ฝันร้ายยามค่ำคืน (โอเบรอน สกิลรอง, characters/oberon.js)
+  // รุ่งอรุณแห่งวันใหม่ (โอเบรอน สกิลรองกลางวัน, characters/oberon.js)
   const isSunrise = p.characterId === "oberon" && tier === "secondary" && !isNightRound(roundNumber);
   let sunriseTarget = null;
   if (isSunrise) {
     sunriseTarget = CHAR_HOOKS.oberon.prepareSunriseTarget(engine, targets);
     if (!sunriseTarget) return;
   }
+  // ฝันร้ายยามค่ำคืน (โอเบรอน สกิลรองกลางคืน, characters/oberon.js): self-buff ไม่มีเป้าหมาย — กดซ้ำไม่ได้ระหว่างมีผล
   const isNightmare = p.characterId === "oberon" && tier === "secondary" && isNightRound(roundNumber);
-  let nightmareTarget = null;
-  if (isNightmare) {
-    nightmareTarget = CHAR_HOOKS.oberon.prepareNightmareTarget(engine, p, targets);
-    if (!nightmareTarget) return;
-  }
+  if (isNightmare && (p.statuses.oberonSickle || 0) > 0) return;
   // เอาไปสิ (Apple guy สกิลรอง, characters/appleguy.js): เลือกผู้เล่น 1 คน (คนอื่นเท่านั้น) มอบของที่เลือกไว้ทันทีก่อนเปิดการ์ด
   const isAppleGive = p.characterId === "appleguy" && tier === "secondary";
   let appleTarget = null;
@@ -2643,10 +2640,7 @@ function useSkill(id, tier, targets, item) {
     const r = CHAR_HOOKS.oberon.applySunriseEffect(engine, p, sunriseTarget, skill.name);
     if (r) flashSuffix = r;
   }
-  if (isNightmare) {
-    const r = CHAR_HOOKS.oberon.applyNightmareEffect(engine, p, nightmareTarget, skill.name);
-    if (r) flashSuffix = r;
-  }
+  if (isNightmare) CHAR_HOOKS.oberon.activateNightmare(engine, p);
   // ---------- โทโนะ ชิกิ: มีดพับประจำตระกูล — เลือกระดับสกิลติดตัว 1-5 (กดเปลี่ยนกี่ครั้งก็ได้) (characters/tohno.js) ----------
   if (isTohnoPick) {
     flashSuffix = CHAR_HOOKS.tohno.applyBasicPick(engine, p, item);
@@ -3187,8 +3181,6 @@ function resolveRound() {
   }
 
   if (best !== worst) {
-    // การหลับไหลอันไม่สิ้นสุด (สกิลติดตัวโอเบรอน): ผู้แพ้ที่ติดทั้ง "การตื่นขึ้น" และ "ยามฟ้าสาง" เจ็บขึ้น +1
-    const oberonHere = combatants.some((q) => q.characterId === "oberon");
     for (const l of combatants.filter((p) => val(p) === worst && p.id !== roundWinnerId)) {
       l.isLoser = true;
       l.result = "lose";
@@ -3222,14 +3214,7 @@ function resolveRound() {
         continue;
       }
       const armorBefore = l.armor;
-      // การหลับไหลอันไม่สิ้นสุด: ติดทั้งการตื่นขึ้น + ยามฟ้าสาง -> ดาเมจแตก/แพ้ +1
-      // และล้าง "การตื่นขึ้น" ออก 1 หน่วยทุกครั้งที่เกิดผล
-      const dawnExtra = (oberonHere && (l.statuses.awaken || 0) > 0 && (l.statuses.dawn || 0) > 0) ? 1 : 0;
-      if (dawnExtra > 0) {
-        l.statuses.awaken--;
-        if (l.statuses.awaken <= 0) delete l.statuses.awaken;
-      }
-      let lossDmg = 1 + dawnExtra;
+      let lossDmg = 1;
       // เต็มอิ่ม (Breakfast โอกูริ patch 2.0.8.1): ดาเมจที่ได้รับ -1 (รวมดาเมจแพ้จั่ว/แตก)
       if ((l.statuses.fullbelly || 0) > 0 && lossDmg > 0) {
         lossDmg = Math.max(0, lossDmg - 1);
@@ -3246,7 +3231,7 @@ function resolveRound() {
       maybeBeatSave(l);
       addSkill(l, 1); // โดนความเสียหายเพราะแต้มห่างจาก 21 มากที่สุด +1
       firePassive(l, "lose");
-      lastLog.push(`${l.name} แต้มน้อยสุด รับความเสียหาย -${lossDmg}${dawnExtra > 0 ? " (การหลับไหลอันไม่สิ้นสุด +1)" : ""}`);
+      lastLog.push(`${l.name} แต้มน้อยสุด รับความเสียหาย -${lossDmg}`);
     }
   }
   for (const p of combatants) if (!p.result) p.result = "safe";
@@ -3264,7 +3249,6 @@ function resolveRound() {
   for (const { u, t } of anataProcs) {
     if (!t.alive || !(bustedOf(t) || t.isLoser)) continue;
     let dmg = songActive(u) ? (u.songAtk || 0) : 0;
-    if ((t.statuses.monster || 0) > 0) dmg = Math.max(0, dmg - 1); // ร่างไคจูรับเบาลง 1
     dealDirect(t, dmg); // patch 2.0.6: การขิงทำดาเมจแบบไม่สนเกราะ
     maybeBeatSave(t); // กันตายทำงานทันทีถ้าโดนขิงจนถึงตาย
     t.wasAttacked = true;
@@ -3308,8 +3292,6 @@ function resolveRound() {
 // เปิดร่างท่าไม้ตาย (หลังเปิดไพ่) -> cutscene ก่อนสรุปผล (สรุปผลไว้ท้ายสุดเสมอ)
 //  หมายเหตุ: สกิลทั่วไปไม่มีแบนเนอร์ก่อนสรุปผลแล้ว — instant เด้งตอนใช้ / หลังเปิดไพ่ไปโชว์ตอนโจมตี
 function afterResolve() {
-  // ฝันร้ายยามค่ำคืน (โอเบรอน, characters/oberon.js): ทำงานหลังเปิดการ์ด — เป้าหมายเดี่ยว
-  CHAR_HOOKS.oberon.resolveNightmareEffects(engine);
   // ---------- เทเปา (characters/tepeu.js): นายเป็นคนทำตัวเองนะ — ผลสังหาร/พลาดทำงานหลังเปิดไพ่ทุกคน ----------
   CHAR_HOOKS.tepeu.resolveAllKills(engine);
   // ---------- Ashen Trail: Cinderella Gray (โอกูริ, characters/oguri.js): หลังเปิดไพ่ — โจมตีทุกคนที่ไพ่แตก ----------
@@ -3656,7 +3638,6 @@ function doAttack(byId, targetId) {
   }
   CHAR_HOOKS.kotone.onAttackConsumeCoins(engine, attacker, pigDmg);
   if (kotoneExhausted) lastLog.push(`🥱 ${attacker.name} พักผ่อนไม่พอจาก [โหมงานหนัก] — พลังโจมตีช่วงเช้าเหลือ 0`);
-  if ((target.statuses.monster || 0) > 0) dmg = Math.max(0, dmg - 1);
   // ชำระค่าบริการ (สกิลติดตัวเจ้าแห่งเน็ตบ้าน): คู่สัญญาโจมตีใส่ตัวละครนี้ ความเสียหายลด 1
   const contractGuard = target.characterId === "broadband_man" && target.contractPartner === attacker.id && attacker.contractWith === target.id;
   if (contractGuard) dmg = Math.max(0, dmg - 1);
@@ -3936,7 +3917,6 @@ function doAttack(byId, targetId) {
   if (isRival) addFx({ name: "ฉันไม่อยากให้เราต้องมาสู้กัน +1", img: TRANSFORMS.ntd.img, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
   if (unibeam2Atk) addFx(skillByStatus(attacker, "unibeam2"), "atk");
   if (attackerBeat) addFx({ name: "ประกายเขี้ยวปฏิปักษ์ (ทะลุเกราะ)", img: OHGER_FORM, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if ((target.statuses.monster || 0) > 0) addFx(skillByStatus(target, "monster"), "def");
   if (shieldBefore > target.shield) addFx({ name: "โล่ป้องกัน (กันความเสียหาย)", img: null, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
   if ((target.statuses.absorb || 0) > 0 && armorLost > 0) addFx(skillByStatus(target, "absorb"), "def");
   if (beatSaveFired) {
@@ -4471,7 +4451,7 @@ io.on('connection', (socket) => {
       gold: 0, inventory: [],
       doomWeapon: ch.id === "doomguy" ? DOOM_STARTING_WEAPON : null, doomQuickSwapUsed: false, doomCharge: 0,
       takutoComboReady: false, takutoUlt2VideoPending: false, takutoAwakenAt: 0,
-      tonkatsu: 0, songAtk: 0, noDrawNext: 0, anataTargets: null, nightmareTarget: null,
+      tonkatsu: 0, songAtk: 0, noDrawNext: 0, anataTargets: null,
       gamblerUses: GAMBLER_USES, profit: 0, tempHp: 0, tempHpTurns: 0, noSkillNext: 0,
       sunriseDrop: 0, sleepFresh: false,
       appleItem: "drink", appleAtkBuffs: [], chillDodge: 100, appleGiveUses: CHAR_HOOKS.appleguy.GIVE_USES,
@@ -4679,6 +4659,7 @@ const engine = {
   get oberonDevour() { return oberonDevour; },
   setOberonDevour(v) { oberonDevour = v; },
   setNightResetPending(v) { nightResetPending = v; },
+  extendNight(n) { cycleShift += n; }, // โอเบรอน Lie Like Vortigern (rework): ต่อเวลากลางคืนไปอีก n เทิร์นจากตำแหน่งปัจจุบัน (เลื่อน timeline ทั้งหมด ไม่ snap ไปจุดคงที่แบบ nightResetPending)
   // ยูนะ ไอดอลประจำสนาม
   get yunaEffect() { return yunaEffect; },
   get yunaWindowEnd() { return yunaWindowEnd; },

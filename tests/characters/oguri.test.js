@@ -122,7 +122,7 @@ test('applyTraining: success path grants skill +1, golden-era stack +1, and refr
   assert.equal(p.skillPoints, 1);
   assert.equal(p.statusAmt.goldenera, 1);
   assert.equal(p.statuses.goldenera, 6, 'refreshed to OGURI_GOLD_TURNS');
-  assert.ok(p.oguriChargeCapBonus >= 4 && p.oguriChargeCapBonus <= 8);
+  assert.ok(p.oguriChargeCapBonus >= 3 && p.oguriChargeCapBonus <= 7);
 });
 
 test('applyTraining: failure path deals 1 unblockable damage and does not grant skill/golden-era', () => {

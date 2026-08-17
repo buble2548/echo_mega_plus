@@ -33,13 +33,12 @@ function useViewport() {
 
 // เช็คว่าการ์ดคู่ต่อสู้คนนี้กดโจมตี/เลือกเป็นเป้าหมายได้ไหม — ใช้ร่วมกันทั้ง layout มือถือและจอใหญ่
 function isTargetable(p, iAmAttacker, c) {
-  return ((iAmAttacker && !p.statuses?.seal) || !!c.anataSel || c.dawnSel || c.nightSel || c.appleSel || c.bbSel || c.shSel || c.skSel || c.doomSel || c.saObSel || c.saLocaSel || c.bgSel || c.kawaiiSel || !!c.bardPending || c.nanayaSel || c.tpSel) && p.alive;
+  return ((iAmAttacker && !p.statuses?.seal) || !!c.anataSel || c.dawnSel || c.appleSel || c.bbSel || c.shSel || c.skSel || c.doomSel || c.saObSel || c.saLocaSel || c.bgSel || c.kawaiiSel || !!c.bardPending || c.nanayaSel || c.tpSel) && p.alive;
 }
 // แตะ/คลิกการ์ดคู่ต่อสู้แล้วต้องทำอะไร — ไล่ตามโหมดเลือกเป้าหมายที่เปิดอยู่ ไม่มีเลยก็โจมตีปกติ
 function resolveAttackPick(id, c) {
   if (c.anataSel) return c.pickAnata(id);
   if (c.dawnSel) return c.pickDawn(id);
-  if (c.nightSel) return c.pickNight(id);
   if (c.appleSel) return c.pickGive(id);
   if (c.bbSel) return c.pickBb(id);
   if (c.shSel) return c.pickSh(id);
@@ -836,10 +835,10 @@ const STATUS_INFO = {
   lai:       { icon: "🌞", label: "Goodfellow", cls: "bg-echo-gold text-gray-900", desc: "Lai Rhyme Goodfellow กำลังทำงาน" },
   vortigern: { icon: "🌑", label: "Vortigern", cls: "bg-echo-hp", desc: "Lie Like Vortigern: ราตรีกลืนกินครอบงำสนามจนกว่าฟ้าจะสาง" },
   veil:      { icon: "🌙", label: "ม่านราตรี", cls: "bg-echo-magenta", desc: "ม่านแห่งราตรี: พลังโจมตี +1 หน่วย" },
-  dawn:      { icon: "🌅", label: "ฟ้าสาง", cls: "bg-echo-gold text-gray-900", desc: "ยามฟ้าสาง: สะสมถาวร (สูงสุด 3) — Lie Like Vortigern จะกล่อมหลับตามจำนวนสแตค" },
-  awaken:    { icon: "⏰", label: "ตื่นขึ้น", cls: "bg-echo-cyan text-gray-900", desc: "การตื่นขึ้น: ฟื้นพลังชีวิตเทิร์นละ 1 — ถ้าติดคู่ยามฟ้าสาง ดาเมจแพ้/แตก +1 (เสียการตื่นขึ้น 1 เมื่อเกิดผล)" },
-  sleep:     { icon: "💤", label: "หลับไหล", cls: "bg-echo-hp", desc: "หลับไหล: ออกการกระทำใดๆ ไม่ได้ และเสียเลือด 1/เทิร์นไม่สนเกราะ (ไม่ถึงตาย — ค้างที่ 1)" },
-  nightmare: { icon: "🌘", label: "ฝันร้าย", cls: "bg-echo-magenta", desc: "ฝันร้ายยามค่ำคืน: หลังเปิดไพ่ เป้าหมายที่เลือกรับความเสียหาย 1 หน่วย — หากกำลังหลับไหล เพิ่มอีก 2 หน่วย" },
+  dawn:      { icon: "🌅", label: "ฟ้าสาง", cls: "bg-echo-gold text-gray-900", desc: "ยามฟ้าสาง: สะสมถาวร (สูงสุด 5) — Lie Like Vortigern จะกล่อมหลับตามจำนวนสแตค" },
+  awaken:    { icon: "⏰", label: "ตื่นขึ้น", cls: "bg-echo-cyan text-gray-900", desc: "การตื่นขึ้น: ฟื้นพลังชีวิตเทิร์นละ 1" },
+  sleep:     { icon: "💤", label: "หลับไหล", cls: "bg-echo-hp", desc: "หลับไหล: ออกการกระทำใดๆ ไม่ได้ และเสียเลือด 1/เทิร์นไม่สนเกราะ (ไม่ถึงตาย — ค้างที่ 1) — หายไปทันทีเมื่อเข้าเช้า" },
+  oberonSickle: { icon: "🌘", label: "เคียวยมทูต", cls: "bg-echo-magenta", desc: "เคียวยมทูต: การโจมตีปกติใส่เป้าหมายที่กำลังหลับไหลจะแรงขึ้น +2 หน่วย — กดซ้ำไม่ได้ระหว่างมีผล" },
   vortarmor: { icon: "🛡️", label: "เกราะราตรี", cls: "bg-echo-armor", desc: "Lie Like Vortigern: เพดานเกราะ +1 ชั่วคราว" },
   // ---------- Apple guy (patch 1.8) ----------
   energy:    { icon: "🥤", label: "ชูกำลัง", cls: "bg-echo-cyan text-gray-900", desc: "เครื่องดื่มชูกำลัง: ได้แต้มสกิล +1 แต่เสียพลัง 1 หน่วยต่อเทิร์นแบบความเสียหายธรรมดา (โดนเกราะก่อน ไม่ถึงตาย — ค้างที่ 1)" },
@@ -1925,7 +1924,6 @@ export default function Game({ state, lowQ }) {
   const [anataSel, setAnataSel] = useState(null); // เทมาริ: โหมดเลือกเป้าหมาย ANATA WAAAAAAAA (null = ไม่ได้เลือกอยู่)
   const [dawnSel, setDawnSel] = useState(false); // โอเบรอน: โหมดเลือกเป้าหมายรุ่งอรุณแห่งวันใหม่ (เลือกตัวเองได้)
   const [bgSel, setBgSel] = useState(false); // บานาจ: โหมดเลือกเป้าหมาย Absorb shield (เลือกตัวเองได้)
-  const [nightSel, setNightSel] = useState(false); // โอเบรอน: โหมดเลือกเป้าหมายฝันร้ายยามค่ำคืน (เลือกตัวเองไม่ได้)
   const [kawaiiSel, setKawaiiSel] = useState(false); // โคโตเนะ (patch 2.1.3): โหมดเลือกเป้าหมาย Sekai ichi kawaii watashi (เลือกตัวเองไม่ได้)
   const [appleOpen, setAppleOpen] = useState(false); // Apple guy: เมนูเลือกของส่งมอบ (สกิลพื้นฐาน)
   const [tohnoOpen, setTohnoOpen] = useState(false); // โทโนะ ชิกิ: เมนูเลือกระดับมีดพับประจำตระกูล (สกิลพื้นฐาน)
@@ -2139,10 +2137,10 @@ export default function Game({ state, lowQ }) {
     clickSound();
     // ท่าไม้ตายเทมาริ: เข้าโหมดเลือกเป้าหมาย 2 คนก่อน (ยังไม่ส่งไป server)
     if (tier === "ultimate" && ch?.id === "temari") { setAnataSel([]); setSkillOpen(false); return; }
-    // สกิลรองโอเบรอน: เข้าโหมดเลือกเป้าหมาย 1 คนก่อนส่งไป server
-    //  กลางวัน = รุ่งอรุณแห่งวันใหม่ (เลือกตัวเองได้) / กลางคืน = ฝันร้ายยามค่ำคืน (คนอื่นเท่านั้น)
-    if (tier === "secondary" && ch?.id === "oberon") {
-      if (nightNow) setNightSel(true); else setDawnSel(true);
+    // สกิลรองโอเบรอนกลางวัน (รุ่งอรุณแห่งวันใหม่): เข้าโหมดเลือกเป้าหมาย 1 คนก่อนส่งไป server (เลือกตัวเองได้)
+    //  กลางคืน (ฝันร้ายยามค่ำคืน) เป็น self-buff ไม่ต้องเลือกเป้าหมายแล้ว — ตกไปที่ path ปกติด้านล่าง
+    if (tier === "secondary" && ch?.id === "oberon" && !nightNow) {
+      setDawnSel(true);
       setSkillOpen(false);
       return;
     }
@@ -2260,7 +2258,7 @@ export default function Game({ state, lowQ }) {
     socket.emit("useSkill", { tier: "secondary", targets: [id] });
     setAppleSel(false);
   };
-  // เลือกเป้าหมายรุ่งอรุณแห่งวันใหม่ / ฝันร้ายยามค่ำคืน -> ส่งไป server ทันที
+  // เลือกเป้าหมายรุ่งอรุณแห่งวันใหม่ -> ส่งไป server ทันที
   const pickDawn = (id) => {
     socket.emit("useSkill", { tier: "secondary", targets: [id] });
     setDawnSel(false);
@@ -2269,10 +2267,6 @@ export default function Game({ state, lowQ }) {
   const pickBg = (id) => {
     socket.emit("useSkill", { tier: "basic", targets: [id] });
     setBgSel(false);
-  };
-  const pickNight = (id) => {
-    socket.emit("useSkill", { tier: "secondary", targets: [id] });
-    setNightSel(false);
   };
   // เลือกเป้าหมาย Sekai ichi kawaii watashi (โคโตเนะ patch 2.1.3) -> ส่งไป server ทันที
   const pickKawaii = (id) => {
@@ -2307,9 +2301,6 @@ export default function Game({ state, lowQ }) {
   useEffect(() => {
     if (bgSel && (phase !== "PLAYING" || me?.skillUsed || done)) setBgSel(false);
   }, [bgSel, phase, me?.skillUsed, done]);
-  useEffect(() => {
-    if (nightSel && (phase !== "PLAYING" || me?.skillUsed || done)) setNightSel(false);
-  }, [nightSel, phase, me?.skillUsed, done]);
   useEffect(() => {
     if (kawaiiSel && (phase !== "PLAYING" || me?.skillUsed || done)) setKawaiiSel(false);
   }, [kawaiiSel, phase, me?.skillUsed, done]);
@@ -2381,8 +2372,8 @@ export default function Game({ state, lowQ }) {
 
   // สถานะ+handler ของทุกโหมดเลือกเป้าหมาย มัดรวมไว้ที่เดียว ใช้ร่วมกันทั้ง layout มือถือและจอใหญ่ (ดู isTargetable/resolveAttackPick)
   const targetChain = {
-    anataSel, dawnSel, nightSel, appleSel, bbSel, shSel, skSel, doomSel, saObSel, saLocaSel, bgSel, kawaiiSel, bardPending, nanayaSel, tpSel,
-    pickAnata, pickDawn, pickNight, pickGive, pickBb, pickSh, pickSk, pickDoom, pickSaOb, pickSaLoca, pickBg, pickKawaii, pickBard, pickNanaya, pickTp,
+    anataSel, dawnSel, appleSel, bbSel, shSel, skSel, doomSel, saObSel, saLocaSel, bgSel, kawaiiSel, bardPending, nanayaSel, tpSel,
+    pickAnata, pickDawn, pickGive, pickBb, pickSh, pickSk, pickDoom, pickSaOb, pickSaLoca, pickBg, pickKawaii, pickBard, pickNanaya, pickTp,
   };
 
   // ============================================================
@@ -2444,12 +2435,6 @@ export default function Game({ state, lowQ }) {
             <span className="text-lg font-black text-echo-gold animate-pulse">🛡️ แตะเลือกเป้าหมาย Absorb shield</span>
             <button onClick={() => { clickSound(); pickBg(me.id); }} className="ml-3 text-sm font-bold bg-echo-gold text-gray-900 rounded-full px-3 py-1">เลือกตัวเอง</button>
             <button onClick={() => { clickSound(); setBgSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
-          </div>
-        )}
-        {nightSel && (
-          <div className="shrink-0 text-center mt-1.5 text-hard">
-            <span className="text-lg font-black text-echo-magenta animate-pulse">🌘 แตะเลือกเป้าหมายฝันร้ายยามค่ำคืน</span>
-            <button onClick={() => { clickSound(); setNightSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
           </div>
         )}
         {kawaiiSel && (
@@ -2807,7 +2792,7 @@ export default function Game({ state, lowQ }) {
         style={{ width: DESIGN_W, height: designH, transform: `scale(${scale})`, transformOrigin: "top left" }}
       >
       {/* กองการ์ดกลาง ทับตำแหน่งโลโก้กลางโต๊ะเดิม (โลโก้เป็นแค่วอเตอร์มาร์กจางๆ ด้านหลัง) — ใหญ่ขึ้นชัดเจน */}
-      <div className="absolute inset-x-0 top-[32%] flex justify-center pointer-events-none">
+      <div className="absolute inset-x-0 top-[40%] flex justify-center pointer-events-none">
         <div className="relative grid place-items-center">
           <img src="/image/logo_current.png" alt="" className="h-16 sm:h-20 w-auto opacity-25" />
           <div className="absolute inset-0 grid place-items-center">
@@ -2867,14 +2852,6 @@ export default function Game({ state, lowQ }) {
           <span className="text-xl font-black text-echo-gold animate-pulse bg-black/60 rounded-full px-5 py-1.5">🛡️ คลิกเลือกเป้าหมาย Absorb shield</span>
           <button onClick={() => { clickSound(); pickBg(me.id); }} className="ml-3 text-sm font-bold bg-echo-gold text-gray-900 rounded-full px-3 py-1">เลือกตัวเอง</button>
           <button onClick={() => { clickSound(); setBgSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
-        </div>
-      )}
-
-      {/* โหมดเลือกเป้าหมายฝันร้ายยามค่ำคืน (โอเบรอน) — เลือกได้เฉพาะคนอื่น */}
-      {nightSel && (
-        <div className="absolute top-[22%] left-1/2 -translate-x-1/2 z-40 text-center text-hard whitespace-nowrap">
-          <span className="text-xl font-black text-echo-magenta animate-pulse bg-black/60 rounded-full px-5 py-1.5">🌘 คลิกเลือกเป้าหมายฝันร้ายยามค่ำคืน</span>
-          <button onClick={() => { clickSound(); setNightSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
         </div>
       )}
 
