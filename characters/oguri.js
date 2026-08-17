@@ -89,11 +89,13 @@ module.exports = {
       engine.log(`🐴 ${p.name} GrayBeast — Energy +1 (${p.oguriEnergy}/${engine.OGURI_ENERGY_MAX})${spMsg}`);
     }
     // Energy หมด -> เข้าสู่ร่างหมดแรง (Burnout) 2 เทิร์น (Rework: ไม่เช็คยุคทองอีกต่อไป — แม้อยู่ร่าง Zone ก็เข้าได้ถ้า Energy หมด)
-    if ((p.oguriEnergy || 0) <= 0) {
-      const wasOn = (p.statuses.burnout || 0) > 0;
+    //  บั๊กเดิม: เช็คแค่ Energy<=0 อย่างเดียวทุกต้นเทิร์น ทำให้ตราบใด Energy ยังไม่ฟื้น (ซึ่ง Burnout เองก็ลด Energy ที่ได้จาก Breakfast ด้วย)
+    //  จะ set burnout = 2 ทับซ้ำใหม่ทุกเทิร์นไม่มีที่สิ้นสุด ไม่มีวันนับถอยหลังจนครบ 2 เทิร์นแล้วหายไปสักที
+    //  แก้โดยเช็คเพิ่มว่ายังไม่ติด Burnout อยู่ก่อน — ถ้าติดอยู่แล้วปล่อยให้นับถอยหลังตามระบบสถานะทั่วไป ไม่ต้อง refresh ซ้ำ
+    if ((p.oguriEnergy || 0) <= 0 && !((p.statuses.burnout || 0) > 0)) {
       p.statuses.burnout = OGURI_BURNOUT_TURNS;
       p.statuses.decay = Math.max(p.statuses.decay || 0, OGURI_BURNOUT_DECAY_TURNS);
-      if (!wasOn) engine.log(`🐴💦 ${p.name} Energy หมด — เข้าสู่ร่างหมดแรง (Burnout)! Breakfast ได้ Energy ลดลง -${OGURI_BURNOUT_ENERGY_PENALTY} และติดผุพัง ${OGURI_BURNOUT_DECAY_TURNS} เทิร์น`);
+      engine.log(`🐴💦 ${p.name} Energy หมด — เข้าสู่ร่างหมดแรง (Burnout)! Breakfast ได้ Energy ลดลง -${OGURI_BURNOUT_ENERGY_PENALTY} และติดผุพัง ${OGURI_BURNOUT_DECAY_TURNS} เทิร์น`);
     }
     // Sunny Day: ได้รับโชคลาภ +1 ทุกเทิร์นที่มีบัฟนี้
     if ((p.statuses.sunny || 0) > 0) {
