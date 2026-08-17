@@ -938,6 +938,12 @@ function instantDeath(p) {
   // ริต้า เบอร์นัล (สกิลติดตัว 2 patch 2.1.7, characters/phenex.js): ตกรอบจริงขณะท่าไม้ตาย 2 ยังทำงานอยู่ -> ปลดปล่อยความเจ็บปวดที่สะสมทั้งหมดก่อนตาย
   if (p.characterId === "phenex") CHAR_HOOKS.phenex.maybeReleasePainOnDeath(engine, p);
   p.hp = 0; p.alive = false; p.result = "dead"; p.locked = true;
+  // ยูนะ: เป้าหมายที่ได้รับพร (Delete/Smile for You/Longing) ตาย/หมดสภาพ -> เพลง+บัฟยูนะปิดลงทันที
+  //  ยกเว้น Break Beat Bark เพราะมีผลทั้งสนาม ไม่ผูกกับผู้เล่นคนใดคนหนึ่งโดยเฉพาะ
+  if (yunaEffect && yunaEffect !== "beatbark" && yunaTargetId === p.id) {
+    yunaEffect = null; yunaTargetId = null; yunaWindowEnd = 0;
+    delete p.statuses.yunaDelete; delete p.statuses.yunaSmile; delete p.statuses.yunaLonging;
+  }
   // ยูนะ (เพลง Longing): คนแรกที่ตายระหว่างเทิร์น 1-10 -> ทำเครื่องหมายไว้ก่อน (ครั้งเดียวต่อเกม)
   //  ยังไม่ฟื้นคืนชีพทันที — ต้องรอให้ฉากโจมตี(ถ้ามี)จบก่อน แล้วค่อยฟื้น+ขึ้นวีดีโอ (ดู endTurn() จุดที่ตั้งค่า yunaLongingPendingId)
   if (!yunaLongingUsed && roundNumber >= 1 && roundNumber <= 10) {
@@ -2804,6 +2810,8 @@ function useSkill(id, tier, targets, item) {
   if (st === "hakunoInvertReady") CHAR_HOOKS.hakuno.applyInvertCharge(engine, p);
   if (st === "hakunoNoRegenReady") CHAR_HOOKS.hakuno.applyNoRegenCharge(engine, p);
   if (st === "moonCell") CHAR_HOOKS.hakuno.applyMoonCellCast(engine, p);
+  // ---------- โอเบรอน: Lie Like Vortigern (Rework 2 — ทำงานทันทีก่อนเปิดการ์ด, characters/oberon.js) ----------
+  if (st === "vortigern") CHAR_HOOKS.oberon.applyVortigernEffect(engine, p);
 
   // ข้อเสียโคโตเนะ (characters/kotone.js): 40% เมื่อใช้สกิลใดๆ จะเจอท่านประธานเซนะจัง -> เทิร์นถัดไปทำอะไรไม่ได้เลย
   if (isKotone) CHAR_HOOKS.kotone.maybeTriggerSena(engine, p);
@@ -3320,14 +3328,9 @@ function afterResolve() {
         // Sekai ichi kawaii watashi (โคโตเนะ patch 2.2.2): ตีหมู่ทุกคน (ยกเว้นตัวเอง) ดาเมจ 3 หน่วย + สตั้น 2 เทิร์น
         //  ไม่ใช้ coin แล้ว (เดิมต้องมี 3 coin + หักตอนกด)
         if (key === "kawaii") CHAR_HOOKS.kotone.activateKawaii(engine, p);
-        // Lai Rhyme Goodfellow / Lie Like Vortigern (โอเบรอน, characters/oberon.js)
+        // Lai Rhyme Goodfellow (โอเบรอน, characters/oberon.js) — Lie Like Vortigern ย้ายไปทำงานทันทีก่อนเปิดการ์ดแล้ว (ดู useSkill()'s st === "vortigern")
         if (key === "lai") CHAR_HOOKS.oberon.applyLaiEffect(engine, p);
-        if (key === "vortigern") CHAR_HOOKS.oberon.applyVortigernEffect(engine, p);
-        // Vortigern (patch 1.7.6): ข้ามวีดีโอประจำท่าไม้ตาย — เล่นราตรีกลืนกิน (oberon_changefill.mp4) ทันที
-        //  จบแล้วฉากหลังกลางคืนกลายเป็น oberon_background.mp4 + เพลงประจำตัว (ผ่าน oberonDevour)
-        if (key === "vortigern") {
-          triggerCutscene(p, "oberonChange");
-        } else {
+        {
           const firstTime = !p.cutsceneShown[key];
           triggerCutscene(p, key);
           // ครั้งแรก (เล่นวีดีโอ): ต่อด้วยฉากประกาศเปลี่ยนร่าง (ระเบิด + เสียงพากย์) ก่อนขึ้นคนอื่น/สรุปผล
@@ -4669,7 +4672,10 @@ const engine = {
   get oberonDevour() { return oberonDevour; },
   setOberonDevour(v) { oberonDevour = v; },
   setNightResetPending(v) { nightResetPending = v; },
-  extendNight(n) { cycleShift += n; }, // โอเบรอน Lie Like Vortigern (rework): ต่อเวลากลางคืนไปอีก n เทิร์นจากตำแหน่งปัจจุบัน (เลื่อน timeline ทั้งหมด ไม่ snap ไปจุดคงที่แบบ nightResetPending)
+  // โอเบรอน Lie Like Vortigern (rework 2): ให้เทิร์นปัจจุบันกลายเป็นจุดเริ่มคืนใหม่เต็มรอบ (CYCLE_TURNS เทิร์น นับจากนี้)
+  //  หมายเหตุ: เคยลองใช้ cycleShift += n (บวกคงที่) มาก่อน แต่สูตรนั้นพังถ้ากดกลางดึกที่ไม่ใช่เทิร์นแรกของคืน — ทำให้เกิดวันแทรกกลางคืนสั้นๆ แบบสุ่ม
+  //  ใช้สูตรเดียวกับ nightResetPending เดิม (คำนวณ cycleShift ใหม่ตรงๆ) ซึ่งพิสูจน์แล้วว่าไม่มีรอยต่อเพี้ยน
+  extendNight() { cycleShift = roundNumber - (CYCLE_TURNS + 1); },
   // ยูนะ ไอดอลประจำสนาม
   get yunaEffect() { return yunaEffect; },
   get yunaWindowEnd() { return yunaWindowEnd; },

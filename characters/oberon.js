@@ -60,19 +60,22 @@ module.exports = {
       engine.maybeBeatSave(o);
       engine.maybeWakeKotone(o);
       o.statuses.awaken = Math.max(o.statuses.awaken || 0, 2); // +1 ชดเชยการลดสถานะตอนจบเทิร์น
-      if (!((o.statuses.sleep || 0) > 0)) o.statuses.dawn = Math.min(3, (o.statuses.dawn || 0) + 1);
+      if (!((o.statuses.sleep || 0) > 0)) o.statuses.dawn = Math.min(5, (o.statuses.dawn || 0) + 1);
       o.wasAttacked = true;
     }
     engine.log(`🌞 Lai Rhyme Goodfellow! ${p.name} โจมตีทุกคน -1 (ไม่สนเกราะ) มอบสถานะ "การตื่นขึ้น" และยามฟ้าสาง +1`);
   },
 
-  // เรียกจาก resolveRound()'s afterReveal sweep (key === "vortigern") — Lie Like Vortigern (กลางคืน): เกราะหมู่ + กล่อมคนติดยามฟ้าสางให้หลับไหล
+  // เรียกจาก useSkill() ทันทีตอนกดใช้ (Rework 2: ทำงานก่อนเปิดการ์ด — ไม่รอ afterReveal sweep แบบเดิมแล้ว)
+  //  Lie Like Vortigern: เกราะหมู่ + กล่อมคนติดยามฟ้าสางให้หลับไหล + ราตรียืดยาวจนกว่าจะถึงเช้าจริง
   applyVortigernEffect(engine, p) {
+    p.seen.vortigern = true;
+    p.transformAt = engine.nextTransformCounter();
     for (const o of engine.alivePlayers()) {
       if (o.id === p.id) continue;
       o.statuses.vortarmor = 3; // เพดานเกราะ +1 คงอยู่ 3 เทิร์น
       engine.healArmor(o, 1);
-      const dawn = Math.min(5, o.statuses.dawn || 0); // ยามฟ้าสางสะสมได้ไม่เกิน 5 -> หลับสูงสุด 5 เทิร์น
+      const dawn = Math.min(5, o.statuses.dawn || 0); // ยามฟ้าสางสะสมได้ไม่เกิน 5 หน่วย -> หลับสูงสุด 5 เทิร์นตรงตัว (ไม่ใช่ค่าคงที่ 5 เทิร์นตายตัว)
       if (dawn > 0 && engine.resistActive(o)) {
         engine.log(`🛡️ ${o.name} ต้านสถานะผิดปกติ — ไม่หลับไหลจากคำลวงของราชาภูติ`);
       } else if (dawn > 0) {
@@ -85,9 +88,10 @@ module.exports = {
     for (const o of Object.values(engine.players)) delete o.statuses.dawn; // ล้างยามฟ้าสางให้ทุกคน
     // ราตรีกลืนกิน: ฉากหลังกลางคืนกลายเป็นวีดีโอ + เพลงประจำตัวโอเบรอน จนกว่าจะหมดกลางคืน
     engine.setOberonDevour(engine.nextTransformCounter());
-    // สนามของโอเบรอน (Rework): ต่อเวลากลางคืนไปอีก 3 เทิร์น จากตำแหน่งปัจจุบัน — ไม่ใช่รีเซ็ตไปจุดเริ่มคืนแบบเดิม
-    engine.extendNight(3);
-    engine.log(`🌑 Lie Like Vortigern! ${p.name} มอบเกราะ +1 ให้ทุกคน (3 เทิร์น) — ราตรีกลืนกิน และต่อเวลากลางคืนไปอีก 3 เทิร์น`);
+    // สนามของโอเบรอน (Rework 2): เทิร์นนี้กลายเป็นจุดเริ่มคืนใหม่เต็มรอบ -> ราตรีจะดำเนินต่อไปจนกว่าจะถึงเช้าจริง (ไม่ใช่ค่าคงที่ +3 เทิร์นตายตัวแบบเดิมที่ทำให้เกิดวันแทรกกลางคืนพังๆ)
+    engine.extendNight();
+    engine.triggerCutscene(p, "oberonChange"); // ข้ามวีดีโอประจำท่า — เล่นราตรีกลืนกินทันที (patch 1.7.6)
+    engine.log(`🌑 Lie Like Vortigern! ${p.name} มอบเกราะ +1 ให้ทุกคน (3 เทิร์น) — ราตรีกลืนกิน และราตรีจะดำเนินต่อไปจนกว่าจะถึงเช้า`);
   },
 
   // เรียกจาก dealRound() ตอนสลับกลางวัน/กลางคืน — ล้างราตรีกลืนกิน + เล่นคัตซีนเปลี่ยนร่างของโอเบรอนทุกคนบนสนาม

@@ -68,10 +68,10 @@ module.exports = function buildTransforms(img) {
     eva13RsHopper:   { img: "/characters/eva13/eva13.webp", video: "/characters/eva13/eva13_rshopper.mp4", title: "RS-HOPPER", label: "สกิลติดตัวทำงาน", seconds: 6, music: null, afterReveal: false },
     eva13ExRsHopper: { img: "/characters/eva13/eva13.webp", video: "/characters/eva13/eva13_ex_rshopper.mp4", title: "RS-HOPPER", label: "สกิลติดตัวทำงาน", seconds: 6, music: null, afterReveal: false },
     // ---------- โอเบรอน (patch 1.7) ----------
-    // lai: ท่าไม้ตายกลางวัน — วีดีโอ 13 วิ | vortigern: patch 1.7.6 ข้ามวีดีโอประจำท่า — เล่น oberonChange แทนทันที
+    // lai: ท่าไม้ตายกลางวัน — วีดีโอ 13 วิ | vortigern (Rework 2): ทำงานทันทีก่อนเปิดการ์ดแล้ว (ดู CHAR_HOOKS.oberon.applyVortigernEffect) ไม่ใช่ afterReveal อีกต่อไป
     // (ฉากหลัง "ราตรีกลืนกิน" ไม่ผูกกับท่าไม้ตาย — ทำงานเองทุกครั้งที่เข้ากลางคืนขณะมีโอเบรอนอยู่ในเกม)
     lai:       { img: "/characters/oberon/oberon_skill3_morning.webp", video: "/characters/oberon/oberon_final_morning.mp4", title: "LAI RHYME GOODFELLOW", label: "ปล่อยท่าไม้ตาย", seconds: 14, music: null, afterReveal: true },
-    vortigern: { img: "/characters/oberon/oberon_skill3_night.jpg", video: "/characters/oberon/oberon_final_night.mp4", title: "LIE LIKE VORTIGERN", label: "ปล่อยท่าไม้ตาย", seconds: 17, music: null, afterReveal: true },
+    vortigern: { img: "/characters/oberon/oberon_skill3_night.jpg", video: "/characters/oberon/oberon_final_night.mp4", title: "LIE LIKE VORTIGERN", label: "ปล่อยท่าไม้ตาย", seconds: 17, music: null, afterReveal: false },
     // oberonChange: ต่อจากวีดีโอ Vortigern — ราตรีกลืนกิน (16 วิ) แล้วฉากหลังกลางคืนกลายเป็น oberon_background.mp4
     oberonChange: { img: img.OBERON_NIGHT_IMG, video: "/characters/oberon/oberon_changefill.mp4", title: "ราตรีกลืนกิน", label: "ราตรีถูกครอบงำ", seconds: 17, music: null, afterReveal: false },
     // oberonNight: สลับร่างตอนเข้ากลางคืน (วีดีโอ 5 วิ) | oberonDay: กลับร่างกลางวัน = แจ้งเตือนปกติ ไม่มีวีดีโอ
