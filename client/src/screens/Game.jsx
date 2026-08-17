@@ -167,6 +167,9 @@ function YunaCutscene({ cs }) {
         ) : (
           <motion.div key="video" className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
             <video ref={ref} src={cs.video} preload="auto" autoPlay playsInline className="absolute inset-0 w-full h-full object-cover" />
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-lg sm:text-2xl font-bold z-10 text-hard" style={{ color: cs.color }}>
+              ♪ {cs.title}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -332,7 +335,7 @@ function TransformAnnounce({ cs }) {
 // ---------- สกิลช่วงจั่วการ์ด: เด้งขึ้นทันทีบนกระดาน (ไม่ตัดเข้าจอดำ) ----------
 function SkillFlash({ f }) {
   return (
-    <div className="absolute top-[32%] left-1/2 -translate-x-1/2 z-40 pointer-events-none">
+    <div className="absolute top-[58%] left-1/2 -translate-x-1/2 z-40 pointer-events-none">
       <div className="pop-in flex items-center gap-3 bg-black/75 rounded-2xl px-4 py-2 border-2 text-hard" style={{ borderColor: f.color }}>
         {f.img ? (
           <img src={f.img} alt="" className="w-16 h-11 object-cover rounded-lg" />
@@ -372,7 +375,7 @@ function CutsceneSkipNotice({ cs, timeLeft }) {
 // ---------- แจ้งเตือนแปลงร่างซ้ำ (ครั้งที่ 2 เป็นต้นไป): การ์ดเล็กๆ ไม่หยุดเกม ----------
 function TransformNotice({ n }) {
   return (
-    <div className="fixed top-[32%] left-1/2 -translate-x-1/2 z-40 pointer-events-none">
+    <div className="fixed top-[58%] left-1/2 -translate-x-1/2 z-40 pointer-events-none">
       <div className="pop-in flex items-center gap-3 bg-black/75 rounded-2xl px-4 py-2 border-2 text-hard" style={{ borderColor: n.color }}>
         {n.img ? (
           <img src={n.img} alt="" className="w-16 h-16 object-cover rounded-xl border-2 shrink-0" style={{ borderColor: n.color }} />
@@ -1812,16 +1815,51 @@ function BardComposeSlot({ me }) {
 }
 
 // ---------- กองการ์ดกลางจอ: การ์ดคว่ำซ้อนกันเล็กน้อย ไม่ต้องมีอาร์ตใหม่ ----------
-function DeckPile({ hostRef, size = "md" }) {
+//  onClick (ถ้ามี) เปิดสมุดการ์ด (DeckLedgerModal) — ต้องเปิด pointer-events เฉพาะจุดนี้เอง เพราะ wrapper รอบนอก (โลโก้/กึ่งกลางจอ) เป็น pointer-events-none ทั้งแถบ
+function DeckPile({ hostRef, size = "md", onClick }) {
   const dims = { sm: { w: 36, h: 48 }, md: { w: 48, h: 64 }, lg: { w: 80, h: 112 } };
   const dim = dims[size] || dims.md;
   return (
-    <div ref={hostRef} className="relative pointer-events-none" style={{ width: dim.w + 10, height: dim.h + 10 }}>
+    <div
+      ref={hostRef}
+      className={`relative ${onClick ? "pointer-events-auto cursor-pointer active:scale-95 transition" : "pointer-events-none"}`}
+      style={{ width: dim.w + 10, height: dim.h + 10 }}
+      onClick={onClick}
+      title={onClick ? "ดูสมุดการ์ดกองกลาง" : undefined}
+    >
       {[0, 1, 2, 3].map((i) => (
         <div key={i} className="absolute" style={{ left: 5 - i * 2, top: 5 - i * 2, transform: `rotate(${(i - 1.5) * -3}deg)` }}>
           <Card back size={size} />
         </div>
       ))}
+    </div>
+  );
+}
+
+// ---------- สมุดการ์ดกองกลาง: กดที่กองการ์ดกลางเพื่อดูการ์ดทั้ง 43 ใบ ใบไหนถูกจั่วไปแล้ว (รอบนี้) จะเป็นสีเทา ----------
+function DeckLedgerModal({ ledger, onClose }) {
+  const drawnCount = ledger.filter((c) => c.drawn).length;
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 grid place-items-center p-4" onClick={onClose}>
+      <div
+        className="bg-echo-navy/95 border border-white/15 rounded-2xl p-4 sm:p-6 max-w-2xl w-full max-h-[85vh] overflow-y-auto text-hard"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-3 gap-3">
+          <div>
+            <div className="text-lg sm:text-xl font-black">สมุดการ์ดกองกลาง</div>
+            <div className="text-xs sm:text-sm text-white/60">จั่วไปแล้ว {drawnCount}/{ledger.length} ใบ (รอบปัจจุบัน — สับใหม่ทุกรอบ)</div>
+          </div>
+          <button onClick={onClose} className="shrink-0 text-sm font-bold bg-black/40 hover:bg-black/60 rounded-full px-3 py-1 border border-white/25">ปิด</button>
+        </div>
+        <div className="grid grid-cols-5 sm:grid-cols-8 gap-1 place-items-center">
+          {ledger.map((c, i) => (
+            <div key={i} className={c.drawn ? "grayscale opacity-30" : ""}>
+              <Card value={c.value} color={c.color} special={c.special} size="sm" />
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1944,6 +1982,7 @@ export default function Game({ state, lowQ }) {
   const [statusViewId, setStatusViewId] = useState(null); // ดูสถานะผู้เล่นคนอื่น (แตะการ์ดตอนไม่ได้เลือกเป้า)
   const [bagOpen, setBagOpen] = useState(false);     // ร้านค้ามายา (patch 2.2 full): เปิดดูคลังของตัวเอง
   const [shopOpen, setShopOpen] = useState(false);   // ร้านค้ามายา: เปิดหน้าร้านค้า
+  const [deckOpen, setDeckOpen] = useState(false);   // สมุดการ์ดกองกลาง: กดที่กองการ์ดกลางเพื่อดู
   const shopAutoShown = useRef(-1);                  // จำรอบร้านค้าที่เด้งอัตโนมัติไปแล้ว (กันเด้งซ้ำ)
   const vp = useViewport();
   const { flights: cardFlights, removeFlight: removeCardFlight, deckRef, selfHandRef, registerOther } = useCardFlights(state);
@@ -2103,8 +2142,20 @@ export default function Game({ state, lowQ }) {
   const anataNeed = Math.min(1, aliveOthers.length);
 
   // สกิลช่วงจั่วการ์ด: server แจ้งมา -> เด้งทันที (ไม่ตัดเข้าจอดำ) แล้วหายเอง
+  //  บั๊กเดิม: ป้ายนี้มีช่องเดียวใช้ร่วมกันทั้งเกม ถ้ามีสกิลใหม่ (ของใครก็ได้ เช่น Bard กดโน้ตรัวๆ) เด้งเข้ามาถี่กว่า 1.8 วิ
+  //  ตัวจับเวลาจะรีเซ็ตใหม่ทุกครั้งไม่มีที่สิ้นสุด ทำให้ป้ายค้างอยู่นานผิดปกติทั้งที่สกิลแต่ละอันจบไปนานแล้ว
+  //  แก้โดยจับเวลาเริ่มของ "ชุดป้ายที่ต่อเนื่องกัน" (flashStartRef) ไว้ครั้งเดียวตอนป้ายว่างแล้วเพิ่งมีอันใหม่ขึ้น
+  //  แล้วบังคับหายภายใน FLASH_MAX_MS จากจุดนั้นเสมอ ไม่ว่าจะมีสกิลใหม่มาต่อคิวรีเฟรชเนื้อหากี่รอบก็ตาม
+  const FLASH_MAX_MS = 1800;
+  const flashRef = useRef(null);
+  const flashStartRef = useRef(0);
+  useEffect(() => { flashRef.current = flash; }, [flash]);
+  const noticeRef = useRef(null);
+  const noticeStartRef = useRef(0);
+  useEffect(() => { noticeRef.current = notice; }, [notice]);
   useEffect(() => {
     const onFlash = (f) => {
+      if (!flashRef.current) flashStartRef.current = Date.now();
       setFlash({ ...f, id: Date.now() });
       // DoomGuy: เสียงใช้สกิล Weapon แยกตามอาวุธที่ถืออยู่ตอนกด
       if (f.doomWeapon) {
@@ -2119,17 +2170,22 @@ export default function Game({ state, lowQ }) {
   }, []);
   useEffect(() => {
     if (!flash) return;
-    const t = setTimeout(() => setFlash(null), 1800);
+    const remain = Math.max(150, FLASH_MAX_MS - (Date.now() - flashStartRef.current));
+    const t = setTimeout(() => setFlash(null), remain);
     return () => clearTimeout(t);
   }, [flash]);
   useEffect(() => {
-    const onNotice = (n) => setNotice({ ...n, id: Date.now() });
+    const onNotice = (n) => {
+      if (!noticeRef.current) noticeStartRef.current = Date.now();
+      setNotice({ ...n, id: Date.now() });
+    };
     socket.on("transformNotice", onNotice);
     return () => socket.off("transformNotice", onNotice);
   }, []);
   useEffect(() => {
     if (!notice) return;
-    const t = setTimeout(() => setNotice(null), 1800);
+    const remain = Math.max(150, FLASH_MAX_MS - (Date.now() - noticeStartRef.current));
+    const t = setTimeout(() => setNotice(null), remain);
     return () => clearTimeout(t);
   }, [notice]);
 
@@ -2512,10 +2568,11 @@ export default function Game({ state, lowQ }) {
           <div className="relative grid place-items-center">
             <img src="/image/logo_current.png" alt="" className="h-14 w-auto opacity-25" />
             <div className="absolute inset-0 grid place-items-center">
-              <DeckPile hostRef={deckRef} size="md" />
+              <DeckPile hostRef={deckRef} size="md" onClick={() => setDeckOpen(true)} />
             </div>
           </div>
         </div>
+        {deckOpen && <DeckLedgerModal ledger={state.deckLedger || []} onClose={() => setDeckOpen(false)} />}
 
         {/* ---------- แผงตัวเรา (ล่างสุด กดง่ายด้วยนิ้วโป้ง) ----------
             ออกแบบใหม่: รูป/แต้มรวม ลอยเป็นป้ายเฉียงเจาะทับขอบบนแผง (ไม่ใช่แถวในกล่องเหมือนเดิม)
@@ -2796,10 +2853,11 @@ export default function Game({ state, lowQ }) {
         <div className="relative grid place-items-center">
           <img src="/image/logo_current.png" alt="" className="h-16 sm:h-20 w-auto opacity-25" />
           <div className="absolute inset-0 grid place-items-center">
-            <DeckPile hostRef={deckRef} size="lg" />
+            <DeckPile hostRef={deckRef} size="lg" onClick={() => setDeckOpen(true)} />
           </div>
         </div>
       </div>
+      {deckOpen && <DeckLedgerModal ledger={state.deckLedger || []} onClose={() => setDeckOpen(false)} />}
 
       {/* ตัวจับเวลา + รอบ */}
       {(phase === "PLAYING" || phase === "ATTACK") && (

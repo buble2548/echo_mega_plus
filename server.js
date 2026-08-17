@@ -738,10 +738,16 @@ function startPhaseTimer(seconds, onExpire) {
 //  การ์ด — กองกลางร่วม 43 ใบ (เลข 1-10 x 4 สี = 40 + King/Queen/Joker อย่างละ 1)
 // ============================================================
 const CARD_COLORS = ["red", "blue", "green", "yellow"];
-function buildCentralDeck() {
+// รายชื่อการ์ดทั้ง 43 ใบแบบไม่สับ (ลำดับคงที่) — ใช้เป็นแม่แบบแสดงสมุดการ์ด (deckLedger) และเทียบว่าใบไหนถูกจั่วไปแล้ว
+function canonicalDeckCards() {
   const deck = [];
   for (let v = 1; v <= 10; v++) for (const color of CARD_COLORS) deck.push({ value: v, color });
   deck.push({ special: "king" }, { special: "queen" }, { special: "joker" });
+  return deck;
+}
+function cardKey(c) { return c.special || `${c.value}-${c.color}`; }
+function buildCentralDeck() {
+  const deck = canonicalDeckCards();
   for (let i = deck.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [deck[i], deck[j]] = [deck[j], deck[i]];
@@ -1538,6 +1544,9 @@ function buildStateFor(viewerId) {
       .map((o) => ({ id: o.id, name: o.name, color: POSITION_COLORS[o.position] || "#9B4F96", img: displayImg(o) }));
     if (options.length) phenexReleaseAsk = { pain: viewer.phenexReleaseAsk.pain, options };
   }
+  // สมุดการ์ดกองกลาง: การ์ดทั้ง 43 ใบตามลำดับคงที่ + ใบไหนถูกจั่วไปแล้วในรอบนี้ (centralDeck สับใหม่ทุกรอบ — สมุดนี้จึงนับเฉพาะรอบปัจจุบัน)
+  const remainingCardKeys = new Set(centralDeck.map(cardKey));
+  const deckLedger = canonicalDeckCards().map((c) => ({ ...c, drawn: !remainingCardKeys.has(cardKey(c)) }));
   // ---------- ริดดี้ มาร์เซนาส (patch 2.0.9): popup ระบบพันธมิตร (ดู characters/riddhe.js's buildViewerState) ----------
   let allyChoices = null, allyOfferAsk = null, allyBreakAskUi = null, allyFinalAskUi = null;
   if (gameState === "PLAYING" && viewer && viewer.alive) {
@@ -1576,6 +1585,7 @@ function buildStateFor(viewerId) {
     attack: gameState === "ATTACKING" ? lastAttack : null,
     log: (gameState === "SUMMARY" || gameState === "TRANSITION" || gameState === "GAMEOVER") ? lastLog : [],
     shop: shopItems, // ร้านค้ามายา (patch 2.2 full): สินค้าส่วนกลาง เห็นเหมือนกันทุกคน
+    deckLedger, // สมุดการ์ด 43 ใบ + สถานะจั่วแล้ว/ยัง (ของรอบปัจจุบัน) — กดที่กองการ์ดกลางเพื่อดู
     players: Object.values(players).map((p) => {
       const mine = p.id === viewerId;
       const show = mine || revealAll;
@@ -1954,6 +1964,15 @@ function dealRound() {
   clearPhaseTimer();
   roundNumber++;
   centralDeck = buildCentralDeck(); // กองกลาง 43 ใบ สับใหม่ทุกรอบ
+  lastLog = [];
+  attackerId = null;
+  roundWinnerId = null;
+  roundTiedWin = false;
+  cutsceneQueue = []; // ล้างคิวเก่าก่อนเสมอ — ต้องอยู่ก่อน rollWindow/CHAR_HOOKS ด้านล่างทั้งหมด ไม่งั้นคัตซีนที่เพิ่งคิวไว้จะโดนล้างทิ้งไปด้วย
+  cutsceneInfo = null;
+  lastAttack = null;
+  roundSkills = [];
+  anataMusicSeq = 0;
   // ร้านค้ามายา (patch 2.2 full): เปิดทุกๆ 5 เทิร์น ตอนเริ่มเทิร์นใหม่
   if (roundNumber % SHOP_INTERVAL_TURNS === 0) openShop();
   // ยูนะ ไอดอลประจำสนาม: ม้วนลูกเต๋าทุกๆ 5 เทิร์น เริ่มจากเทิร์นที่ 16 (16, 21, 26, ...)
@@ -1964,15 +1983,6 @@ function dealRound() {
     nightResetPending = false;
     cycleShift = roundNumber - (CYCLE_TURNS + 1); // ให้เทิร์นนี้ตรงกับคืนแรกของวงจร
   }
-  lastLog = [];
-  attackerId = null;
-  roundWinnerId = null;
-  roundTiedWin = false;
-  cutsceneQueue = [];
-  cutsceneInfo = null;
-  lastAttack = null;
-  roundSkills = [];
-  anataMusicSeq = 0;
 
   for (const p of Object.values(players)) {
     resetRoundDisplay(p);
