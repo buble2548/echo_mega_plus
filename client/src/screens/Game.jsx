@@ -1029,6 +1029,15 @@ function StatusChips({ p, left, compact, max = 5 }) {
   );
 }
 
+// สถานะที่เป็นสแตคถาวร/ตัวนับเรื่อยๆ ไม่ใช่ตัวนับถอยหลังเทิร์น (ต้องตรงกับรายการยกเว้นในลูปลดเทิร์นสถานะทั่วไปที่ server.js
+//  ไม่งั้น StatusModal จะโชว์ "เหลือ N เทิร์น" หลอกๆ ทั้งที่ค่า v ที่แท้จริงคือจำนวนสแตคสะสม ไม่ใช่เทิร์นที่เหลือ)
+const PERMANENT_STATUS_KEYS = new Set([
+  "dawn", "chill", "hburn", "melody", "star", "emeraude", "saphir", "lance", "takutoThirdAtk",
+  "doomCrucible", "fortune", "rsHopper", "cassius", "yaak", "spear", "ohger", "evade", "empower",
+  "miyakoHeal", "miyakoCombo", "miyakoUlt", "hakunoInvertReady", "hakunoNoRegenReady", "kotoneAtk",
+  "deathline", "tepeuCook", "tepeuPonder", "graybeast", "grit", "healthfull", "overweight",
+]);
+
 // ---------- หน้าต่างดูสถานะ + รายละเอียดสกิลของผู้เล่น (แตะการ์ดผู้เล่นคนไหนก็ได้ตอนไม่ได้เลือกเป้า) ----------
 //  patch 1.9.1: เพิ่มรายละเอียดสกิลตัวละครของฝั่งตรงข้ามให้กดดูได้จากหน้ากระดาน
 function StatusModal({ p, onClose, statusOnly }) {
@@ -1064,7 +1073,11 @@ function StatusModal({ p, onClose, statusOnly }) {
                 <span className={`text-xs px-1.5 py-0.5 rounded-md font-bold shrink-0 ${it.cls}`}>{it.icon}{it.label}{it.amt > 0 ? ` +${it.amt}` : ""}</span>
                 <div className="min-w-0">
                   <span className="text-sm opacity-90 leading-snug">{it.desc}</span>
-                  {it.v > 1 && <div className="text-xs font-bold text-echo-gold mt-0.5">⏳ เหลือ {it.v} เทิร์น</div>}
+                  {it.v > 1 && (
+                    PERMANENT_STATUS_KEYS.has(it.key)
+                      ? <div className="text-xs font-bold text-echo-cyan mt-0.5">📌 สแตคสะสม {it.v}</div>
+                      : <div className="text-xs font-bold text-echo-gold mt-0.5">⏳ เหลือ {it.v} เทิร์น</div>
+                  )}
                 </div>
               </div>
             ))}
