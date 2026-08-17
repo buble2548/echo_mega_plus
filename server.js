@@ -714,6 +714,7 @@ let yunaEffect = null;       // "longing" | "delete" | "smile" | "beatbark" | nu
 let yunaTargetId = null;     // เป้าหมาย delete/smile/longing — null สำหรับ beatbark (ทั้งสนาม)
 let yunaMusicSeq = 0;        // เพิ่มทุกครั้งที่ยูนะ trigger ใหม่ -> client รีสตาร์ทเพลงจากต้น
 let yunaLongingPendingId = null; // ตายในเทิร์น 1-10 แล้วรอฟื้นด้วย Longing — รอฉากโจมตีจบก่อน (ดู endTurn())
+let yunaPity = 0;            // ระบบกันดวงซวย: หน้าต่างไหนไม่ติด +5% สะสมไปเรื่อยๆ ติดแล้วรีเซ็ตกลับ 0 (ดู characters/yuna.js's rollWindow)
 
 function clearPhaseTimer() {
   if (phaseTimerId) clearInterval(phaseTimerId);
@@ -796,6 +797,7 @@ function calculateScore(cards) {
   if (hasJoker) base += Math.min(12, Math.max(0, 21 - base)); // โจ๊กเกอร์: ดันแต้มไปให้ใกล้ 21 ที่สุด (สูงสุด +12)
   return base;
 }
+const YELLOW_CARD_SKILL_BONUS = 2; // ไพ่เหลืองครบ 3 ใบ 1 ชุด = แต้มสกิล +2 (เดิม +1)
 // สีการ์ดครบ 3 ใบ: บลูทำงานทันที (ต้านสถานะผิดปกติ), แดง/เขียว/เหลืองทำงานตอนเปิดไพ่ (ดู applyLockColorTriggers)
 function checkBlueTrigger(p) {
   const blueCount = p.cards.filter((c) => c.color === "blue").length;
@@ -836,8 +838,9 @@ function applyLockColorTriggers(p) {
         if (h > 0) lastLog.push(`🟢 ${p.name} ครบไพ่เขียว 3 ใบ — ฟื้นพลังชีวิต +${h}`);
       }
     } else if (color === "yellow") {
-      addSkill(p, n);
-      lastLog.push(`🟡 ${p.name} ครบไพ่เหลือง 3 ใบ — แต้มสกิล +${n}`);
+      const gain = n * YELLOW_CARD_SKILL_BONUS;
+      addSkill(p, gain);
+      lastLog.push(`🟡 ${p.name} ครบไพ่เหลือง 3 ใบ — แต้มสกิล +${gain}`);
     }
   }
 }
@@ -1856,7 +1859,7 @@ function startMatch() {
   nightResetPending = false;
   oberonDevour = 0;
   dayForceUntil = 0;
-  yunaLongingUsed = false; yunaWindowEnd = 0; yunaEffect = null; yunaTargetId = null; yunaMusicSeq = 0; yunaLongingPendingId = null;
+  yunaLongingUsed = false; yunaWindowEnd = 0; yunaEffect = null; yunaTargetId = null; yunaMusicSeq = 0; yunaLongingPendingId = null; yunaPity = 0;
   allyWinFlag = false;
   // อาริมะ มิยาโกะ (characters/miyako.js): เจอ โทโนะ ชิกิ หรือ นานายะ ชิกิ ในเกมเดียวกัน -> เล่นวีดีโอ arima_shiki.mp4 ก่อนเริ่มเทิร์นแรก
   cutsceneQueue = [];
@@ -4302,7 +4305,7 @@ function backToLobby() {
   nightResetPending = false;
   oberonDevour = 0;
   dayForceUntil = 0;
-  yunaLongingUsed = false; yunaWindowEnd = 0; yunaEffect = null; yunaTargetId = null; yunaMusicSeq = 0; yunaLongingPendingId = null;
+  yunaLongingUsed = false; yunaWindowEnd = 0; yunaEffect = null; yunaTargetId = null; yunaMusicSeq = 0; yunaLongingPendingId = null; yunaPity = 0;
   lastLog = [];
   cutsceneQueue = [];
   cutsceneInfo = null;
@@ -4680,6 +4683,8 @@ const engine = {
   get yunaEffect() { return yunaEffect; },
   get yunaWindowEnd() { return yunaWindowEnd; },
   get yunaLongingUsed() { return yunaLongingUsed; },
+  get yunaPity() { return yunaPity; },
+  setYunaPity(v) { yunaPity = v; },
   setYunaTrigger({ effect, targetId, windowEnd }) { yunaEffect = effect; yunaTargetId = targetId; yunaWindowEnd = windowEnd; yunaMusicSeq++; },
   pushCutsceneRaw(entry) { cutsceneQueue.push(entry); },
   log(msg) { lastLog.push(msg); },

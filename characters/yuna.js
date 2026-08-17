@@ -21,7 +21,8 @@ const YUNA_MUSIC = { longing: "yuna_longing", delete: "yuna_delete", smile: "yun
 const YUNA_CUTSCENE_TITLE = { longing: "Longing", delete: "Delete", smile: "Smile for You", beatbark: "Break Beat Bark!" };
 
 const YUNA_WINDOW_TURNS = 5;
-const YUNA_ROLL_CHANCE = 0.25;    // โอกาสมีเอฟเฟกต์เกิดขึ้นในแต่ละหน้าต่าง 5 เทิร์น
+const YUNA_ROLL_CHANCE = 0.25;    // โอกาสมีเอฟเฟกต์เกิดขึ้นในแต่ละหน้าต่าง 5 เทิร์น (ฐานตั้งต้น — ดูระบบกันดวงซวยด้านล่าง)
+const YUNA_PITY_STEP = 0.05;      // ระบบกันดวงซวย: หน้าต่างไหนไม่ติด โอกาสหน้าต่างถัดไป +5% สะสมไปเรื่อยๆ — ติดแล้วรีเซ็ตกลับฐานตั้งต้นทันที
 const YUNA_LATE_TURN = 40;        // หลังเทิร์นนี้ น้ำหนักเพลงเปลี่ยน + Break Beat Bark! ปลดล็อก
 
 function queueYunaCutscene(engine, kind) {
@@ -52,7 +53,12 @@ function pickSmileTarget(engine) { return pickExtreme(engine, "min"); }
 
 // เรียกจาก dealRound() ทุกๆ 5 เทิร์น เริ่มเทิร์นที่ 16 (16, 21, 26, ...)
 function rollWindow(engine, roundNumber) {
-  if (Math.random() >= YUNA_ROLL_CHANCE) return; // 75%: ไม่มีอะไรเกิดขึ้นหน้าต่างนี้
+  const chance = Math.min(1, YUNA_ROLL_CHANCE + (engine.yunaPity || 0));
+  if (Math.random() >= chance) {
+    engine.setYunaPity((engine.yunaPity || 0) + YUNA_PITY_STEP); // ไม่ติด -> เพิ่มโอกาสหน้าต่างถัดไป
+    return;
+  }
+  engine.setYunaPity(0); // ติดแล้ว -> รีเซ็ตกลับฐานตั้งต้น
   const late = roundNumber > YUNA_LATE_TURN;
   // น้ำหนัก: ก่อนเทิร์น 40 -> delete 50 / smile 50 / beatbark 0 | หลังเทิร์น 40 -> delete 30 / smile 30 / beatbark 40
   const roll = Math.random() * 100;
