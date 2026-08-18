@@ -33,6 +33,7 @@ const broadband_man = require("./broadband_man");
 const bard = require("./bard");
 const kai = require("./kai");
 const mageslayer = require("./mageslayer");
+const takumi = require("./takumi");
 
 const CHARACTER_MODULES = [
   tohno,
@@ -61,6 +62,7 @@ const CHARACTER_MODULES = [
   bard,
   kai,
   mageslayer,
+  takumi,
 ];
 
 const CHAR_HOOKS = {};

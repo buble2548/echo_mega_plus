@@ -154,15 +154,15 @@ test('onTargetUsedSkill: marked target with 0 energy gets sealed instead of drai
   assert.equal(t.statuses.manaSeal, 2);
 });
 
-test('onBustOrLoseRoll: 35% chance to gain 1 Fury stack, capped at 3, no-op for non-mageslayer', () => {
-  const ms = mkPlayer({ statuses: { mageslayerFury: 2 } });
+test('onBustOrLoseRoll: 35% chance to gain 1 Fury stack, capped at 2, no-op for non-mageslayer', () => {
+  const ms = mkPlayer({ statuses: { mageslayerFury: 1 } });
   const orig = Math.random;
   Math.random = () => 0;
   try {
     mageslayer.onBustOrLoseRoll(engine, ms);
-    assert.equal(ms.statuses.mageslayerFury, 3);
+    assert.equal(ms.statuses.mageslayerFury, 2);
     mageslayer.onBustOrLoseRoll(engine, ms);
-    assert.equal(ms.statuses.mageslayerFury, 3, 'capped at 3');
+    assert.equal(ms.statuses.mageslayerFury, 2, 'capped at 2');
   } finally {
     Math.random = orig;
   }
@@ -171,24 +171,29 @@ test('onBustOrLoseRoll: 35% chance to gain 1 Fury stack, capped at 3, no-op for 
   assert.equal(other.statuses.mageslayerFury || 0, 0);
 });
 
-test('resolveManaRupture: damage tiers by target energy — 7-8=1, 3-6=3, 1-2=5, 0=5+stun(1, or 2 vs Bard)', () => {
+test('resolveManaRupture: damage tiers by target energy — 7-8=1, 2-6=3, 0-1=5+stun(1, or 2 vs Bard)', () => {
   const caster = mkPlayer({ skillPoints: 0 });
   const t1 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 8 });
   mageslayer.resolveManaRupture(engine, caster, t1);
   assert.equal(t1.hp, 9, 'tier 7-8 -> 1 damage');
 
-  const t2 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 5 });
+  const t2 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 2 });
   mageslayer.resolveManaRupture(engine, caster, t2);
-  assert.equal(t2.hp, 7, 'tier 3-6 -> 3 damage');
+  assert.equal(t2.hp, 7, 'tier 2-6 (low end, energy=2) -> 3 damage');
 
-  const t3 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 2 });
+  const t3 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 6 });
   mageslayer.resolveManaRupture(engine, caster, t3);
-  assert.equal(t3.hp, 5, 'tier 1-2 -> 5 damage');
+  assert.equal(t3.hp, 7, 'tier 2-6 (high end, energy=6) -> 3 damage');
 
-  const t4 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 0 });
+  const t4 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 1 });
   mageslayer.resolveManaRupture(engine, caster, t4);
-  assert.equal(t4.hp, 5, 'tier 0 -> 5 damage');
+  assert.equal(t4.hp, 5, 'tier 0-1 (energy=1) -> 5 damage');
   assert.equal(t4.statuses.stun, 1, 'non-bard: stun 1 turn');
+
+  const t5 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 0 });
+  mageslayer.resolveManaRupture(engine, caster, t5);
+  assert.equal(t5.hp, 5, 'tier 0-1 (energy=0) -> 5 damage');
+  assert.equal(t5.statuses.stun, 1, 'non-bard: stun 1 turn');
 
   const bard = mkPlayer({ characterId: 'bard', hp: 10, armor: 0, skillPoints: 0 });
   mageslayer.resolveManaRupture(engine, caster, bard);
@@ -196,11 +201,11 @@ test('resolveManaRupture: damage tiers by target energy — 7-8=1, 3-6=3, 1-2=5,
   assert.equal(bard.statuses.stun, 2, 'bard special case: stun 2 turns');
 });
 
-test('resolveManaRupture: caster always gains +2 energy, bypassing Song\'s Curse (direct assignment)', () => {
+test('resolveManaRupture: caster\'s energy is unchanged (no more +2 energy back — removed to respect Song\'s Curse)', () => {
   const caster = mkPlayer({ skillPoints: 0 });
   const t = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 5 });
   mageslayer.resolveManaRupture(engine, caster, t);
-  assert.equal(caster.skillPoints, 2);
+  assert.equal(caster.skillPoints, 0, 'no energy return anymore');
 });
 
 test('applyManaBurden: every alive player (including the caster) gains +1 spellburden stack, 5 turns, resist blocks it', () => {

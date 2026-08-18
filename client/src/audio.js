@@ -79,6 +79,10 @@ const FILES = {
   doomguy_bt_shoot: "/characters/doomguy/sound/BT Shoot.mp3",
   doomguy_bt_skill: "/characters/doomguy/sound/BT Skill.mp3",
   doomguy_bfg_shoot: "/characters/doomguy/sound/BFG.mp3",
+  // ทาคุมิ ฟุจิวาระ: เพลงประจำตัวตามเกียร์ (เกียร์ 3-5 / เกียร์ 6) + เพลงระหว่างท่าไม้ตาย "ถึงจะมองไม่เห็น แต่ฉันยังอยู่" ทำงาน
+  all_around: "/characters/takumi/all_around.mp3",
+  secret_love: "/characters/takumi/secret_love.mp3",
+  forever: "/characters/takumi/forever.mp3",
   action_button: "/effect_sound/action_button.wav",
   trun_change: "/effect_sound/trun_change.wav",
   attack: "/effect_sound/attack.wav",

@@ -170,5 +170,11 @@ module.exports = function buildTransforms(img) {
     // ---------- ผู้สังหารจอมมหาเวทย์ ----------
     // mageslayerWitchMark: สกิลพื้นฐาน Witch Mark — เล่นทันทีตอนกด (ก่อนเปิดการ์ด)
     mageslayerWitchMark: { img: "/characters/mageslayer/Pic_skill_1.jpg", video: "/characters/mageslayer/VDO_Skill_1.mp4", title: "WITCH MARK", label: "ใช้สกิล", seconds: 6, music: null, afterReveal: false },
+    // ---------- ทาคุมิ ฟุจิวาระ ----------
+    // ไฟล์มีเดียยังไม่มีจริง (ผู้ใช้จะเตรียมมาทีหลัง) — seconds เป็นค่าประมาณชั่วคราว ต้องวัดความยาววิดีโอจริงตอนได้ไฟล์มาแล้วแก้ทีหลัง
+    // takumiBlackoutStart: ท่าไม้ตาย ถึงจะมองไม่เห็น แต่ฉันยังอยู่ — เล่นทันทีตอนกด (ก่อนเปิดการ์ด)
+    takumiBlackoutStart: { img: "/characters/takumi/skill3.jpg", video: "/characters/takumi/takumi_skill3_first.mp4", title: "ถึงจะมองไม่เห็น แต่ฉันยังอยู่", label: "ปล่อยท่าไม้ตาย", seconds: 10, music: "forever", afterReveal: false },
+    // takumiBlackoutBust: ทริกเกอร์ — คนแรกที่ไพ่แตกระหว่างบังตากระดาน (เล่นก่อนสรุปผล ผ่าน afterResolve()'s queueCutscene)
+    takumiBlackoutBust: { img: "/characters/takumi/skill3.jpg", video: "/characters/takumi/takumi_skill3_second.mp4", title: "ถึงจะมองไม่เห็น แต่ฉันยังอยู่", label: "ไพ่แตก", seconds: 10, music: null, afterReveal: false },
   };
 };

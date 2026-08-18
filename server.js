@@ -123,27 +123,31 @@ const SHOP_SKILL_SIZES = [
 const DOOM_BASE = "/characters/doomguy";
 const DOOM_WEAPONS = {
   shotgun:      { id: "shotgun", name: "Combat Shotgun", img: `${DOOM_BASE}/สกิลรอง/Combat shotgun.webp`, cost: 2, weight: 17, atk: 2, pierce: false, effect: "explode" },
-  heavy:        { id: "heavy", name: "Heavy Cannon", img: `${DOOM_BASE}/สกิลรอง/Heavy Cannon.webp`, cost: 3, weight: 17, atk: 1, pierce: true, effect: "lockon" },
-  plasma:       { id: "plasma", name: "Plasma Rifle", img: `${DOOM_BASE}/สกิลรอง/Plasma Rifle.webp`, cost: 0, weight: 17, atk: 2, pierce: true, effect: null },
+  heavy:        { id: "heavy", name: "Heavy Cannon", img: `${DOOM_BASE}/สกิลรอง/Heavy Cannon.webp`, cost: 2, weight: 17, atk: 2, pierce: true, effect: "lockon" },
+  plasma:       { id: "plasma", name: "Plasma Rifle", img: `${DOOM_BASE}/สกิลรอง/Plasma Rifle.webp`, cost: 2, weight: 17, atk: 1, pierce: true, effect: "drain" },
   chaingun:     { id: "chaingun", name: "Chaingun", img: `${DOOM_BASE}/สกิลรอง/Chaingun.webp`, cost: 2, weight: 17, atk: 2, pierce: false, effect: "shield" },
   rocket:       { id: "rocket", name: "Rocket Launcher", img: `${DOOM_BASE}/สกิลรอง/Rocket Launcher.webp`, cost: 5, weight: 10, atk: 3, pierce: false, splash: true, effect: "bonusdmg" },
   supershotgun: { id: "supershotgun", name: "Super Shotgun", img: `${DOOM_BASE}/สกิลรอง/Super shotgun.webp`, cost: 4, weight: 10, atk: 3, pierce: false, effect: "stun" },
-  ballista:     { id: "ballista", name: "Ballista", img: `${DOOM_BASE}/สกิลรอง/Ballista.webp`, cost: 5, weight: 10, atk: 3, pierce: true, effect: "aoe" },
+  ballista:     { id: "ballista", name: "Ballista", img: `${DOOM_BASE}/สกิลรอง/Ballista.webp`, cost: 5, weight: 10, atk: 3, pierce: true, effect: "bonusdmg2" },
   bfg:          { id: "bfg", name: "BFG 9000", img: `${DOOM_BASE}/สกิลรอง/BFG9000.webp`, cost: 8, weight: 2, atk: 6, pierce: false, effect: null },
 };
 const DOOM_WEAPON_IDS = Object.keys(DOOM_WEAPONS);
 const DOOM_STARTING_WEAPON = "shotgun";
-const DOOM_LOCKON_CHANCE = 0.4;
+const DOOM_LOCKON_CHANCE = 1; // patch: เอาทอย 40% ออก ติดสถานะ [ล็อคเป้า] แน่นอนเสมอ
 const DOOM_EXPLODE_DMG = 1;
 const DOOM_EXPLODE_TARGETS = 2;
 const DOOM_LOCKON_BONUS = 1;
 const DOOM_ROCKET_BONUS_DMG = 2;
-const DOOM_BALLISTA_DMG = 1;
+const DOOM_BALLISTA_TARGET_DMG = 2; // Ballista (patch): เปลี่ยนจาก aoe ทุกคน 1 -> เลือกเป้าหมาย 1 คนโดนดาเมจเพิ่มเติม 2 (โครงเดียวกับ Rocket's bonusdmg)
+const DOOM_DRAIN_DMG = 1;    // [โดนดูด] (Plasma Rifle): ดาเมจ 1/เทิร์น ผ่านเกราะก่อน
+const DOOM_DRAIN_TURNS = 3;  // [โดนดูด]: คงอยู่ 3 เทิร์น
 const DOOM_CRUCIBLE_ATK = 7;
 const DOOM_CRUCIBLE_CHARGE_NEED = 5;
 const DOOM_HEAL_ON_ATK = 1;
+const DOOM_SHIELD_ON_ATK = 1; // patch: พาสซีฟเพิ่มโล่ +1 ทุกครั้งที่โจมตีโดน (นอกเหนือจากฮีล)
 const DOOM_CHARGE_CHANCE = 0.35; // patch 2.2 new: 10% -> 25% -> 35%
-const DOOM_TIE_ATTACK_CHANCE = 0.60; // patch 2.2 new: 50% -> 60% (ชนะมากขึ้น)
+const DOOM_TIE_ATTACK_CHANCE = 0.75; // patch: 50% -> 60% -> 75% (ชนะมากขึ้น)
+const DOOM_FORTUNE_CHANCE = 0.2; // patch: ทุกต้นเทิร์นมีโอกาส 20% ได้ [โชคลาภ] +1 สแตค
 const DOOM_CRUCIBLE_BUST_DMG = 2; // Crucible: บังคับทุกคนแตก -> รับความเสียหายเหมือนแพ้จั่ว/ไพ่แตก
 const DOOM_CRUCIBLE_BUST_DRAWS = 2; // Crucible (patch 2.2.4): บังคับจั่วเพิ่ม 2 ใบ (แบบเดียวกับ Ashen Trail โอกูริ)
 const DOOM_CRUCIBLE_BUST_BONUS = 8; // Crucible (patch 2.2.4): บวกแต้มการ์ดตรงๆ +8 การันตีแตกจริง แม้เปิดไพ่/ล็อกไปแล้ว
@@ -511,6 +515,10 @@ const HAKUNO_COMMAND_USES = 3;        // อาคมบัญชาระดั
 // สกิลติดตัว/ท่าไม้ตายถูก MOON*CELL ปิดใช้งานอยู่ไหม (มีผลกับทุกคนยกเว้นฮาคุโนะเจ้าของท่า)
 function moonCellActive() {
   return Object.values(players).some((pp) => (pp.statuses && pp.statuses.moonCell) > 0);
+}
+// ทาคุมิ ฟุจิวาระ: ถึงจะมองไม่เห็น แต่ฉันยังอยู่ — ท่าไม้ตายทำงานอยู่ไหม (บังตากระดานทั้งหมด — แบบเดียวกับ moonCellActive)
+function takumiBlackoutActive() {
+  return Object.values(players).some((pp) => (pp.statuses && pp.statuses.takumiBlackout) > 0);
 }
 // ยูนะ — Break Beat Bark! ทำงานอยู่ไหม (บัฟทั้งสนาม ไม่ใช่สถานะผู้เล่นคนเดียว เหมือน moonCellActive)
 function yunaBeatBarkActive() {
@@ -1032,6 +1040,13 @@ function displayImg(p) {
   if (p.characterId === "oguri" && (p.statuses.graybeast || 0) > 0) return OGURI_ZONE_IMG;
   // ผู้สังหารจอมมหาเวทย์: เคยใช้ Witch Mark ไปแล้ว (ถาวร) = MS02.png แทน MS01.png ปกติ
   if (p.characterId === "mageslayer") return p.mageslayerHasMarked ? "/characters/mageslayer/MS02.png" : "/characters/mageslayer/MS01.png";
+  // ทาคุมิ ฟุจิวาระ: ภาพเปลี่ยนตามเกียร์ธรรมดา — เกียร์ 1-2: takumi1.webp / เกียร์ 3-5: takumi3.jpg / เกียร์ 6: takumi6.jpg
+  if (p.characterId === "takumi") {
+    const gear = p.takumiGear || 1;
+    if (gear >= 6) return "/characters/takumi/takumi6.jpg";
+    if (gear >= 3) return "/characters/takumi/takumi3.jpg";
+    return "/characters/takumi/takumi1.webp";
+  }
   // ริดดี้ มาร์เซนาส: ล็อบบี้ = riddhe.jpg — ลงสนามเป็นบันชี / NT-D (ท่าไม้ตาย 1) / ร่างดำมืด (ท่าไม้ตาย 2 หรือถาวรหลังสกิลติดตัว 3)
   if (p.characterId === "riddhe") {
     if (gameState === "LOBBY") return p.img;
@@ -1078,6 +1093,14 @@ function activeSkillMusic() {
     }
   }
   if (bestBeat) return bestBeat;
+  // ทาคุมิ ฟุจิวาระ: ถึงจะมองไม่เห็น แต่ฉันยังอยู่ ทำงานอยู่ — เพลง forever เล่นค้าง (priority สูงกว่าเพลงตามเกียร์ ต่ำกว่า Beat Mode)
+  let bestTakumiBlackout = null;
+  for (const p of alivePlayers()) {
+    if (p.characterId === "takumi" && (p.statuses.takumiBlackout || 0) > 0) {
+      if (!bestTakumiBlackout || (p.transformAt || 0) > bestTakumiBlackout.at) bestTakumiBlackout = { music: "forever", at: p.transformAt || 0 };
+    }
+  }
+  if (bestTakumiBlackout) return bestTakumiBlackout;
   // สึงาชิ ทาคุโตะ (patch 2.2.5): สกิลติดตัว 1 กันตายทำงานไปแล้วสักครั้ง — ระหว่างที่ยังอยู่ในร่างฉันคว้ามันได้แล้ว เพลง takuto2 เล่นแทน takuto ปกติ
   let bestTakutoAwaken = null;
   for (const p of alivePlayers()) {
@@ -1145,6 +1168,16 @@ function activeSkillMusic() {
     }
   }
   if (bestMageslayer) return bestMageslayer;
+  // ทาคุมิ ฟุจิวาระ: เพลงประจำตัวตามเกียร์ธรรมดา — เกียร์ 3-5: all_around / เกียร์ 6: secret_love (เกียร์ 1-2 ไม่มีเพลงพิเศษ)
+  let bestTakumiGear = null;
+  for (const p of alivePlayers()) {
+    if (p.characterId !== "takumi") continue;
+    const gear = p.takumiGear || 1;
+    const gearMusic = gear >= 6 ? "secret_love" : gear >= 3 ? "all_around" : null;
+    if (!gearMusic) continue;
+    if (!bestTakumiGear || (p.transformAt || 0) > bestTakumiGear.at) bestTakumiGear = { music: gearMusic, at: p.transformAt || 0 };
+  }
+  if (bestTakumiGear) return bestTakumiGear;
   // MOON*CELL (คิชินามิ ฮาคุโนะ patch 2.2.1): เพลง hakuno_theme เล่นค้างระหว่างท่าไม้ตายทำงาน
   let bestHakuno = null;
   for (const p of alivePlayers()) {
@@ -1385,6 +1418,7 @@ function resetCombat(p) {
   if (p.characterId === "doomguy") p.doomWeapon = DOOM_STARTING_WEAPON; // เริ่มเกมได้ Combat Shotgun เสมอ
   p.doomQuickSwapUsed = false; // Quick Swap: 1 ครั้งต่อเทิร์น
   p.doomCharge = 0;            // ชาร์จสำหรับปลดล็อก Crucible (ครบ 5)
+  p.doomChaingunShieldUsed = false; // Chaingun's [ใช้ได้ครั้งเดียว]: รีเซ็ตทุกครั้งที่เปลี่ยนอาวุธ
   // ---------- สึงาชิ ทาคุโตะ (patch 2.2 new) ----------
   p.takutoComboReady = false; // Saphir+Emeraude ร่วมกัน: รอ postAttackFollowup อ่านเพื่อโจมตีเพิ่มอีกครั้ง (patch 2.2.3 — เดิมเก็บเป็นโอกาส 50/50)
   p.takutoUlt2VideoPending = false; // อย่างนายน่ะ จะไปเข้าใจอะไร: รอโจมตีจริงครั้งถัดไปแล้วค่อยเล่นวีดีโอ
@@ -1438,6 +1472,10 @@ function resetCombat(p) {
   p.mageslayerHasMarked = false;    // เคยใช้ Witch Mark หรือยัง (ถาวร — ขับเคลื่อนภาพโปรไฟล์ MS01→MS02)
   p.mageslayerRuptureTargetId = null; // Mana Rupture: เป้าหมายที่เล็งไว้ (ผลทำงานหลังเปิดไพ่)
   p.mageslayerLockedBurden = false; // Mana Burden: Bard ที่ติดตราล่าเวทตอนโดน — ล้าง spellburden ไม่ได้แม้ต้านสถานะ
+  // ---------- ทาคุมิ ฟุจิวาระ (takumi) ----------
+  p.takumiGear = 1;             // เกียร์ธรรมดา: 1-6 เริ่มเกม 1
+  p.takumiSkillUsesRound = 0;   // งบสกิลรวม 5 ครั้ง/เทิร์น (พื้นฐาน/รอง/ท่าไม้ตาย ผสมกันได้อิสระ)
+  p.takumiBlackoutFired = false; // ถึงจะมองไม่เห็น แต่ฉันยังอยู่: กันยิงซ้ำระหว่างสถานะเดียวกันยังทำงานอยู่
   // ---------- เรียวกิ ชิกิ (patch 2.0.6) ----------
   //  p.shikiUlt คงไว้ตามที่เลือกตอนเข้าห้อง (deatheye | wither) — ไม่รีเซ็ตระหว่างแมตช์
   p.witherAdded = 0;        // เส้นชีวิตที่ความตายที่โรยราแจกให้คนนี้ (สูงสุด 3 — จบท่าแล้วลบออกคืน)
@@ -1626,6 +1664,8 @@ function buildStateFor(viewerId) {
     players: Object.values(players).map((p) => {
       const mine = p.id === viewerId;
       const show = mine || revealAll;
+      // ทาคุมิ ฟุจิวาระ: ถึงจะมองไม่เห็น แต่ฉันยังอยู่ ทำงานอยู่ — บังตากระดานทั้งหมด (score/cards/hp/armor/shield ของทุกคนรวมตัวเอง, แต้มสกิลของทุกคนยกเว้นตัวเอง)
+      const takumiBlackout = takumiBlackoutActive();
       // ใบโปรโมทสินค้า (Apple guy): แต้มการ์ดของคนติดสถานะถูกเปิดเผยให้ทุกคนเห็น (1 เทิร์น)
       const promoShow = (p.statuses.promo || 0) > 0;
       // นายยังมีอนาคตอีกยาวไกล (ริดดี้ patch 2.0.9): คู่พันธมิตรเห็นแต้มการ์ดของกันและกันได้ตลอด
@@ -1690,11 +1730,12 @@ function buildStateFor(viewerId) {
         const w = DOOM_WEAPONS[p.doomWeapon] || DOOM_WEAPONS.shotgun;
         const effDesc = {
           explode: "เลือกเป้าหมาย 1 คน ติดสถานะ [ระเบิด] — โดนโจมตีเมื่อไหร่จะระเบิดใส่คนอื่นสุ่ม 2 คน -1",
-          lockon: `เลือกเป้าหมาย 1 คน ติด [ล็อคเป้า] (โอกาสสำเร็จ ${Math.round(DOOM_LOCKON_CHANCE * 100)}%) — โดนโจมตีครั้งถัดไปแรงขึ้น +${DOOM_LOCKON_BONUS}`,
-          shield: "เพิ่มโล่ของตัวเอง +1",
+          lockon: `เลือกเป้าหมาย 1 คน ติด [ล็อคเป้า] แน่นอน — โดนโจมตีครั้งถัดไปแรงขึ้น +${DOOM_LOCKON_BONUS}`,
+          drain: `เลือกเป้าหมาย 1 คน ติดสถานะ [โดนดูด] — ดาเมจ ${DOOM_DRAIN_DMG} หน่วยทุกเทิร์น ${DOOM_DRAIN_TURNS} เทิร์น (เจาะเกราะก่อน)`,
+          shield: "เพิ่มโล่ของตัวเอง +1 (ใช้ได้ครั้งเดียวต่อการถืออาวุธนี้)",
           bonusdmg: `เลือกเป้าหมาย 1 คน โดนดาเมจเพิ่มเติมทันที -${DOOM_ROCKET_BONUS_DMG}`,
           stun: "เลือกเป้าหมาย 1 คน สตั้น 1 เทิร์น",
-          aoe: `ทำดาเมจกับทุกคน -${DOOM_BALLISTA_DMG}`,
+          bonusdmg2: `เลือกเป้าหมาย 1 คน โดนดาเมจเพิ่มเติมทันที -${DOOM_BALLISTA_TARGET_DMG}`,
         }[w.effect] || "ไม่มีความสามารถพิเศษ";
         secondaryPub = { name: `Weapon: ${w.name}`, desc: `ถือ ${w.name} อยู่ — โจมตีปกติ${w.pierce ? "เจาะเกราะ" : ""} ${w.atk} หน่วย. ${effDesc}`, cost: w.cost, img: w.img };
       }
@@ -1718,11 +1759,11 @@ function buildStateFor(viewerId) {
         busted: (show || promoShow || allyShow) ? bustedOf(p) : false,
         result: p.result,
         cardCount: p.cards.length,
-        cards: mine ? p.cards : null,
-        score: (show || promoShow || allyShow) ? scoreOf(p) : null,
-        hp: p.hp, maxHp: maxHpOf(p), // Locacaca (ซาโตรุ): Max HP ลดถาวรได้
-        armor: p.armor, maxArmor: maxArmorOf(p),
-        shield: p.shield,
+        cards: takumiBlackout ? null : (mine ? p.cards : null),
+        score: takumiBlackout ? null : ((show || promoShow || allyShow) ? scoreOf(p) : null),
+        hp: takumiBlackout ? null : p.hp, maxHp: takumiBlackout ? null : maxHpOf(p), // Locacaca (ซาโตรุ): Max HP ลดถาวรได้ / ทาคุมิ: บังตาระหว่างท่าไม้ตายทำงาน
+        armor: takumiBlackout ? null : p.armor, maxArmor: takumiBlackout ? null : maxArmorOf(p),
+        shield: takumiBlackout ? null : p.shield,
         tempHp: p.tempHp || 0, // เลือดชั่วคราว (แกมเบลอร์)
         // เอฟเฟครอบการ์ด (เห็นทุกคน): เขี้ยวปฏิปักษ์สีเขียว (ถาวร) / เกราะราชันสีแดง (ตอนสวม)
         beat: !!(p.seen && p.seen.beat),
@@ -1730,8 +1771,8 @@ function buildStateFor(viewerId) {
         rachan: !!(p.seen && p.seen.rachan) && (p.statuses.rachan || 0) > 0,
         // ยูนะ: ออร่าเฉพาะเป้าหมาย (Longing สีทอง / Delete สีม่วง / Smile for You สีเขียว-ฟ้า) — beatbark ไม่มีเป้าหมายเดี่ยว ดู yunaFieldFx
         fieldAura: (p.id === yunaTargetId && roundNumber <= yunaWindowEnd) ? yunaEffect : null,
-        // ซาโตรุ (patch 2.0.8.2): แต้มสกิลถูกซ่อนจากผู้เล่นอื่นเสมอ (-1 = ซ่อน)
-        skillPoints: (p.characterId === "satoru" && !mine && !passiveSealed(p)) ? -1 : p.skillPoints,
+        // ซาโตรุ (patch 2.0.8.2): แต้มสกิลถูกซ่อนจากผู้เล่นอื่นเสมอ (-1 = ซ่อน) / ทาคุมิ: บังตาแต้มสกิลของทุกคนยกเว้นตัวเองระหว่างท่าไม้ตายทำงาน (sentinel -1 แบบเดียวกัน กลับด้าน)
+        skillPoints: (takumiBlackout && !mine) ? -1 : ((p.characterId === "satoru" && !mine && !passiveSealed(p)) ? -1 : p.skillPoints),
         maxSkill: maxSkillOf(p), // Bard: เพดานพลังงาน 9
         beamAmmo: p.beamAmmo,
         puddingCount: p.puddingCount || 0,
@@ -1761,6 +1802,8 @@ function buildStateFor(viewerId) {
         mageslayerHasMarked: p.characterId === "mageslayer" ? !!p.mageslayerHasMarked : undefined, // ผู้สังหารจอมมหาเวทย์: เคยใช้ Witch Mark หรือยัง
         kaiRivalId: mine ? (p.kaiRivalId || null) : undefined, // ไค ชิซากิ: คู่ปรับที่ถูกบังคับโจมตี (เห็นแค่ตัวเอง — ฝั่งอื่นเช็คจาก statuses.kaiRival1/2 ได้)
         kaiSkillUsesRound: p.characterId === "kai" ? (p.kaiSkillUsesRound || 0) : undefined, // ไค: งบสกิล 2 ครั้งต่อเทิร์น ใช้ไปแล้วกี่ครั้ง
+        takumiGear: p.characterId === "takumi" ? (p.takumiGear || 1) : undefined, // ทาคุมิ: เกียร์ธรรมดาปัจจุบัน (1-6)
+        takumiSkillUsesRound: p.characterId === "takumi" ? (p.takumiSkillUsesRound || 0) : undefined, // ทาคุมิ: งบสกิล 5 ครั้งต่อเทิร์น ใช้ไปแล้วกี่ครั้ง
         shikiUlt: p.shikiUlt || "deatheye", // ชิกิ: ท่าไม้ตายที่เลือกตอนเข้าห้อง (deatheye | wither)
         stamina: p.stamina || 0,           // โอกูริ แคป: Stamina ชาร์จสะสม (ทรัพยากรท่าไม้ตาย)
         oguriEnergy: p.oguriEnergy || 0,   // โอกูริ แคป: Energy สะสม (สูงสุด 16 — ทรัพยากร Breakfast/Training)
@@ -2048,6 +2091,8 @@ function dealRound() {
     // เทเปา (patch 2.2 new): ทำอาหาร/ครุ่นคิด/ฉากหลังไม้ตาย นับถอยหลังที่ endTurn() แทน (ต้องอ่านค่าก่อนลดเพื่อรู้ "เทิร์นสุดท้าย" ให้ตรง)
     p.bardNotesUsed = 0;      // Bard: นับโน้ตใหม่ทุกเทิร์น (จำกัด 2 — มิติวิญญาณไม่จำกัด)
     p.kaiSkillUsesRound = 0;  // ไค: งบสกิล 2 ครั้ง (รังสรรค์/ลงทัณฑ์ ผสมกันได้อิสระ) เต็มใหม่ทุกเทิร์น
+    p.takumiSkillUsesRound = 0; // ทาคุมิ: งบสกิลรวม 5 ครั้งต่อเทิร์น (พื้นฐาน/รอง/ท่าไม้ตาย ผสมกันได้อิสระ) เต็มใหม่ทุกเทิร์น
+    CHAR_HOOKS.doomguy.onRoundStartFortuneRoll(engine, p); // DoomGuy: ทุกต้นเทิร์นมีโอกาส 20% ได้ [โชคลาภ] +1 สแตค
     p.anataTargets = null;
     p.hakunoLowDraw = false; // ข้าขอบัญชา (หญิง คิชินามิ ฮาคุโนะ): จำกัดจั่ว 2/3 แต้ม เฉพาะเทิร์นที่ใช้เท่านั้น
     // ห้ามจั่วการ์ดเพิ่มที่ตั้งไว้จากเทิร์นก่อน (ทงคัสสึ / กำไรเท่าตัวโว้ย) — noDrawNext เป็นจำนวนเทิร์น
@@ -2179,6 +2224,8 @@ function dealRound() {
 
     // ---------- ลุกไหม้ (hburn, สถานะ Universal): ดาเมจ 1/เทิร์น สะสมสูงสุด 6 — ย้าย body ไป characters/_universal_status.js แล้ว ----------
     tickBurn(engine, p);
+    // ---------- [โดนดูด] (doomDrain, Plasma Rifle — DoomGuy): ดาเมจ 1/เทิร์น 3 เทิร์น เจาะเกราะก่อน ----------
+    CHAR_HOOKS.doomguy.tickDrain(engine, p);
     // ---------- บานาจ (patch 2.1.2, characters/banagher.js): Full Assault — ตีหมู่ทุกคนต่อเนื่องทุกต้นเทิร์นที่ผลยังอยู่ ----------
     CHAR_HOOKS.banagher.onRoundStartFullAssaultTick(engine, p);
     p.cards = [];
@@ -2488,7 +2535,14 @@ function useSkill(id, tier, targets, item) {
   //  งบรวม 2 ครั้งต่อเทิร์น ผสมกันได้อิสระ (เช่น รังสรรค์ 2 ครั้งใส่คนละเป้า, หรือ 1 รังสรรค์ + 1 ลงทัณฑ์)
   const isKaiPick = p.characterId === "kai" && (tier === "basic" || tier === "secondary");
   if (isKaiPick && (p.kaiSkillUsesRound || 0) >= 2) return;
-  if (p.skillUsedRound && !gambleRepeat && !isApplePick && !isTohnoPick && !isHakunoGender && !isDoomguyPick && !isKaiPick) return; // ใช้สกิลได้เพียง 1 อันต่อเทิร์น (ซ้ำ/ซ้อนไม่ได้)
+  // ทาคุมิ ฟุจิวาระ: ขึ้นเกียร์ (พื้นฐาน) / ลงเกียร์ (รอง) / ถึงจะมองไม่เห็น แต่ฉันยังอยู่ (ท่าไม้ตาย) ไม่นับเป็นการใช้สกิลของเทิร์นร่วมกัน
+  //  งบรวม 5 ครั้งต่อเทิร์น ผสมกันได้อิสระ (แพทเทิร์นเดียวกับไค กว้างขึ้นครอบคลุมท่าไม้ตายด้วย) — ท่าไม้ตายกดซ้ำไม่ได้ผ่านเช็คทั่วไปด้านล่าง (takumiBlackout บล็อกเอง)
+  const isTakumiPick = p.characterId === "takumi" && (tier === "basic" || tier === "secondary" || tier === "ultimate");
+  if (isTakumiPick && (p.takumiSkillUsesRound || 0) >= 5) return;
+  const isTakumiGearUp = p.characterId === "takumi" && tier === "basic";
+  const isTakumiGearDown = p.characterId === "takumi" && tier === "secondary";
+  const isTakumiBlackout = p.characterId === "takumi" && tier === "ultimate";
+  if (p.skillUsedRound && !gambleRepeat && !isApplePick && !isTohnoPick && !isHakunoGender && !isDoomguyPick && !isKaiPick && !isTakumiPick) return; // ใช้สกิลได้เพียง 1 อันต่อเทิร์น (ซ้ำ/ซ้อนไม่ได้)
   // MOON*CELL (คิชินามิ ฮาคุโนะ): ต้องมีแต้มคำสาปแห่งดวงจันทร์ครบ 3 เท่านั้น
   if (st === "moonCell" && (p.hakunoMoonPoints || 0) < HAKUNO_MOONCELL_NEED) return;
   // ข้าขอบัญชา (ชาย/หญิง คิชินามิ ฮาคุโนะ): กดซ้ำไม่ได้จนกว่าผลเดิมจะหมด
@@ -2594,9 +2648,9 @@ function useSkill(id, tier, targets, item) {
   const isDoomWeapon = p.characterId === "doomguy" && tier === "secondary";
   const doomW = isDoomWeapon ? (DOOM_WEAPONS[p.doomWeapon] || DOOM_WEAPONS.shotgun) : null;
   if (isDoomWeapon) cost = doomW.cost;
-  if (isDoomWeapon && !doomW.effect) return; // ปืนบางกระบอกไม่มีความสามารถพิเศษให้กด (Plasma Rifle / BFG 9000)
+  if (isDoomWeapon && !doomW.effect) return; // ปืนบางกระบอกไม่มีความสามารถพิเศษให้กด (BFG 9000)
   let doomTarget = null;
-  if (isDoomWeapon && ["explode", "lockon", "stun", "bonusdmg"].includes(doomW.effect)) {
+  if (isDoomWeapon && ["explode", "lockon", "stun", "bonusdmg", "bonusdmg2", "drain"].includes(doomW.effect)) {
     doomTarget = CHAR_HOOKS.doomguy.resolveWeaponTarget(engine, p, targets);
     if (!doomTarget) return;
   }
@@ -2662,13 +2716,13 @@ function useSkill(id, tier, targets, item) {
     msWitchMarkTarget = CHAR_HOOKS.mageslayer.prepareWitchMarkTarget(engine, p, targets);
     if (!msWitchMarkTarget) return;
   }
-  const isMsRupture = p.characterId === "mageslayer" && tier === "secondary";
+  const isMsRupture = p.characterId === "mageslayer" && tier === "ultimate";
   let msRuptureTarget = null;
   if (isMsRupture) {
     msRuptureTarget = CHAR_HOOKS.mageslayer.prepareRuptureTarget(engine, p, targets);
     if (!msRuptureTarget) return;
   }
-  const isMsBurden = p.characterId === "mageslayer" && tier === "ultimate";
+  const isMsBurden = p.characterId === "mageslayer" && tier === "secondary";
 
   if (st === "beam" && (p.beamAmmo || 0) <= 0) return; // Beam Magnum กระสุนหมด ใช้ไม่ได้
   if (st === "beamplus" && (p.beamAmmo || 0) <= 0) return; // Beam Magnum Plus (ริดดี้) กระสุนหมด ใช้ไม่ได้
@@ -2696,8 +2750,9 @@ function useSkill(id, tier, targets, item) {
     if (p.statuses.freecast <= 0) delete p.statuses.freecast;
     lastLog.push(`👸 ${p.name} การ์ดราชินี — ใช้สกิลนี้โดยไม่เสียแต้มสกิล`);
   }
-  if (!isApplePick && !isTohnoPick && !isHakunoGender && !isDoomguyPick && !isKaiPick) p.skillUsedRound = true; // เอาแบบนี้ได้ไหม / มีดพับประจำตระกูล / เธอ/นาย คือฉันหรอ? / Quick Swap-Weapon (DoomGuy) / รังสรรค์-ลงทัณฑ์ (ไค)
+  if (!isApplePick && !isTohnoPick && !isHakunoGender && !isDoomguyPick && !isKaiPick && !isTakumiPick) p.skillUsedRound = true; // เอาแบบนี้ได้ไหม / มีดพับประจำตระกูล / เธอ/นาย คือฉันหรอ? / Quick Swap-Weapon (DoomGuy) / รังสรรค์-ลงทัณฑ์ (ไค) / ขึ้น-ลงเกียร์+ท่าไม้ตาย (ทาคุมิ)
   if (isKaiPick) p.kaiSkillUsesRound = (p.kaiSkillUsesRound || 0) + 1;
+  if (isTakumiPick) p.takumiSkillUsesRound = (p.takumiSkillUsesRound || 0) + 1;
 
   // ---------- นายมีฝีมือแค่ไหนหรอ? (ชิกิ patch 2.0.6): ยกเลิกท่าไม้ตายทันทีที่มีผู้เล่นอื่นกด ----------
   //  มีชิกิถือชาร์จ godslay อยู่บนสนาม -> ท่าไม้ตายของผู้เล่นอื่นที่เพิ่งกดถูกยกเลิกทันที
@@ -2783,6 +2838,10 @@ function useSkill(id, tier, targets, item) {
     p.transformAt = ++transformCounter; // Mana Burden: BGM mageslayer_ult ใช้ลำดับนี้ตัดสินว่าใครล่าสุด
     CHAR_HOOKS.mageslayer.applyManaBurden(engine, p);
   }
+  // ---------- ทาคุมิ ฟุจิวาระ (characters/takumi.js) ----------
+  if (isTakumiGearUp) flashSuffix = CHAR_HOOKS.takumi.applyGearUp(engine, p);
+  if (isTakumiGearDown) flashSuffix = CHAR_HOOKS.takumi.applyGearDown(engine, p);
+  if (isTakumiBlackout) CHAR_HOOKS.takumi.activateBlackout(engine, p);
   // ---------- โอกูริ แคป (Rework, characters/oguri.js) ----------
   if (isBreakfast) flashSuffix = CHAR_HOOKS.oguri.applyBreakfast(engine, p);
   if (isOguriTrain) flashSuffix = CHAR_HOOKS.oguri.applyTraining(engine, p);
@@ -3424,6 +3483,8 @@ function afterResolve() {
   CHAR_HOOKS.oguri.onAfterResolveAshenTrail(engine);
   // ---------- ผู้สังหารจอมมหาเวทย์ (characters/mageslayer.js): Mana Rupture — ผลทำงานหลังเปิดไพ่ทุกคน ----------
   CHAR_HOOKS.mageslayer.resolveAllRuptures(engine);
+  // ---------- ทาคุมิ ฟุจิวาระ (characters/takumi.js): ถึงจะมองไม่เห็น แต่ฉันยังอยู่ — คนแรกที่ไพ่แตกระหว่างบัฟยังทำงาน ----------
+  CHAR_HOOKS.takumi.tryBustTrigger(engine);
 
   const activated = [];
   for (const p of alivePlayers()) {
@@ -4165,6 +4226,7 @@ function endTurn() {
       if (k === "emeraude" || k === "saphir" || k === "lance") continue; // Star Sword / หอกผู้พิชิต (สึงาชิ ทาคุโตะ): คงอยู่จนกว่าจะได้โจมตี (ไม่ลดเทิร์น)
       if (k === "takutoThirdAtk") continue; // พิชิตแสงดาว (สึงาชิ ทาคุโตะ): คงอยู่จนกว่าจะได้ลุ้นโจมตีครั้งที่ 3 (ไม่ลดเทิร์น)
       if (k === "doomCrucible") continue; // Crucible (ดูมกาย patch 2.2 new): คงอยู่จนกว่าจะได้โจมตี 1 ครั้ง (ไม่ลดเทิร์น)
+      if (k === "doomDrain") continue; // [โดนดูด] (ดูมกาย, Plasma Rifle): tickDrain() นับถอยหลัง/ลบเองแล้ว ไม่ให้ลูปนี้ลดซ้ำ
       if (k === "fortune") continue; // โชคลาภ (Bard): คงอยู่จนกว่าจะจั่วไพ่ครั้งถัดไป (หมดอายุเองถ้าไม่ใช้ 3 เทิร์น — ดูด้านบน)
       if (k === "rsHopper") continue; // RS-Hopper (เอวา 13): สแตคชาร์จ ไม่ใช่ตัวนับเทิร์น — ฟื้นเองทุก 3 เทิร์น (ดูด้านบน)
       if (k === "cassius") continue; // หอกแห่งแคสเซียส (เอวา 13): คงอยู่จนกว่าจะได้โจมตี (ไม่ลดเทิร์น)
@@ -4207,6 +4269,11 @@ function endTurn() {
         if (k === "kaiRival1" || k === "kaiRival2") CHAR_HOOKS.kai.onExpireKaiRival(p);
         // ผู้สังหารจอมมหาเวทย์: ภาระเวทหมดอายุตามธรรมชาติ -> ล้างล็อก Mana Burden (ถ้ามี)
         if (k === "spellburden") delete p.mageslayerLockedBurden;
+        // ทาคุมิ ฟุจิวาระ: ถึงจะมองไม่เห็น แต่ฉันยังอยู่ หมดเวลาเองตามธรรมชาติ (ไม่มีใครไพ่แตกใน 5 เทิร์น) -> รีเซ็ต guard ให้ใช้ท่าไม้ตายรอบหน้าได้ปกติ
+        if (k === "takumiBlackout") {
+          p.takumiBlackoutFired = false;
+          lastLog.push(`🌑 ${p.name} ถึงจะมองไม่เห็น แต่ฉันยังอยู่ หมดเวลาเอง — กลับมามองเห็นกันได้ตามปกติ`);
+        }
         // ไม่อยากให้ใครต้องเจ็บปวด (ริต้า เบอร์นัล patch 2.1.7): หมดเวลาพอดีเทิร์นนี้ — ยังนับว่า "ตายขณะท่าไม้ตายทำงาน"
         //  ต่อไปอีก 1 จังหวะจบเทิร์น เผื่อตายจากผลติกท้ายเทิร์นเดียวกัน (ล้างค่านี้ทิ้งตอนเริ่มเทิร์นถัดไปใน dealRound)
         if (k === "phenexTaunt") p.phenexTauntGrace = true;
@@ -4595,6 +4662,8 @@ io.on('connection', (socket) => {
       beamAmmo: BEAM_AMMO, puddingCount: 0, rsHopperRegenTimer: 0,
       gold: 0, inventory: [],
       doomWeapon: ch.id === "doomguy" ? DOOM_STARTING_WEAPON : null, doomQuickSwapUsed: false, doomCharge: 0,
+      doomChaingunShieldUsed: false,
+      takumiGear: 1, takumiSkillUsesRound: 0, takumiBlackoutFired: false,
       takutoComboReady: false, takutoUlt2VideoPending: false, takutoAwakenAt: 0,
       tonkatsu: 0, songAtk: 0, noDrawNext: 0, anataTargets: null,
       gamblerUses: GAMBLER_USES, profit: 0, tempHp: 0, tempHpTurns: 0, noSkillNext: 0,
@@ -4763,7 +4832,11 @@ const engine = {
   DOOM_LOCKON_BONUS,
   DOOM_CRUCIBLE_ATK,
   DOOM_ROCKET_BONUS_DMG,
-  DOOM_BALLISTA_DMG,
+  DOOM_BALLISTA_TARGET_DMG,
+  DOOM_DRAIN_DMG,
+  DOOM_DRAIN_TURNS,
+  DOOM_SHIELD_ON_ATK,
+  DOOM_FORTUNE_CHANCE,
   DOOM_CRUCIBLE_CHARGE_NEED,
   DOOM_HEAL_ON_ATK,
   DOOM_CHARGE_CHANCE,
@@ -4798,6 +4871,7 @@ const engine = {
   riddheAllied,
   riddheGrantFreeNtdToAlly(rAlly, byId) { return CHAR_HOOKS.riddhe.grantFreeNtdToAlly(engine, rAlly, byId); },
   hasQueuedCutscene() { return cutsceneQueue.length > 0; },
+  takumiBlackoutActive,
   get gameState() { return gameState; },
   setGameState(v) { gameState = v; },
   get roundNumber() { return roundNumber; },

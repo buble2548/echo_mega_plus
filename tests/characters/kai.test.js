@@ -115,14 +115,14 @@ test('resolveOverhaul: punishment+punishment — one-sided resist creates a one-
   assert.equal(b.kaiRivalId, a.id);
 });
 
-test('resolveOverhaul: creation+punishment -> Scale of Equality — punished side takes 3 (through armor), creation side heals 3', () => {
+test('resolveOverhaul: creation+punishment -> Scale of Equality — punished side takes 2 (through armor), creation side heals 3', () => {
   const kaiP = mkPlayer();
   const creationSide = mkPlayer({ armor: 2, hp: 5 });
   const punishSide = mkPlayer({ armor: 2, hp: 5, hp5: true });
   punishSide.hp = 3; // dip below max so heal on the creation side is observable, and damage on punish side is observable via armor
   kai.resolveOverhaul(engine, creationSide, 'kaiCreation', punishSide, 'kaiPunishment', kaiP);
-  assert.equal(punishSide.armor, 0, '3 damage through armor-first: 2 armor gone, 1 spills to hp');
-  assert.equal(punishSide.hp, 2, '1 unit spilled into hp after armor exhausted');
+  assert.equal(punishSide.armor, 0, '2 damage through armor-first: both armor units gone, nothing spills to hp');
+  assert.equal(punishSide.hp, 3, 'hp untouched — 2 armor absorbed the full 2 damage');
 });
 
 test('resolveOverhaul: creation+punishment — self-punishment exception: kai punishing itself only takes 1 damage', () => {

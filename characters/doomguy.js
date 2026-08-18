@@ -34,10 +34,32 @@ module.exports = {
     return t;
   },
 
+  // เรียกจาก dealRound() ต้นเทิร์น (ลูปเดียวกับ tickBurn ใน _universal_status.js) — [โดนดูด] (Plasma Rifle):
+  //  ดาเมจ 1/เทิร์น เจาะเกราะก่อน นับถอยหลังเอง — ต้อง exclude "doomDrain" จาก generic decay loop เพราะจัดการที่นี่แล้ว
+  tickDrain(engine, p) {
+    if (!p || !p.alive || !(((p.statuses && p.statuses.doomDrain) || 0) > 0)) return;
+    engine.dealMixed(p, engine.DOOM_DRAIN_DMG);
+    engine.log(`🌀 ${p.name} [โดนดูด] — เสียหาย -${engine.DOOM_DRAIN_DMG} (เจาะเกราะก่อน) (เหลืออีก ${p.statuses.doomDrain - 1} เทิร์น)`);
+    engine.maybeBeatSave(p);
+    engine.maybeBeatMode(p);
+    engine.maybeEva3(p);
+    engine.maybeWakeKotone(p);
+    if (p.alive && p.hp <= 0) {
+      engine.instantDeath(p);
+      if (!p.alive) engine.log(`💀 ${p.name} เลือดจริงหมด ตกรอบ!`);
+    }
+    p.statuses.doomDrain = Math.max(0, p.statuses.doomDrain - 1);
+    if (p.statuses.doomDrain <= 0) {
+      delete p.statuses.doomDrain;
+      if (p.statusAmt) delete p.statusAmt.doomDrain;
+    }
+  },
+
   // เรียกจาก useSkill() ในส่วน effect — Quick Swap: สลับอาวุธทันที (ใช้ได้ 1 ครั้ง/เทิร์น)
   applyQuickSwap(engine, p) {
     p.doomQuickSwapUsed = true;
     p.doomWeapon = engine.rollDoomWeapon(p.doomWeapon);
+    p.doomChaingunShieldUsed = false; // เปลี่ยนอาวุธ -> Chaingun's [ใช้ได้ครั้งเดียว] รีเซ็ตใหม่
     engine.log(`🔫 ${p.name} Quick Swap — สลับอาวุธเป็น ${engine.DOOM_WEAPONS[p.doomWeapon].name}!`);
   },
 
@@ -52,17 +74,28 @@ module.exports = {
         engine.log(`💣 ${p.name} ${wname} — ${doomTarget.name} ติดสถานะระเบิด! (โจมตีโดนเมื่อไหร่จะระเบิดใส่คนอื่นสุ่ม 2 คน -1)`);
       }
     } else if (doomW.effect === "lockon" && doomTarget) {
+      // patch: เอาทอย 40% ออก ติดสถานะ [ล็อคเป้า] แน่นอนเสมอ (ยังคงต้านสถานะผิดปกติได้ตามปกติ)
       if (engine.resistActive(doomTarget)) {
         engine.log(`🛡️ ${doomTarget.name} ต้านสถานะผิดปกติ — ${wname} ไม่มีผล`);
-      } else if (Math.random() < engine.DOOM_LOCKON_CHANCE) {
+      } else {
         doomTarget.statuses.doomLockon = 1;
         engine.log(`🎯 ${p.name} ${wname} — ล็อคเป้า ${doomTarget.name} สำเร็จ! (โดนโจมตีครั้งถัดไปแรงขึ้น +1)`);
-      } else {
-        engine.log(`🎯 ${p.name} ${wname} — ล็อคเป้า ${doomTarget.name} ล้มเหลว (โอกาส ${Math.round(engine.DOOM_LOCKON_CHANCE * 100)}%)`);
+      }
+    } else if (doomW.effect === "drain" && doomTarget) {
+      if (engine.resistActive(doomTarget)) {
+        engine.log(`🛡️ ${doomTarget.name} ต้านสถานะผิดปกติ — ${wname} ไม่มีผล`);
+      } else if (engine.applyDebuff(doomTarget, "doomDrain", null, engine.DOOM_DRAIN_TURNS)) {
+        engine.log(`🌀 ${p.name} ${wname} — ${doomTarget.name} ติดสถานะ [โดนดูด] (ดาเมจ ${engine.DOOM_DRAIN_DMG}/เทิร์น ${engine.DOOM_DRAIN_TURNS} เทิร์น เจาะเกราะก่อน)`);
       }
     } else if (doomW.effect === "shield") {
-      p.shield += 1;
-      engine.log(`🛡️ ${p.name} ${wname} — เพิ่มโล่ +1`);
+      // ใช้ได้ครั้งเดียวต่อการถืออาวุธนี้ (รีเซ็ตทุกครั้งที่เปลี่ยนอาวุธ — ดู server.js's applyQuickSwap/onRoundStartWeaponCycle)
+      if (p.doomChaingunShieldUsed) {
+        engine.log(`🛡️ ${p.name} ${wname} — ใช้ไปแล้วรอบถืออาวุธนี้ ให้โล่ซ้ำไม่ได้`);
+      } else {
+        p.doomChaingunShieldUsed = true;
+        p.shield += 1;
+        engine.log(`🛡️ ${p.name} ${wname} — เพิ่มโล่ +1 (ใช้ได้ครั้งเดียวต่อการถืออาวุธนี้)`);
+      }
     } else if (doomW.effect === "bonusdmg" && doomTarget) {
       engine.dealMixed(doomTarget, engine.DOOM_ROCKET_BONUS_DMG);
       engine.maybeBeatSave(doomTarget); engine.maybeBeatMode(doomTarget); engine.maybeEva3(doomTarget); engine.maybeWakeKotone(doomTarget);
@@ -79,15 +112,16 @@ module.exports = {
         doomTarget.statuses.stun = Math.max(doomTarget.statuses.stun || 0, 1);
         engine.log(`💥 ${p.name} ${wname} — สตั้น ${doomTarget.name} 1 เทิร์น`);
       }
-    } else if (doomW.effect === "aoe") {
-      for (const o of engine.alivePlayers()) {
-        if (o.id === p.id) continue;
-        engine.dealMixed(o, engine.DOOM_BALLISTA_DMG);
-        engine.maybeBeatSave(o); engine.maybeBeatMode(o); engine.maybeEva3(o); engine.maybeWakeKotone(o);
-        o.wasAttacked = true;
-        if (o.alive && o.hp <= 0) { engine.instantDeath(o); if (!o.alive) engine.log(`💀 ${o.name} เลือดจริงหมด ตกรอบ!`); }
+    } else if (doomW.effect === "bonusdmg2" && doomTarget) {
+      // Ballista (patch): เลือกเป้าหมาย 1 คน โดนดาเมจเพิ่มเติมทันที (โครงเดียวกับ Rocket's bonusdmg)
+      engine.dealMixed(doomTarget, engine.DOOM_BALLISTA_TARGET_DMG);
+      engine.maybeBeatSave(doomTarget); engine.maybeBeatMode(doomTarget); engine.maybeEva3(doomTarget); engine.maybeWakeKotone(doomTarget);
+      doomTarget.wasAttacked = true;
+      engine.log(`🎯 ${p.name} ${wname} — ยิงใส่ ${doomTarget.name} เพิ่มเติม -${engine.DOOM_BALLISTA_TARGET_DMG}`);
+      if (doomTarget.alive && doomTarget.hp <= 0) {
+        engine.instantDeath(doomTarget);
+        if (!doomTarget.alive) engine.log(`💀 ${doomTarget.name} เลือดจริงหมด ตกรอบ!`);
       }
-      engine.log(`💥 ${p.name} ${wname} — ทำดาเมจทุกคน -${engine.DOOM_BALLISTA_DMG}`);
     }
   },
 
@@ -128,7 +162,9 @@ module.exports = {
   // เรียกจาก doAttack() หลังคำนวณดาเมจแล้ว — ฮีลตัวเอง+ชาร์จ Crucible / ล็อคเป้าใช้แล้วหมดฤทธิ์ / ระเบิด Combat Shotgun / กระจายดาเมจ Rocket Launcher / Crucible ใช้แล้วหมดฤทธิ์
   onAttackPostDamage(engine, attacker, target, dmg, doomLockonAtk) {
     const heal = engine.healHp(attacker, engine.DOOM_HEAL_ON_ATK);
-    if (heal > 0) engine.log(`💉 ${attacker.name} สกิลติดตัว — ฮีลตัวเอง +${heal}`);
+    attacker.shield += engine.DOOM_SHIELD_ON_ATK;
+    if (heal > 0) engine.log(`💉🛡️ ${attacker.name} สกิลติดตัว — ฮีลตัวเอง +${heal} และโล่ +${engine.DOOM_SHIELD_ON_ATK}`);
+    else engine.log(`🛡️ ${attacker.name} สกิลติดตัว — โล่ +${engine.DOOM_SHIELD_ON_ATK}`);
     if ((attacker.doomCharge || 0) < engine.DOOM_CRUCIBLE_CHARGE_NEED && Math.random() < engine.DOOM_CHARGE_CHANCE) {
       attacker.doomCharge = (attacker.doomCharge || 0) + 1;
       engine.log(`🔥 ${attacker.name} สกิลติดตัว — ได้รับชาร์จ Crucible +1 (${attacker.doomCharge}/${engine.DOOM_CRUCIBLE_CHARGE_NEED})`);
@@ -171,11 +207,21 @@ module.exports = {
     }
   },
 
+  // เรียกจาก dealRound() ต้นเทิร์น (ลูปเดียวกับที่รีเซ็ต p.kaiSkillUsesRound) — พาสซีฟ: ทุกต้นเทิร์นมีโอกาส 20% ได้ [โชคลาภ] +1 สแตค
+  onRoundStartFortuneRoll(engine, p) {
+    if (p.characterId !== "doomguy" || !p.alive) return;
+    if (Math.random() >= engine.DOOM_FORTUNE_CHANCE) return;
+    p.statuses.fortune = Math.min(engine.BARD_FORTUNE_MAX, (p.statuses.fortune || 0) + 1);
+    p.fortuneIdle = 0;
+    engine.log(`🍀 ${p.name} สกิลติดตัว — ได้โชคลาภ +1 (${p.statuses.fortune}/${engine.BARD_FORTUNE_MAX})`);
+  },
+
   // เรียกจาก dealRound() ตอนจบเทิร์น (ในลูปสถานะร่วมท้ายเทิร์น) — Weapon: บังคับสลับอาวุธใหม่ทันที (ไม่ทำงานระหว่างถือ Crucible)
   onRoundStartWeaponCycle(engine, p) {
     if (!(p.characterId === "doomguy" && p.alive && (p.statuses.doomCrucible || 0) <= 0)) return;
     const oldW = engine.DOOM_WEAPONS[p.doomWeapon] ? engine.DOOM_WEAPONS[p.doomWeapon].name : "";
     p.doomWeapon = engine.rollDoomWeapon(p.doomWeapon);
+    p.doomChaingunShieldUsed = false; // เปลี่ยนอาวุธ -> Chaingun's [ใช้ได้ครั้งเดียว] รีเซ็ตใหม่
     engine.log(`🔫 ${p.name} Weapon — จบเทิร์น สลับอาวุธจาก ${oldW} เป็น ${engine.DOOM_WEAPONS[p.doomWeapon].name} อัตโนมัติ`);
   },
 };

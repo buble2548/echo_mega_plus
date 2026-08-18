@@ -3,15 +3,15 @@
 //  Mana Burden (ภาระเวท) / Song's Curse (คำสาปบรรเลงทำนอง — พาสซีฟถาวร)
 //  ดู characters/index.js สำหรับไฟล์มัดรวม, server.js's useSkill()/doAttack()/afterResolve() สำหรับจุดเรียก
 //  หมายเหตุ: Song's Curse ห้ามฟื้นพลังงานปกติทุกทาง — hardcode เช็คตรงใน server.js's addSkill() (ไม่ใช่สถานะ
-//  ต้านไม่ได้) การขโมยพลังงาน (Witch Mark) และ +2 ของ Mana Rupture ใช้ direct assignment ตรงๆ จึงทะลุข้อจำกัดนี้
-//  โดยธรรมชาติ (ไม่เรียกผ่าน engine.addSkill เลย)
+//  ต้านไม่ได้) การขโมยพลังงาน (Witch Mark) ใช้ direct assignment ตรงๆ จึงทะลุข้อจำกัดนี้โดยธรรมชาติ
+//  (ไม่เรียกผ่าน engine.addSkill เลย) — Mana Rupture ไม่คืนพลังงานให้ผู้ใช้อีกต่อไป (nerf: ขัดกับพาสซีฟที่ฟื้น
+//  พลังงานเฉพาะจากการโจมตีเป้าหมายติด Witch Mark เท่านั้น)
 // ============================================================
 
-const MS_FURY_MAX = 3;         // Fury: สะสมสูงสุด 3 สต็อก
+const MS_FURY_MAX = 2;         // Fury: สะสมสูงสุด 2 สต็อก (nerf จาก 3)
 const MS_FURY_CHANCE = 0.35;   // Fury: โอกาสสะสมเมื่อแตก/แต้มต่ำสุด (อิสระต่อกันทั้งสอง trigger)
 const MS_MARK_STEAL_CHANCE = 0.35; // ตราล่าเวท: โอกาสขโมยพลังงานเมื่อเป้าหมายที่มาร์กใช้สกิลใดๆ
 const MS_SEAL_TURNS = 2;       // ผนึกพลังงาน: เป้าหมายพลังงาน 0 (โจมตีปกติ / ใช้สกิลไม่มีให้ขโมย)
-const MS_RUPTURE_ENERGY_BACK = 2; // Mana Rupture: คืนพลังงานให้ผู้ใช้ (ทะลุ Song's Curse เสมอ)
 
 module.exports = {
   id: "mageslayer",
@@ -138,9 +138,8 @@ module.exports = {
     const e = target.skillPoints || 0;
     let dmg = 0, stunTurns = 0;
     if (e >= 7 && e <= 8) dmg = 1;
-    else if (e >= 3 && e <= 6) dmg = 3;
-    else if (e >= 1 && e <= 2) dmg = 5;
-    else if (e === 0) { dmg = 5; stunTurns = target.characterId === "bard" ? 2 : 1; }
+    else if (e >= 2 && e <= 6) dmg = 3;
+    else if (e >= 0 && e <= 1) { dmg = 5; stunTurns = target.characterId === "bard" ? 2 : 1; }
     engine.dealMixed(target, dmg, true);
     engine.maybeBeatSave(target); engine.maybeBeatMode(target); engine.maybeEva3(target); engine.maybeWakeKotone(target);
     target.wasAttacked = true;
@@ -157,8 +156,6 @@ module.exports = {
     } else {
       engine.log(`💥 ${caster.name} Mana Rupture — ${target.name} (พลังงาน ${e}) รับดาเมจ -${dmg}`);
     }
-    caster.skillPoints = Math.min(engine.maxSkillOf(caster), caster.skillPoints + MS_RUPTURE_ENERGY_BACK); // ทะลุ Song's Curse เสมอ — ไม่ผ่าน addSkill
-    engine.log(`🔋 ${caster.name} Mana Rupture — คืนพลังงาน +${MS_RUPTURE_ENERGY_BACK} (ทะลุ Song's Curse)`);
   },
 
   // เรียกจาก afterResolve() — ทำงานทุกคนที่เล็งเป้าหมายไว้ (ไพ่แตก = ใช้งานไม่ได้)
