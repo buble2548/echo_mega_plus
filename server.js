@@ -1432,8 +1432,7 @@ function resetCombat(p) {
   // ---------- ไค ชิซากิ (kai) ----------
   p.kaiLinkWith = null;     // เชื่อมต่อ (Overhaul#1): id คู่เชื่อม (มิเรอร์กัน — แยกจาก linkedWith ของ Bard)
   p.kaiRivalId = null;      // โทสะระงับด้วยโทสะ (Overhaul#3): id คู่ปรับที่ถูกบังคับโจมตี
-  p.kaiBasicUsedRound = false;   // มือซ้ายแห่งการรังสรรค์: กดได้ 1 ครั้งต่อเทิร์น (ไม่นับรวมกับสกิลรอง)
-  p.kaiPunishUsedRound = false;  // มือขวาแห่งการลงทัณฑ์: กดได้ 1 ครั้งต่อเทิร์น (ไม่นับรวมกับสกิลพื้นฐาน)
+  p.kaiSkillUsesRound = 0;   // มือซ้ายแห่งการรังสรรค์/มือขวาแห่งการลงทัณฑ์: งบรวม 2 ครั้งต่อเทิร์น ผสมกันได้อิสระ (เช่น รังสรรค์ 2 ครั้ง, หรือ 1+1)
   // ---------- ผู้สังหารจอมมหาเวทย์ (mageslayer) ----------
   p.mageslayerMarkedId = null;      // ตราล่าเวท: id เป้าหมายที่มาร์กอยู่ (เคลื่อนย้ายได้)
   p.mageslayerHasMarked = false;    // เคยใช้ Witch Mark หรือยัง (ถาวร — ขับเคลื่อนภาพโปรไฟล์ MS01→MS02)
@@ -1761,8 +1760,7 @@ function buildStateFor(viewerId) {
         kaiOverhaulSlots: p.characterId === "kai" ? kaiOverhaulSlots.map((s) => ({ playerId: s.playerId, name: (players[s.playerId] && players[s.playerId].name) || "", status: s.status, img: players[s.playerId] ? displayImg(players[s.playerId]) : null })) : undefined,
         mageslayerHasMarked: p.characterId === "mageslayer" ? !!p.mageslayerHasMarked : undefined, // ผู้สังหารจอมมหาเวทย์: เคยใช้ Witch Mark หรือยัง
         kaiRivalId: mine ? (p.kaiRivalId || null) : undefined, // ไค ชิซากิ: คู่ปรับที่ถูกบังคับโจมตี (เห็นแค่ตัวเอง — ฝั่งอื่นเช็คจาก statuses.kaiRival1/2 ได้)
-        kaiBasicUsedRound: p.characterId === "kai" ? !!p.kaiBasicUsedRound : undefined,   // ไค: มือซ้ายแห่งการรังสรรค์ ใช้ไปแล้วเทิร์นนี้หรือยัง
-        kaiPunishUsedRound: p.characterId === "kai" ? !!p.kaiPunishUsedRound : undefined, // ไค: มือขวาแห่งการลงทัณฑ์ ใช้ไปแล้วเทิร์นนี้หรือยัง
+        kaiSkillUsesRound: p.characterId === "kai" ? (p.kaiSkillUsesRound || 0) : undefined, // ไค: งบสกิล 2 ครั้งต่อเทิร์น ใช้ไปแล้วกี่ครั้ง
         shikiUlt: p.shikiUlt || "deatheye", // ชิกิ: ท่าไม้ตายที่เลือกตอนเข้าห้อง (deatheye | wither)
         stamina: p.stamina || 0,           // โอกูริ แคป: Stamina ชาร์จสะสม (ทรัพยากรท่าไม้ตาย)
         oguriEnergy: p.oguriEnergy || 0,   // โอกูริ แคป: Energy สะสม (สูงสุด 16 — ทรัพยากร Breakfast/Training)
@@ -2049,8 +2047,7 @@ function dealRound() {
     if (p.characterId === "appleguy") CHAR_HOOKS.appleguy.onRoundStartDecay(p);
     // เทเปา (patch 2.2 new): ทำอาหาร/ครุ่นคิด/ฉากหลังไม้ตาย นับถอยหลังที่ endTurn() แทน (ต้องอ่านค่าก่อนลดเพื่อรู้ "เทิร์นสุดท้าย" ให้ตรง)
     p.bardNotesUsed = 0;      // Bard: นับโน้ตใหม่ทุกเทิร์น (จำกัด 2 — มิติวิญญาณไม่จำกัด)
-    p.kaiBasicUsedRound = false;   // ไค: กดมือซ้ายแห่งการรังสรรค์ได้อีก 1 ครั้งในเทิร์นใหม่นี้
-    p.kaiPunishUsedRound = false;  // ไค: กดมือขวาแห่งการลงทัณฑ์ได้อีก 1 ครั้งในเทิร์นใหม่นี้
+    p.kaiSkillUsesRound = 0;  // ไค: งบสกิล 2 ครั้ง (รังสรรค์/ลงทัณฑ์ ผสมกันได้อิสระ) เต็มใหม่ทุกเทิร์น
     p.anataTargets = null;
     p.hakunoLowDraw = false; // ข้าขอบัญชา (หญิง คิชินามิ ฮาคุโนะ): จำกัดจั่ว 2/3 แต้ม เฉพาะเทิร์นที่ใช้เท่านั้น
     // ห้ามจั่วการ์ดเพิ่มที่ตั้งไว้จากเทิร์นก่อน (ทงคัสสึ / กำไรเท่าตัวโว้ย) — noDrawNext เป็นจำนวนเทิร์น
@@ -2488,9 +2485,9 @@ function useSkill(id, tier, targets, item) {
   //  ไม่นับเป็นการใช้สกิลของเทิร์น กดได้ทั้งคู่ในเทิร์นเดียวกัน (Quick Swap เองยังจำกัด 1 ครั้ง/เทิร์นแยกต่างหาก)
   const isDoomguyPick = p.characterId === "doomguy" && (tier === "basic" || tier === "secondary");
   // ไค ชิซากิ: มือซ้ายแห่งการรังสรรค์ (พื้นฐาน) + มือขวาแห่งการลงทัณฑ์ (รอง) ไม่นับเป็นการใช้สกิลของเทิร์นร่วมกัน
-  //  กดได้ทั้งคู่ในเทิร์นเดียวกัน (คนละมาร์ก) — แต่ละอันเองยังจำกัด 1 ครั้ง/เทิร์นแยกต่างหาก (ดูเช็คด้านล่าง)
+  //  งบรวม 2 ครั้งต่อเทิร์น ผสมกันได้อิสระ (เช่น รังสรรค์ 2 ครั้งใส่คนละเป้า, หรือ 1 รังสรรค์ + 1 ลงทัณฑ์)
   const isKaiPick = p.characterId === "kai" && (tier === "basic" || tier === "secondary");
-  if (isKaiPick && ((tier === "basic" && p.kaiBasicUsedRound) || (tier === "secondary" && p.kaiPunishUsedRound))) return;
+  if (isKaiPick && (p.kaiSkillUsesRound || 0) >= 2) return;
   if (p.skillUsedRound && !gambleRepeat && !isApplePick && !isTohnoPick && !isHakunoGender && !isDoomguyPick && !isKaiPick) return; // ใช้สกิลได้เพียง 1 อันต่อเทิร์น (ซ้ำ/ซ้อนไม่ได้)
   // MOON*CELL (คิชินามิ ฮาคุโนะ): ต้องมีแต้มคำสาปแห่งดวงจันทร์ครบ 3 เท่านั้น
   if (st === "moonCell" && (p.hakunoMoonPoints || 0) < HAKUNO_MOONCELL_NEED) return;
@@ -2700,8 +2697,7 @@ function useSkill(id, tier, targets, item) {
     lastLog.push(`👸 ${p.name} การ์ดราชินี — ใช้สกิลนี้โดยไม่เสียแต้มสกิล`);
   }
   if (!isApplePick && !isTohnoPick && !isHakunoGender && !isDoomguyPick && !isKaiPick) p.skillUsedRound = true; // เอาแบบนี้ได้ไหม / มีดพับประจำตระกูล / เธอ/นาย คือฉันหรอ? / Quick Swap-Weapon (DoomGuy) / รังสรรค์-ลงทัณฑ์ (ไค)
-  if (tier === "basic" && isKaiPick) p.kaiBasicUsedRound = true;
-  if (tier === "secondary" && isKaiPick) p.kaiPunishUsedRound = true;
+  if (isKaiPick) p.kaiSkillUsesRound = (p.kaiSkillUsesRound || 0) + 1;
 
   // ---------- นายมีฝีมือแค่ไหนหรอ? (ชิกิ patch 2.0.6): ยกเลิกท่าไม้ตายทันทีที่มีผู้เล่นอื่นกด ----------
   //  มีชิกิถือชาร์จ godslay อยู่บนสนาม -> ท่าไม้ตายของผู้เล่นอื่นที่เพิ่งกดถูกยกเลิกทันที
