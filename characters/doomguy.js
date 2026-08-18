@@ -219,6 +219,12 @@ module.exports = {
   // เรียกจาก dealRound() ตอนจบเทิร์น (ในลูปสถานะร่วมท้ายเทิร์น) — Weapon: บังคับสลับอาวุธใหม่ทันที (ไม่ทำงานระหว่างถือ Crucible)
   onRoundStartWeaponCycle(engine, p) {
     if (!(p.characterId === "doomguy" && p.alive && (p.statuses.doomCrucible || 0) <= 0)) return;
+    // Combat Shotgun/Heavy Cannon: มี [ระเบิด]/[ล็อคเป้า] ค้างอยู่ (ยังไม่โดนใช้) — ห้ามสลับอาวุธแม้จะเป็นการสลับอัตโนมัติตอนจบเทิร์นก็ตาม
+    //  ปืนที่สุ่มได้จะติดตัวอยู่จนกว่าสถานะจะถูกใช้ (โดนโจมตี) เท่านั้น
+    if (engine.doomWeaponMarkPending()) {
+      engine.log(`🔫 ${p.name} Weapon — มี [ระเบิด]/[ล็อคเป้า] ค้างอยู่ ยังไม่โดนใช้ — สลับอาวุธอัตโนมัติงดไว้ก่อน`);
+      return;
+    }
     const oldW = engine.DOOM_WEAPONS[p.doomWeapon] ? engine.DOOM_WEAPONS[p.doomWeapon].name : "";
     p.doomWeapon = engine.rollDoomWeapon(p.doomWeapon);
     p.doomChaingunShieldUsed = false; // เปลี่ยนอาวุธ -> Chaingun's [ใช้ได้ครั้งเดียว] รีเซ็ตใหม่

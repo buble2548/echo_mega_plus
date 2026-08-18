@@ -4878,6 +4878,7 @@ const engine = {
   riddheGrantFreeNtdToAlly(rAlly, byId) { return CHAR_HOOKS.riddhe.grantFreeNtdToAlly(engine, rAlly, byId); },
   hasQueuedCutscene() { return cutsceneQueue.length > 0; },
   takumiBlackoutActive,
+  doomWeaponMarkPending,
   get gameState() { return gameState; },
   setGameState(v) { gameState = v; },
   get roundNumber() { return roundNumber; },
