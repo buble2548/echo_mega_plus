@@ -1863,47 +1863,54 @@ function BardComposeSlot({ me }) {
 }
 
 // ---------- ไค ชิซากิ: ช่อง Overhaul 2 ช่อง (แทนที่ปุ่มท่าไม้ตาย) ----------
-//  แสดงชื่อผู้ถือ + ไอคอนสถานะ (รังสรรค์🎨/ลงทัณฑ์⚔️) ต่อช่อง — ครบ 2 ช่องกดได้ทันที ไม่เสียแต้มสกิล
+//  ระหว่างสะสม: แต่ละช่องโชว์รูปโปรไฟล์เป้าหมายที่ถือมาร์กอยู่ + ไอคอนสถานะ (รังสรรค์🎨/ลงทัณฑ์⚔️) ซ้อนมุม
+//  ครบ 2 ช่อง: เปลี่ยนเป็นรูปเดียวเต็มปุ่มตามคอมโบที่จะออกผล (kai_passive1/2/3.jpg) กดได้ทันที ไม่เสียแต้มสกิล
+const KAI_COMBO_IMG = {
+  cc: "/characters/kai/kai_passive1.jpg", // รังสรรค์+รังสรรค์ = สวรรค์ประทานพร
+  cp: "/characters/kai/kai_passive2.jpg", // รังสรรค์+ลงทัณฑ์ = ตาชั่งแห่งความเท่าเทียม
+  pp: "/characters/kai/kai_passive3.jpg", // ลงทัณฑ์+ลงทัณฑ์ = โทสะระงับด้วยโทสะ
+};
 function KaiOverhaulSlot({ me }) {
   const slots = me.kaiOverhaulSlots || [];
   const ready = slots.length >= 2;
   // คำนวณคอมโบฝั่ง client ล้วนๆ จากเนื้อหา kaiOverhaulSlots เอง (ไม่ต้องมี field เพิ่มจาก server)
-  const comboLabel = (() => {
-    if (slots.length < 2) return "";
-    const [a, b] = slots;
-    if (a.status === "kaiCreation" && b.status === "kaiCreation") return "สวรรค์ประทานพร";
-    if (a.status === "kaiPunishment" && b.status === "kaiPunishment") return "โทสะระงับด้วยโทสะ";
-    return "ตาชั่งแห่งความเท่าเทียม";
-  })();
+  const comboKey = ready ? (slots[0].status === "kaiCreation" ? (slots[1].status === "kaiCreation" ? "cc" : "cp") : (slots[1].status === "kaiPunishment" ? "pp" : "cp")) : null;
+  const comboLabel = { cc: "สวรรค์ประทานพร", cp: "ตาชั่งแห่งความเท่าเทียม", pp: "โทสะระงับด้วยโทสะ" }[comboKey] || "";
   return (
     <div className="flex flex-col items-center gap-1">
       <button
         onClick={() => { if (ready) { clickSound(); socket.emit("kaiOverhaul"); } }}
         disabled={!ready}
-        className={`relative w-full h-20 sm:h-24 rounded-2xl overflow-hidden bg-black/40 border-2 shadow-lg grid grid-cols-2 gap-1.5 p-2 transition ${
-          ready ? "border-echo-gold/70 active:scale-95 cursor-pointer" : "border-white/15 cursor-not-allowed"
+        className={`relative w-full h-20 sm:h-24 rounded-2xl overflow-hidden bg-black/40 border-2 shadow-lg transition ${
+          ready ? "border-echo-gold/70 active:scale-95 cursor-pointer" : "border-white/15 cursor-not-allowed grid grid-cols-2 gap-1.5 p-2"
         }`}
       >
-        {[0, 1].map((i) => {
-          const slot = slots[i];
-          return (
-            <div
-              key={i}
-              className={`rounded-xl flex flex-col items-center justify-center text-center gap-0.5 border ${
-                slot ? "bg-white/15 border-echo-gold/70 pop-in" : "bg-white/5 border-white/15"
-              }`}
-            >
-              {slot ? (
-                <>
-                  <span className="text-lg sm:text-2xl">{slot.status === "kaiCreation" ? "🎨" : "⚔️"}</span>
-                  <span className="text-[10px] sm:text-xs font-bold leading-tight px-1 truncate max-w-full">{slot.name}</span>
-                </>
-              ) : (
-                <span className="opacity-25 text-xl">♦</span>
-              )}
-            </div>
-          );
-        })}
+        {ready ? (
+          <img src={KAI_COMBO_IMG[comboKey]} alt={comboLabel} className="absolute inset-0 w-full h-full object-cover pop-in" />
+        ) : (
+          [0, 1].map((i) => {
+            const slot = slots[i];
+            return (
+              <div
+                key={i}
+                className={`relative rounded-xl overflow-hidden flex items-center justify-center border ${
+                  slot ? "border-echo-gold/70 pop-in" : "bg-white/5 border-white/15"
+                }`}
+              >
+                {slot ? (
+                  <>
+                    {slot.img && <img src={slot.img} alt={slot.name} className="absolute inset-0 w-full h-full object-cover" />}
+                    <span className="absolute bottom-0.5 right-0.5 text-base sm:text-lg drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
+                      {slot.status === "kaiCreation" ? "🎨" : "⚔️"}
+                    </span>
+                  </>
+                ) : (
+                  <span className="opacity-25 text-xl">♦</span>
+                )}
+              </div>
+            );
+          })
+        )}
       </button>
       <div className="text-sm sm:text-base font-bold text-center leading-tight">
         {ready ? `Overhaul พร้อม! (${comboLabel})` : `Overhaul · ${slots.length}/2`}
@@ -2400,6 +2407,8 @@ export default function Game({ state, lowQ }) {
   };
   const pickMsRupture = (id) => {
     socket.emit("useSkill", { tier: "secondary", targets: [id] });
+    // Mana Rupture ทำงานหลังเปิดไพ่ แต่เสียง sfx ต้องดังทันทีตอนกดใช้ ไม่ใช่รอผลตอนหลังเปิดไพ่
+    playSfx("mageslayer_skill2");
     setMsRuptureSel(false);
   };
   // เลือกเป้าหมาย Weapon ของ DoomGuy -> ส่งไป server ทันที
@@ -2822,10 +2831,10 @@ export default function Game({ state, lowQ }) {
               {/* ช่องสกิล 3 อัน — ทรงพัด: ช่องกลาง (สกิลรอง) ยกสูงกว่าอีก 2 ช่อง */}
               <div className="grid grid-cols-3 gap-2 mt-3 items-end">
                 <div className="translate-y-1.5">
-                  <SkillSlot label="สกิลพื้นฐาน" tier="basic" skill={ch?.basic} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoHealPending || hakunoSecondaryPending || beatBasicLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || (me.skillUsed && !gambleRepeat && !isApple && !isBard && !isTohno && !isHakuno && !isDoomguy) || cassiusLocked || veilLocked || ktBasicLocked || (isHakuno && me.hakunoGenderSwitched) || doomBasicLocked || takutoBasicPending || tepeuCookLocked || tepeuPonderLocked} onUse={requestSkillUse} ammo={isGambler ? me.gamblerUses : undefined} cost={isGambler && goldenOn ? halfCost(ch?.basic) : isKotone && overworkMe ? ktCost(ch?.basic) : undefined} />
+                  <SkillSlot label="สกิลพื้นฐาน" tier="basic" skill={ch?.basic} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoHealPending || hakunoSecondaryPending || beatBasicLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || (me.skillUsed && !gambleRepeat && !isApple && !isBard && !isTohno && !isHakuno && !isDoomguy && !isKai) || (isKai && me.kaiBasicUsedRound) || cassiusLocked || veilLocked || ktBasicLocked || (isHakuno && me.hakunoGenderSwitched) || doomBasicLocked || takutoBasicPending || tepeuCookLocked || tepeuPonderLocked} onUse={requestSkillUse} ammo={isGambler ? me.gamblerUses : undefined} cost={isGambler && goldenOn ? halfCost(ch?.basic) : isKotone && overworkMe ? ktCost(ch?.basic) : undefined} />
                 </div>
                 <div className="-translate-y-2">
-                  <SkillSlot label="สกิลรอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || (me.skillUsed && !isBard && !isDoomguy) || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked} onUse={requestSkillUse} ammo={isApple ? me.appleGiveUses : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : isKotone && overworkMe ? ktCost(ch?.secondary) : undefined} />
+                  <SkillSlot label="สกิลรอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || (me.skillUsed && !isBard && !isDoomguy && !isKai) || (isKai && me.kaiPunishUsedRound) || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked} onUse={requestSkillUse} ammo={isApple ? me.appleGiveUses : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : isKotone && overworkMe ? ktCost(ch?.secondary) : undefined} />
                 </div>
                 <div className="translate-y-1.5">
                   {isBard ? <BardComposeSlot me={me} /> : isKai ? <KaiOverhaulSlot me={me} /> : <SkillSlot label="ท่าไม้ตาย" tier="ultimate" skill={ch?.ultimate} points={me.skillPoints} disabled={(done || phase !== "PLAYING" || noSkill || moonCellOn || beatMe || me.skillUsed || ultimateActive || fourthLocked || doomUltLocked || takutoUltLockedNow || tepeuCookLocked || tepeuPonderLocked || offerLocked || ktUltLocked || shUltLocked || shCharging || rgCharging || phenexTaunting || hikaruUltLocked)} onUse={requestSkillUse} cost={undefined} />}
@@ -3337,10 +3346,10 @@ export default function Game({ state, lowQ }) {
               <div className="flex flex-col items-center gap-1.5">
                 <div className="flex items-end gap-2 sm:gap-3">
                   <div className="w-40 sm:w-48">
-                    <SkillSlot size="lg" label="พื้นฐาน" tier="basic" skill={ch?.basic} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoHealPending || hakunoSecondaryPending || beatBasicLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || (me.skillUsed && !gambleRepeat && !isApple && !isBard && !isTohno && !isHakuno && !isDoomguy) || cassiusLocked || veilLocked || ktBasicLocked || (isHakuno && me.hakunoGenderSwitched) || doomBasicLocked || takutoBasicPending || tepeuCookLocked || tepeuPonderLocked} onUse={requestSkillUse} ammo={isGambler ? me.gamblerUses : undefined} cost={isGambler && goldenOn ? halfCost(ch?.basic) : isKotone && overworkMe ? ktCost(ch?.basic) : undefined} />
+                    <SkillSlot size="lg" label="พื้นฐาน" tier="basic" skill={ch?.basic} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoHealPending || hakunoSecondaryPending || beatBasicLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || (me.skillUsed && !gambleRepeat && !isApple && !isBard && !isTohno && !isHakuno && !isDoomguy && !isKai) || (isKai && me.kaiBasicUsedRound) || cassiusLocked || veilLocked || ktBasicLocked || (isHakuno && me.hakunoGenderSwitched) || doomBasicLocked || takutoBasicPending || tepeuCookLocked || tepeuPonderLocked} onUse={requestSkillUse} ammo={isGambler ? me.gamblerUses : undefined} cost={isGambler && goldenOn ? halfCost(ch?.basic) : isKotone && overworkMe ? ktCost(ch?.basic) : undefined} />
                   </div>
                   <div className="w-40 sm:w-48">
-                    <SkillSlot size="lg" label="รอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || (me.skillUsed && !isBard && !isDoomguy) || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked} onUse={requestSkillUse} ammo={isApple ? me.appleGiveUses : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : isKotone && overworkMe ? ktCost(ch?.secondary) : undefined} />
+                    <SkillSlot size="lg" label="รอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || (me.skillUsed && !isBard && !isDoomguy && !isKai) || (isKai && me.kaiPunishUsedRound) || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked} onUse={requestSkillUse} ammo={isApple ? me.appleGiveUses : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : isKotone && overworkMe ? ktCost(ch?.secondary) : undefined} />
                   </div>
                   <div className="w-40 sm:w-48">
                     {isBard ? <BardComposeSlot me={me} /> : isKai ? <KaiOverhaulSlot me={me} /> : <SkillSlot size="lg" label="ท่าไม้ตาย" tier="ultimate" skill={ch?.ultimate} points={me.skillPoints} disabled={(done || phase !== "PLAYING" || noSkill || moonCellOn || beatMe || me.skillUsed || ultimateActive || monsterMe || fourthLocked || doomUltLocked || takutoUltLockedNow || tepeuCookLocked || tepeuPonderLocked || offerLocked || ktUltLocked || shUltLocked || shCharging || rgCharging || phenexTaunting)} onUse={requestSkillUse} cost={undefined} />}
