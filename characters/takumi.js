@@ -9,7 +9,7 @@
 const TAKUMI_GEAR_MAX = 6;
 const TAKUMI_GEAR_MIN = 1;
 const TAKUMI_GEAR_ATK3 = 1;  // เกียร์ >= 3: ดาเมจ +1
-const TAKUMI_GEAR_ATK6 = 2;  // เกียร์ >= 6: ดาเมจ +2 เพิ่มอีก (รวม +3 ที่เกียร์ 6)
+const TAKUMI_GEAR_ATK6 = 1;  // เกียร์ >= 6: ดาเมจ +1 เพิ่มอีก (รวม +2 ที่เกียร์ 6)
 const TAKUMI_GEARDOWN_HEAL_CAP = 4; // ลงเกียร์กลับมาที่ 1 พอดี: ฮีลสูงสุด 4 (คิดจากเกียร์ก่อนกดครั้งนี้ - 1)
 const TAKUMI_BLACKOUT_TURNS = 5;    // ถึงจะมองไม่เห็น แต่ฉันยังอยู่: คงอยู่ 5 เทิร์น (หรือจนกว่าจะมีคนไพ่แตก)
 const TAKUMI_BLACKOUT_DMG = 3;      // ทริกเกอร์: คนแรกที่ไพ่แตก โดนดาเมจ 3 หน่วย (เจาะเกราะก่อน)
@@ -18,7 +18,7 @@ const TAKUMI_BLACKOUT_DECAY_TURNS = 3; // ทริกเกอร์: เป้
 module.exports = {
   id: "takumi",
 
-  // ดาเมจ contribution (เกียร์ >= 3 -> +1, เกียร์ >= 6 -> +2 เพิ่มอีก รวม +3) — เรียกจาก computeAttackBase()
+  // ดาเมจ contribution (เกียร์ >= 3 -> +1, เกียร์ >= 6 -> +1 เพิ่มอีก รวม +2) — เรียกจาก computeAttackBase()
   //  คำนวณสดจาก p.takumiGear ตรงๆ ไม่ใช่ status ที่มีอายุ
   damageBonus(engine, attacker) {
     if (attacker.characterId !== "takumi") return 0;

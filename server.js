@@ -110,7 +110,7 @@ const SHOP_CARD_COLOR_PRICE = 5; // ยาเปลี่ยนสีการ�
 const SHOP_FORTUNE_PRICE = 5;
 const SHOP_FORTUNE_AMOUNT = 2;   // ยาโชคลาภ: ได้โชคลาภ +2 หน่วยเมื่อใช้
 const SHOP_RESIST_PRICE = 5;
-const SHOP_RESIST_TURNS = 3;     // ยาต้านสถานะ: ต้านสถานะผิดปกติ 3 เทิร์น
+const SHOP_RESIST_TURNS = 1;     // ยาต้านสถานะ: ต้านสถานะผิดปกติ 1 เทิร์น
 const SHOP_ARMOR_PRICE = 3;
 const SHOP_ARMOR_AMOUNT = 1;     // ยาฟื้นเกราะ: ฟื้นเกราะ +1 หน่วย
 const SHOP_CARD_REMOVE_PRICE = 5; // ยาลดไพ่: ลดไพ่ใบล่าสุดของตัวเองออก 1 ใบ (กันแตกได้)
@@ -4233,6 +4233,7 @@ function endTurn() {
       if (k === "takutoThirdAtk") continue; // พิชิตแสงดาว (สึงาชิ ทาคุโตะ): คงอยู่จนกว่าจะได้ลุ้นโจมตีครั้งที่ 3 (ไม่ลดเทิร์น)
       if (k === "doomCrucible") continue; // Crucible (ดูมกาย patch 2.2 new): คงอยู่จนกว่าจะได้โจมตี 1 ครั้ง (ไม่ลดเทิร์น)
       if (k === "doomDrain") continue; // [โดนดูด] (ดูมกาย, Plasma Rifle): tickDrain() นับถอยหลัง/ลบเองแล้ว ไม่ให้ลูปนี้ลดซ้ำ
+      if (k === "doomExplode" || k === "doomLockon") continue; // [ระเบิด]/[ล็อคเป้า] (ดูมกาย, Combat Shotgun/Heavy Cannon): ค้างอยู่จนกว่าจะโดนโจมตีใช้จริง ไม่ลดเทิร์นเอง
       if (k === "fortune") continue; // โชคลาภ (Bard): คงอยู่จนกว่าจะจั่วไพ่ครั้งถัดไป (หมดอายุเองถ้าไม่ใช้ 3 เทิร์น — ดูด้านบน)
       if (k === "rsHopper") continue; // RS-Hopper (เอวา 13): สแตคชาร์จ ไม่ใช่ตัวนับเทิร์น — ฟื้นเองทุก 3 เทิร์น (ดูด้านบน)
       if (k === "cassius") continue; // หอกแห่งแคสเซียส (เอวา 13): คงอยู่จนกว่าจะได้โจมตี (ไม่ลดเทิร์น)

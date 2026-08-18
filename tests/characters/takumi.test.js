@@ -21,7 +21,7 @@ function mkPlayer(over = {}) {
   return p;
 }
 
-test('damageBonus: 0 at gear 1-2, +1 at gear 3-5, +3 at gear 6, 0 for non-takumi', () => {
+test('damageBonus: 0 at gear 1-2, +1 at gear 3-5, +2 at gear 6, 0 for non-takumi', () => {
   const p1 = mkPlayer({ takumiGear: 1 });
   assert.equal(takumi.damageBonus(engine, p1), 0);
   const p2 = mkPlayer({ takumiGear: 2 });
@@ -31,7 +31,7 @@ test('damageBonus: 0 at gear 1-2, +1 at gear 3-5, +3 at gear 6, 0 for non-takumi
   const p5 = mkPlayer({ takumiGear: 5 });
   assert.equal(takumi.damageBonus(engine, p5), 1);
   const p6 = mkPlayer({ takumiGear: 6 });
-  assert.equal(takumi.damageBonus(engine, p6), 3, 'gear 6: +1 (>=3) + 2 (>=6) = +3');
+  assert.equal(takumi.damageBonus(engine, p6), 2, 'gear 6: +1 (>=3) + 1 (>=6) = +2');
   const other = mkPlayer({ characterId: 'tohno', takumiGear: 6 });
   assert.equal(takumi.damageBonus(engine, other), 0, 'zero for non-takumi attackers');
 });
