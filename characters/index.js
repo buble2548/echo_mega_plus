@@ -31,6 +31,8 @@ const kotone = require("./kotone");
 const gambler = require("./gambler");
 const broadband_man = require("./broadband_man");
 const bard = require("./bard");
+const kai = require("./kai");
+const mageslayer = require("./mageslayer");
 
 const CHARACTER_MODULES = [
   tohno,
@@ -57,6 +59,8 @@ const CHARACTER_MODULES = [
   gambler,
   broadband_man,
   bard,
+  kai,
+  mageslayer,
 ];
 
 const CHAR_HOOKS = {};

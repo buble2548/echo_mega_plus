@@ -27,12 +27,16 @@ module.exports = {
   },
 
   // เรียกจาก useSkill() ในส่วน effect (isPudding === true — สกิลพื้นฐาน กินได้ไม่จำกัดจำนวนครั้ง)
-  applyBasicPudding(p, log) {
+  applyBasicPudding(engine, p) {
     p.puddingCount = (p.puddingCount || 0) + 1;
     if (p.puddingCount % KUWAGATA_PUDDING_FULL_AT === 0) {
-      p.statuses.nodraw = Math.max(p.statuses.nodraw || 0, KUWAGATA_PUDDING_NODRAW_TURNS);
-      p.noDrawNext = Math.max(p.noDrawNext || 0, KUWAGATA_PUDDING_NODRAW_TURNS);
-      log(`🍮 ${p.name} กิน Rainbow Pudding ครบ ${p.puddingCount} ชิ้น — อิ่ม! จั่วการ์ดเพิ่มไม่ได้ ${KUWAGATA_PUDDING_NODRAW_TURNS} เทิร์น`);
+      if (engine.resistActive(p)) {
+        engine.log(`🛡️ ${p.name} ต้านสถานะผิดปกติ — กิน Rainbow Pudding ครบ ${p.puddingCount} ชิ้นแต่ไม่ติดอิ่มจนจั่วไม่ได้`);
+      } else {
+        p.statuses.nodraw = Math.max(p.statuses.nodraw || 0, KUWAGATA_PUDDING_NODRAW_TURNS);
+        p.noDrawNext = Math.max(p.noDrawNext || 0, KUWAGATA_PUDDING_NODRAW_TURNS);
+        engine.log(`🍮 ${p.name} กิน Rainbow Pudding ครบ ${p.puddingCount} ชิ้น — อิ่ม! จั่วการ์ดเพิ่มไม่ได้ ${KUWAGATA_PUDDING_NODRAW_TURNS} เทิร์น`);
+      }
     }
   },
 
@@ -84,6 +88,10 @@ module.exports = {
   onAttackConsumeOhger(engine, attacker, target) {
     delete attacker.statuses.ohger;
     if (!target.alive) return;
+    if (engine.resistActive(target)) {
+      engine.log(`🛡️ ${target.name} ต้านสถานะผิดปกติ — โอเจอร์ชาร์จ โจมตี +1 แต่ไม่ติดผุพัง`);
+      return;
+    }
     target.statuses.decay = Math.max(target.statuses.decay || 0, KUWAGATA_OHGER_DECAY_TURNS);
     engine.log(`👑 ${attacker.name} โอเจอร์ชาร์จ — โจมตี +1 และมอบผุพังให้ ${target.name} ${KUWAGATA_OHGER_DECAY_TURNS} เทิร์น (เกราะไม่ฟื้น)!`);
   },

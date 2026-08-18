@@ -19,8 +19,8 @@ module.exports = {
       o.statuses.veil = Math.max(o.statuses.veil || 0, 2); // พลังโจมตี +1 คงอยู่ 2 เทิร์น (รวมตัวเอง)
       engine.healHp(o, 1);   // ฟื้นพลังชีวิตทุกคน +1 (รวมตัวเอง)
       engine.healArmor(o, 1); // ฟื้นเกราะทุกคน +1 (รวมตัวเอง)
-      // ยามฟ้าสาง +2 ถาวร (สะสมสูงสุด 5) — คนที่กำลังหลับไหลจะไม่รับเพิ่ม (ผลก่อนหน้ายังไม่หมด)
-      if (o.id !== p.id && !((o.statuses.sleep || 0) > 0)) o.statuses.dawn = Math.min(5, (o.statuses.dawn || 0) + 2);
+      // ยามฟ้าสาง +2 ถาวร (สะสมสูงสุด 5) — คนที่กำลังหลับไหลจะไม่รับเพิ่ม (ผลก่อนหน้ายังไม่หมด) — ต้านสถานะผิดปกติกันสแตคใหม่ได้ (สแตคเดิมไม่หาย)
+      if (o.id !== p.id && !((o.statuses.sleep || 0) > 0) && !engine.resistActive(o)) o.statuses.dawn = Math.min(5, (o.statuses.dawn || 0) + 2);
     }
     engine.log(`🌙 ${p.name} ม่านแห่งราตรี — ทุกคนพลังโจมตี +1 (2 เทิร์น) ฟื้นเลือด/เกราะ +1 และติดยามฟ้าสาง +2 (ยกเว้นผู้ใช้/คนหลับ)`);
   },
@@ -39,9 +39,11 @@ module.exports = {
     const t = sunriseTarget;
     engine.healHp(t, 5);
     t.sunriseDrop = 2; // หลังจากนั้นลดลงรวม 2 หน่วย — หักเทิร์นละ 1 แบบไม่สนเกราะ (ไม่ถึงตาย ค้างที่ 1)
-    // ยามฟ้าสาง +1 — ไม่ติดถ้าใช้กับตัวเอง หรือเป้าหมายกำลังหลับไหล (ผลก่อนหน้ายังไม่หมด)
-    if (t.id !== p.id && !((t.statuses.sleep || 0) > 0)) t.statuses.dawn = Math.min(5, (t.statuses.dawn || 0) + 1);
-    engine.log(`🌄 ${p.name} รุ่งอรุณแห่งวันใหม่ — ฟื้นพลังชีวิต ${t.name} +5 (2 เทิร์นถัดมาเสียเลือดเทิร์นละ 1 ไม่สนเกราะ)${t.id !== p.id && !(t.statuses.sleep > 0) ? " และติดยามฟ้าสาง +1" : ""}`);
+    // ยามฟ้าสาง +1 — ไม่ติดถ้าใช้กับตัวเอง หรือเป้าหมายกำลังหลับไหล (ผลก่อนหน้ายังไม่หมด) หรือต้านสถานะผิดปกติอยู่ (สแตคเดิมไม่หาย)
+    const dawnEligible = t.id !== p.id && !((t.statuses.sleep || 0) > 0);
+    const dawnGiven = dawnEligible && !engine.resistActive(t);
+    if (dawnGiven) t.statuses.dawn = Math.min(5, (t.statuses.dawn || 0) + 1);
+    engine.log(`🌄 ${p.name} รุ่งอรุณแห่งวันใหม่ — ฟื้นพลังชีวิต ${t.name} +5 (2 เทิร์นถัดมาเสียเลือดเทิร์นละ 1 ไม่สนเกราะ)${dawnGiven ? " และติดยามฟ้าสาง +1" : dawnEligible ? " (ต้านสถานะผิดปกติ — ไม่ติดยามฟ้าสาง)" : ""}`);
     return ` — ใส่ ${t.name}`;
   },
 
@@ -60,7 +62,7 @@ module.exports = {
       engine.maybeBeatSave(o);
       engine.maybeWakeKotone(o);
       o.statuses.awaken = Math.max(o.statuses.awaken || 0, 2); // +1 ชดเชยการลดสถานะตอนจบเทิร์น
-      if (!((o.statuses.sleep || 0) > 0)) o.statuses.dawn = Math.min(5, (o.statuses.dawn || 0) + 1);
+      if (!((o.statuses.sleep || 0) > 0) && !engine.resistActive(o)) o.statuses.dawn = Math.min(5, (o.statuses.dawn || 0) + 1);
       o.wasAttacked = true;
     }
     engine.log(`🌞 Lai Rhyme Goodfellow! ${p.name} โจมตีทุกคน -1 (ไม่สนเกราะ) มอบสถานะ "การตื่นขึ้น" และยามฟ้าสาง +1`);

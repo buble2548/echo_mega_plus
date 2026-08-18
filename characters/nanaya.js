@@ -41,6 +41,9 @@ module.exports = {
     let flashSuffix;
     if (engine.satoruOnTargeted(target, p, `สกิล ${skillName} `).negated) {
       flashSuffix = " — ถูกลบล้าง";
+    } else if (engine.resistActive(target)) {
+      flashSuffix = " — ถูกต้าน";
+      engine.log(`🛡️ ${target.name} ต้านสถานะผิดปกติ — อันนี้ของนายรึเปล่าไม่มีผล`);
     } else {
       target.statuses.noskill = Math.max(target.statuses.noskill || 0, NANAYA_SILENCE_TURNS);
       target.statuses.nodraw = Math.max(target.statuses.nodraw || 0, NANAYA_SILENCE_TURNS);

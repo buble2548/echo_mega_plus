@@ -13,15 +13,20 @@ const BANAGHER_SHIELD_TURNS = 2;  // Absorb shield: คงอยู่ 2 เท�
 const BANAGHER_ASSAULT_TURNS = 3; // Full Assault: ตีหมู่ทุกคน 3 เทิร์น เทิร์นละ 1 หน่วย
 const BANAGHER_ULT2_ALLY_COST = 8; // แสงที่ไม่อยู่เพียงลำพัง: หักแต้มสกิลริดดี้พันธมิตรเพิ่มอีก 8 แต้ม (คอสจริงรวม 16)
 const BANAGHER_ULT2_TARGET_DMG = 6; // แสงที่ไม่อยู่เพียงลำพัง: ดาเมจเสริมใส่เป้าหมาย (รวมพื้นฐาน 1 = 7)
+const BEAM_MAGNUM_BONUS = 2; // Beam Magnum (สกิลรอง 2): ดาเมจเสริม +2 — บั๊กเดิม: ตกหล่นตอนย้ายออกจาก server.js
+//  ทำให้ ctx.beam ไม่เคยถูกส่งกลับเลย (computeAttackBase()'s ...hookCtx ไม่มีคีย์นี้) doAttack()'s destructure
+//  `beam` เลยเป็น undefined เสมอ กระทบทั้งดาเมจ +2, การหักกระสุน beamAmmo, คัตซีน banagherBeamAtk, และ fx breakdown
 
 module.exports = {
   id: "banagher",
 
-  // ดาเมจ contribution (แสงที่ไม่อยู่เพียงลำพัง +6) — เรียกจาก computeAttackBase()
+  // ดาเมจ contribution (แสงที่ไม่อยู่เพียงลำพัง +6 / Beam Magnum +2) — เรียกจาก computeAttackBase()
   damageBonus(engine, attacker, target, ctx) {
     const unibeam2Atk = (attacker.statuses.unibeam2 || 0) > 0;
+    const beamAtk = (attacker.statuses.beam || 0) > 0;
     ctx.unibeam2Atk = unibeam2Atk;
-    return unibeam2Atk ? BANAGHER_ULT2_TARGET_DMG : 0;
+    ctx.beam = beamAtk; // doAttack() destructure ตัวนี้ไปใช้หักกระสุน/เล่นคัตซีน/โชว์ fx ด้วย (ไม่ใช่แค่ดาเมจ)
+    return (unibeam2Atk ? BANAGHER_ULT2_TARGET_DMG : 0) + (beamAtk ? BEAM_MAGNUM_BONUS : 0);
   },
 
   // เรียกจาก useSkill()'s gate — เตรียมเป้าหมาย Absorb shield (เลือกตัวเองได้)

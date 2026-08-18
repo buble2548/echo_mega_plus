@@ -77,6 +77,10 @@ module.exports = {
     w.tepeuLoseStreak = 0; // ชนะ -> เคาน์เตอร์แพ้ติดกัน (เทเปา) รีเซ็ต
     const tepeuPondering = combatants.find((q) => q.characterId === "tepeu" && (q.tepeuPonderTurns || 0) > 0 && q.id !== w.id);
     if (!tepeuPondering) return;
+    if (engine.resistActive(w)) {
+      engine.log(`🛡️ ${w.name} ต้านสถานะผิดปกติ — สมองอันชาญฉลาดไม่มีผล`);
+      return;
+    }
     const dlCur = w.statuses.deathline || 0;
     if (dlCur >= TEPEU_DEATHLINE_CAP) return;
     w.statuses.deathline = dlCur + 1;
@@ -116,6 +120,10 @@ module.exports = {
   // เรียกจาก doAttack() หลังคำนวณดาเมจ — การโจมตีปกติมอบสถานะ "เส้นชีวิต" ให้เป้าหมาย +1 เสมอ (ไม่ต้องติดครุ่นคิดก็ได้)
   grantDeathlineOnAttack(engine, attacker, target) {
     if (attacker.characterId !== "tepeu") return;
+    if (engine.resistActive(target)) {
+      engine.log(`🛡️ ${target.name} ต้านสถานะผิดปกติ — ไม่ติดเส้นชีวิตเพิ่ม`);
+      return;
+    }
     const cur = target.statuses.deathline || 0;
     if (cur >= TEPEU_DEATHLINE_CAP) return;
     target.statuses.deathline = cur + 1;

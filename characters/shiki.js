@@ -29,6 +29,7 @@ module.exports = {
       for (const o of engine.alivePlayers()) {
         if (o.id === s.id) continue;
         if ((o.witherAdded || 0) >= SHIKI_WITHER_ADD_MAX) continue; // ท่าไม้ตายแจกครบ 3 หน่วยแล้ว
+        if (engine.resistActive(o)) continue; // ต้านสถานะผิดปกติ — ไม่ได้เส้นชีวิตเพิ่มรอบนี้
         const cur = o.statuses.deathline || 0;
         const next = Math.min(SHIKI_WITHER_LINE_MAX, cur + 1);
         if (next > cur) {
@@ -50,6 +51,10 @@ module.exports = {
       for (const o of combatants) {
         if (o.id === s.id || engine.bustedOf(o)) continue;
         if (engine.scoreOf(o) !== engine.scoreOf(s)) continue;
+        if (engine.resistActive(o)) {
+          engine.log(`🛡️ ${o.name} ต้านสถานะผิดปกติ — แต้มเท่ากับ ${s.name} แต่ไม่ติดเส้นชีวิตเพิ่ม`);
+          continue;
+        }
         const gained = engine.shikiGiveLifeline(s, o, 2);
         if (gained > 0) {
           engine.log(`🩸 เนตรมารแห่งความมรณะ — ${o.name} แต้มเท่ากับ ${s.name} ติดเส้นชีวิต +${gained} (สะสม ${o.statuses.deathline}${witherMode ? `/${SHIKI_WITHER_LINE_MAX}` : `/${SHIKI_DEATHLINE_MAX}`})`);
@@ -77,7 +82,8 @@ module.exports = {
       return " — เส้นชีวิตถูกลบล้าง";
     }
     const gained = engine.shikiGiveLifeline(p, target, 1);
-    engine.log(`🔪 ${p.name} นายมีฝีมือแค่ไหนหรอ? — ${target.name} ติดเส้นชีวิต +${gained} (สะสม ${target.statuses.deathline || 0}) และ ${p.name} พร้อมยกเลิกท่าไม้ตายของผู้เล่นอื่น 1 ครั้ง (${SHIKI_GODSLAY_TURNS} เทิร์น)`);
+    const dlMsg = gained > 0 ? `ติดเส้นชีวิต +${gained} (สะสม ${target.statuses.deathline || 0})` : `ต้านสถานะผิดปกติ — ไม่ติดเส้นชีวิตเพิ่ม`;
+    engine.log(`🔪 ${p.name} นายมีฝีมือแค่ไหนหรอ? — ${target.name} ${dlMsg} และ ${p.name} พร้อมยกเลิกท่าไม้ตายของผู้เล่นอื่น 1 ครั้ง (${SHIKI_GODSLAY_TURNS} เทิร์น)`);
     return ` — วัดฝีมือ ${target.name}`;
   },
 

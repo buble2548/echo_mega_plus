@@ -11,8 +11,9 @@ const MIYAKO_COMBO_CHANCE = [1, 1, 0.5, 0.25]; // เพลงหมัด อ�
 const MIYAKO_FORCE_SCORE = 20;        // หนูจะทำให้พี่ตาสว่างเอง: บังคับแต้มการจั่วเป็น 20 ทันที (ไม่มีผลถ้ามีแต้ม 21 อยู่แล้ว)
 const MIYAKO_SEAL_TURNS = 3;          // ไม่ยอมให้ฆ่าใครอีกแล้ว: ปิดใช้งานความสามารถสังหารทันทีของเป้าหมาย 3 เทิร์น
 const MIYAKO_ATK_BONUS = 1;           // ย๊ากก!: เป้าหมายไม่มีความสามารถสังหาร -> พลังโจมตีถาวร +1 (ได้ครั้งเดียว ไม่สะสม — ใช้แค่ log ที่นี่)
-const MIYAKO_ARMOR_SEAL_TURNS = 5;    // ย๊ากก!: เป้าหมายไม่มีความสามารถสังหาร -> เกราะเป้าหมายไม่ฟื้น 5 เทิร์น
-const MIYAKO_ULT_DECAY_TURNS = 3;     // ย๊ากก!: เป้าหมายไม่มีความสามารถสังหาร -> ติดผุพัง 3 เทิร์นเพิ่มด้วย
+// ย๊ากก!: เป้าหมายไม่มีความสามารถสังหาร -> ติดผุพัง (เกราะไม่ฟื้น) 5 เทิร์น — เดิมแยกเป็น armorSeal(5)+decay(3) สองสถานะซ้อนกัน
+//  ทั้งคู่บล็อกเกราะฟื้นเหมือนกันเป๊ะ รวมเป็น decay ตัวเดียว ใช้ค่าที่ยาวกว่า (5) คงความแรงเดิมของท่าไม้ตายไว้
+const MIYAKO_ULT_DECAY_TURNS = 5;
 
 module.exports = {
   id: "miyako",
@@ -94,14 +95,20 @@ module.exports = {
     engine.triggerCutscene(attacker, "miyakoUlt");
     delete attacker.statuses.miyakoUlt;
     if (!target.alive) return;
+    const resisted = engine.resistActive(target);
     if (engine.hasKillCapability(target)) {
-      target.statuses.miyakoSeal = Math.max(target.statuses.miyakoSeal || 0, MIYAKO_SEAL_TURNS);
-      engine.log(`🥊 ${attacker.name} ไม่ยอมให้ฆ่าใครอีกแล้ว — สั่งปิดใช้งานความสามารถในการสังหารทันทีของ ${target.name} เป็นเวลา ${MIYAKO_SEAL_TURNS} เทิร์น!`);
+      if (resisted) {
+        engine.log(`🛡️ ${target.name} ต้านสถานะผิดปกติ — ไม่ยอมให้ฆ่าใครอีกแล้วไม่มีผล`);
+      } else {
+        target.statuses.miyakoSeal = Math.max(target.statuses.miyakoSeal || 0, MIYAKO_SEAL_TURNS);
+        engine.log(`🥊 ${attacker.name} ไม่ยอมให้ฆ่าใครอีกแล้ว — สั่งปิดใช้งานความสามารถในการสังหารทันทีของ ${target.name} เป็นเวลา ${MIYAKO_SEAL_TURNS} เทิร์น!`);
+      }
     } else {
-      target.statuses.armorSeal = Math.max(target.statuses.armorSeal || 0, MIYAKO_ARMOR_SEAL_TURNS);
-      target.statuses.decay = Math.max(target.statuses.decay || 0, MIYAKO_ULT_DECAY_TURNS);
+      if (!resisted) target.statuses.decay = Math.max(target.statuses.decay || 0, MIYAKO_ULT_DECAY_TURNS);
       attacker.statuses.yaak = 1;
-      engine.log(`🥊 ${attacker.name} ย๊ากก! — ${target.name} ไม่มีความสามารถในการสังหารทันที พลังโจมตี +${MIYAKO_ATK_BONUS} (ตลอดคอมโบนี้ถ้ากำลังต่อเพลงหมัดอาริมะอยู่) และเกราะของ ${target.name} จะไม่ฟื้น ${MIYAKO_ARMOR_SEAL_TURNS} เทิร์น พร้อมติดผุพัง ${MIYAKO_ULT_DECAY_TURNS} เทิร์น!`);
+      engine.log(resisted
+        ? `🥊 ${attacker.name} ย๊ากก! — ${target.name} ต้านสถานะผิดปกติ ไม่ติดผุพัง แต่พลังโจมตี +${MIYAKO_ATK_BONUS} ยังคงมีผล (ตลอดคอมโบนี้ถ้ากำลังต่อเพลงหมัดอาริมะอยู่)`
+        : `🥊 ${attacker.name} ย๊ากก! — ${target.name} ไม่มีความสามารถในการสังหารทันที พลังโจมตี +${MIYAKO_ATK_BONUS} (ตลอดคอมโบนี้ถ้ากำลังต่อเพลงหมัดอาริมะอยู่) และเกราะของ ${target.name} จะไม่ฟื้น ${MIYAKO_ULT_DECAY_TURNS} เทิร์น!`);
     }
   },
 

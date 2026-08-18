@@ -33,7 +33,7 @@ function useViewport() {
 
 // เช็คว่าการ์ดคู่ต่อสู้คนนี้กดโจมตี/เลือกเป็นเป้าหมายได้ไหม — ใช้ร่วมกันทั้ง layout มือถือและจอใหญ่
 function isTargetable(p, iAmAttacker, c) {
-  return ((iAmAttacker && !p.statuses?.seal) || !!c.anataSel || c.dawnSel || c.appleSel || c.bbSel || c.shSel || c.skSel || c.doomSel || c.saObSel || c.saLocaSel || c.bgSel || c.kawaiiSel || !!c.bardPending || c.nanayaSel || c.tpSel) && p.alive;
+  return ((iAmAttacker && !p.statuses?.seal && (!c.kaiRivalId || p.id === c.kaiRivalId)) || !!c.anataSel || c.dawnSel || c.appleSel || c.bbSel || c.shSel || c.skSel || c.doomSel || c.saObSel || c.saLocaSel || c.bgSel || c.kawaiiSel || !!c.bardPending || c.nanayaSel || c.tpSel || c.kaiCreateSel || c.kaiPunishSel || c.msMarkSel || c.msRuptureSel) && p.alive;
 }
 // แตะ/คลิกการ์ดคู่ต่อสู้แล้วต้องทำอะไร — ไล่ตามโหมดเลือกเป้าหมายที่เปิดอยู่ ไม่มีเลยก็โจมตีปกติ
 function resolveAttackPick(id, c) {
@@ -51,6 +51,10 @@ function resolveAttackPick(id, c) {
   if (c.bardPending) return c.pickBard(id);
   if (c.nanayaSel) return c.pickNanaya(id);
   if (c.tpSel) return c.pickTp(id);
+  if (c.kaiCreateSel) return c.pickKaiCreate(id);
+  if (c.kaiPunishSel) return c.pickKaiPunish(id);
+  if (c.msMarkSel) return c.pickMsMark(id);
+  if (c.msRuptureSel) return c.pickMsRupture(id);
   return socket.emit("attack", { targetId: id });
 }
 
@@ -694,7 +698,7 @@ function AuraDust({ fieldAura }) {
     if (!fieldAura) { setParticles([]); return; }
     setParticles(Array.from({ length: 16 }, (_, i) => ({
       angle: (i / 16) * 360 + (Math.random() * 16 - 8),
-      dist: 42 + Math.random() * 46,
+      dist: 16 + Math.random() * 18,
       size: 4 + Math.random() * 4,
       delay: Math.random() * 1.4,
       duration: 1.3 + Math.random() * 0.9,
@@ -873,6 +877,16 @@ const STATUS_INFO = {
   might:     { icon: "💪", label: "เสริมพลัง", cls: "bg-echo-gold text-gray-900", desc: "เสริมพลัง: ดาเมจที่ทำได้เพิ่มขึ้นตามจำนวนที่ระบุ ตามจำนวนเทิร์นที่เหลือ" },
   spellflow: { icon: "🌀", label: "กระแสเวท", cls: "bg-echo-cyan text-gray-900", desc: "กระแสเวท: การใช้สกิลทุกชนิดใช้พลังงานลดลงตามจำนวนที่ระบุ ตามจำนวนเทิร์นที่เหลือ" },
   spellburden: { icon: "⛓️", label: "ภาระเวท", cls: "bg-echo-hp", desc: "ภาระเวท: การใช้สกิลทุกชนิดใช้พลังงานเพิ่มขึ้นตามจำนวนที่ระบุ (ไม่เกิน 8) ตามจำนวนเทิร์นที่เหลือ" },
+  manaSeal:  { icon: "⛔", label: "ผนึกพลังงาน", cls: "bg-echo-hp", desc: "ผนึกพลังงาน: ฟื้นฟูแต้มสกิลจากช่องทางใดๆ ไม่ได้เลย (เช้า/พรจั่วการ์ด/ไอเทม) ตามจำนวนเทิร์นที่เหลือ" },
+  // ---------- ไค ชิซากิ ----------
+  kaiCreation: { icon: "🎨", label: "รังสรรค์", cls: "bg-echo-gold text-gray-900", desc: "รังสรรค์: มาร์กถาวรจากไค ชิซากิ — ครบ 2 มาร์กบนกระดานจะปลดล็อก Overhaul" },
+  kaiPunishment: { icon: "⚔️", label: "ลงทัณฑ์", cls: "bg-echo-hp", desc: "ลงทัณฑ์: มาร์กถาวรจากไค ชิซากิ — ครบ 2 มาร์กบนกระดานจะปลดล็อก Overhaul" },
+  kaiLink: { icon: "🕊️", label: "เชื่อมต่อ", cls: "bg-echo-magenta", desc: "เชื่อมต่อ (สวรรค์ประทานพร): HP/เกราะที่เสียหรือฟื้นฟูจริงถูกแชร์ให้คู่เชื่อมเท่ากัน 1:1 ตามจำนวนเทิร์นที่เหลือ" },
+  kaiRival1: { icon: "😡", label: "คู่ปรับ", cls: "bg-echo-hp", desc: "โทสะระงับด้วยโทสะ: ถูกบังคับโจมตีเฉพาะคู่ปรับที่ถูกกำหนดไว้เท่านั้น ตามจำนวนเทิร์นที่เหลือ" },
+  kaiRival2: { icon: "😡", label: "คู่ปรับ", cls: "bg-echo-hp", desc: "โทสะระงับด้วยโทสะ: ถูกบังคับโจมตีเฉพาะคู่ปรับที่ถูกกำหนดไว้เท่านั้น ตามจำนวนเทิร์นที่เหลือ" },
+  // ---------- ผู้สังหารจอมมหาเวทย์ ----------
+  mageslayerMark: { icon: "🎯", label: "ตราล่าเวท", cls: "bg-echo-magenta", desc: "ตราล่าเวท (Witch Mark): เป้าหมายที่ถูกมาร์ก — โจมตีปกติ/หลบหลีก/ใช้สกิลใดๆ มีโอกาสถูกขโมยพลังงาน (เคลื่อนย้ายได้ ถาวรจนกว่าจะย้าย/ถูกล้าง)" },
+  mageslayerFury: { icon: "😤", label: "Fury", cls: "bg-echo-gold text-gray-900", desc: "Fury: สะสมพลังโกรธ (สูงสุด 3) — ใช้หมดพร้อมกันในการโจมตีปกติครั้งถัดไป (+ดาเมจ และดูดเลือดเท่าจำนวนสต็อก)" },
   // ---------- ยูนะ ไอดอลประจำสนาม (patch 2.2.6) — ต้าน/ลบไม่ได้ ไม่อยู่ในสถานะพื้นฐานทั่วไป ----------
   yunaDelete: { icon: "💜", label: "Delete", cls: "bg-echo-magenta", desc: "Delete (ยูนะ): ดาเมจที่ได้รับเพิ่มขึ้น +1 ตามจำนวนเทิร์นที่เหลือ — ต้าน/ลบไม่ได้ ซ้อนกับเปราะบางได้" },
   yunaSmile: { icon: "💚", label: "Smile for You", cls: "bg-echo-cyan text-gray-900", desc: "Smile for You (ยูนะ): ดาเมจที่ได้รับลดลง -1 ตามจำนวนเทิร์นที่เหลือ — ต้าน/ลบไม่ได้" },
@@ -932,7 +946,6 @@ const STATUS_INFO = {
   miyakoUlt:   { icon: "🎯", label: "หนูจะเอาจริงแล้วนะ", cls: "bg-echo-gold text-gray-900", desc: "หนูจะทำให้พี่ตาสว่างเอง: แต้มการจั่วกลายเป็น 20 — เมื่อได้โจมตีจะปิดความสามารถสังหารทันทีของเป้าหมาย หรือเสริมพลังโจมตีถาวร +1 พร้อมมอบผุพัง" },
   miyakoSeal:  { icon: "🥊", label: "ไม่ยอมให้ฆ่าใครอีกแล้ว", cls: "bg-echo-hp", desc: "ไม่ยอมให้ฆ่าใครอีกแล้ว: ความสามารถสังหารทันทีถูกปิดใช้งาน ตามจำนวนเทิร์นที่เหลือ" },
   yaak:        { icon: "🥊", label: "ย๊ากก!", cls: "bg-echo-gold text-gray-900", desc: "ย๊ากก!: การโจมตีปกติ +1 หน่วย คงอยู่จนกว่าจะได้โจมตี — ถ้ามีเพลงหมัด อาริมะด้วย จะติดอยู่ทุกหมัดในคอมโบ (นับทั้งคอมโบเป็นการโจมตีครั้งเดียว)" },
-  armorSeal: { icon: "🛡️", label: "เกราะไม่ฟื้น", cls: "bg-echo-hp", desc: "เกราะฟื้นไม่ได้ ตามจำนวนเทิร์นที่เหลือ" },
   // ---------- สถานะ Universal (patch 2.2.1) ----------
   invert:     { icon: "🔄", label: "ผกผัน", cls: "bg-echo-hp", desc: "ผกผัน: ฟื้นเลือด/เกราะ กลายเป็นเสียแทน — เพิ่มพลังโจมตี กลายเป็นลดแทน ตามจำนวนเทิร์นที่เหลือ" },
   decay:      { icon: "🥀", label: "ผุพัง", cls: "bg-echo-hp", desc: "ผุพัง: เกราะฟื้นไม่ได้ ตามจำนวนเทิร์นที่เหลือ" },
@@ -1073,11 +1086,15 @@ function StatusModal({ p, onClose, statusOnly }) {
                 <span className={`text-xs px-1.5 py-0.5 rounded-md font-bold shrink-0 ${it.cls}`}>{it.icon}{it.label}{it.amt > 0 ? ` +${it.amt}` : ""}</span>
                 <div className="min-w-0">
                   <span className="text-sm opacity-90 leading-snug">{it.desc}</span>
-                  {it.v > 1 && (
-                    PERMANENT_STATUS_KEYS.has(it.key)
-                      ? <div className="text-xs font-bold text-echo-cyan mt-0.5">📌 สแตคสะสม {it.v}</div>
-                      : <div className="text-xs font-bold text-echo-gold mt-0.5">⏳ เหลือ {it.v} เทิร์น</div>
-                  )}
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                    {/* จำนวนซ้อนทับ (amount) — โชว์แยกชัดเจนเสมอเมื่อมีค่า ไม่ใช่แค่เลขเล็กๆ ในป้ายไอคอนด้านบนที่สังเกตยาก */}
+                    {it.amt > 0 && <span className="text-xs font-bold text-echo-hp">📊 จำนวนซ้อนทับ +{it.amt}</span>}
+                    {it.v > 1 && (
+                      PERMANENT_STATUS_KEYS.has(it.key)
+                        ? <span className="text-xs font-bold text-echo-cyan">📌 สแตคสะสม {it.v}</span>
+                        : <span className="text-xs font-bold text-echo-gold">⏳ เหลือ {it.v} เทิร์น</span>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -1845,6 +1862,56 @@ function BardComposeSlot({ me }) {
   );
 }
 
+// ---------- ไค ชิซากิ: ช่อง Overhaul 2 ช่อง (แทนที่ปุ่มท่าไม้ตาย) ----------
+//  แสดงชื่อผู้ถือ + ไอคอนสถานะ (รังสรรค์🎨/ลงทัณฑ์⚔️) ต่อช่อง — ครบ 2 ช่องกดได้ทันที ไม่เสียแต้มสกิล
+function KaiOverhaulSlot({ me }) {
+  const slots = me.kaiOverhaulSlots || [];
+  const ready = slots.length >= 2;
+  // คำนวณคอมโบฝั่ง client ล้วนๆ จากเนื้อหา kaiOverhaulSlots เอง (ไม่ต้องมี field เพิ่มจาก server)
+  const comboLabel = (() => {
+    if (slots.length < 2) return "";
+    const [a, b] = slots;
+    if (a.status === "kaiCreation" && b.status === "kaiCreation") return "สวรรค์ประทานพร";
+    if (a.status === "kaiPunishment" && b.status === "kaiPunishment") return "โทสะระงับด้วยโทสะ";
+    return "ตาชั่งแห่งความเท่าเทียม";
+  })();
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <button
+        onClick={() => { if (ready) { clickSound(); socket.emit("kaiOverhaul"); } }}
+        disabled={!ready}
+        className={`relative w-full h-20 sm:h-24 rounded-2xl overflow-hidden bg-black/40 border-2 shadow-lg grid grid-cols-2 gap-1.5 p-2 transition ${
+          ready ? "border-echo-gold/70 active:scale-95 cursor-pointer" : "border-white/15 cursor-not-allowed"
+        }`}
+      >
+        {[0, 1].map((i) => {
+          const slot = slots[i];
+          return (
+            <div
+              key={i}
+              className={`rounded-xl flex flex-col items-center justify-center text-center gap-0.5 border ${
+                slot ? "bg-white/15 border-echo-gold/70 pop-in" : "bg-white/5 border-white/15"
+              }`}
+            >
+              {slot ? (
+                <>
+                  <span className="text-lg sm:text-2xl">{slot.status === "kaiCreation" ? "🎨" : "⚔️"}</span>
+                  <span className="text-[10px] sm:text-xs font-bold leading-tight px-1 truncate max-w-full">{slot.name}</span>
+                </>
+              ) : (
+                <span className="opacity-25 text-xl">♦</span>
+              )}
+            </div>
+          );
+        })}
+      </button>
+      <div className="text-sm sm:text-base font-bold text-center leading-tight">
+        {ready ? `Overhaul พร้อม! (${comboLabel})` : `Overhaul · ${slots.length}/2`}
+      </div>
+    </div>
+  );
+}
+
 // ---------- กองการ์ดกลางจอ: การ์ดคว่ำซ้อนกันเล็กน้อย ไม่ต้องมีอาร์ตใหม่ ----------
 //  onClick (ถ้ามี) เปิดสมุดการ์ด (DeckLedgerModal) — ต้องเปิด pointer-events เฉพาะจุดนี้เอง เพราะ wrapper รอบนอก (โลโก้/กึ่งกลางจอ) เป็น pointer-events-none ทั้งแถบ
 function DeckPile({ hostRef, size = "md", onClick }) {
@@ -2007,6 +2074,10 @@ export default function Game({ state, lowQ }) {
   const [bardSel, setBardSel] = useState([]);        // Bard: เป้าหมายบทเพลงที่เลือกไว้ (บทเพลงต้องการ 1-2 คน)
   const [nanayaSel, setNanayaSel] = useState(false);  // นานายะ ชิกิ: โหมดเลือกเป้าหมาย อันนี้ของนายรึเปล่า (เลือกตัวเองไม่ได้)
   const [tpSel, setTpSel] = useState(false);          // เทเปา: โหมดเลือกเป้าหมาย นายเป็นคนทำตัวเองนะ (เลือกตัวเองไม่ได้)
+  const [kaiCreateSel, setKaiCreateSel] = useState(false);   // ไค: โหมดเลือกเป้าหมายมือซ้ายแห่งการรังสรรค์ (เลือกตัวเองได้)
+  const [kaiPunishSel, setKaiPunishSel] = useState(false);   // ไค: โหมดเลือกเป้าหมายมือขวาแห่งการลงทัณฑ์ (เลือกตัวเองได้)
+  const [msMarkSel, setMsMarkSel] = useState(false);         // ผู้สังหารจอมมหาเวทย์: โหมดเลือกเป้าหมาย Witch Mark (เลือกตัวเองไม่ได้)
+  const [msRuptureSel, setMsRuptureSel] = useState(false);   // ผู้สังหารจอมมหาเวทย์: โหมดเลือกเป้าหมาย Mana Rupture (เลือกตัวเองไม่ได้)
   const [cycleFx, setCycleFx] = useState(null); // แบนเนอร์สลับกลางวัน/กลางคืน
   const prevCycle = useRef(null);
   const [hakunoCmdOpen, setHakunoCmdOpen] = useState(false); // คิชินามิ ฮาคุโนะ: เมนูเลือกคำสั่งอาคมบัญชาระดับ EX+
@@ -2149,6 +2220,10 @@ export default function Game({ state, lowQ }) {
   //  (patch 2.0.8 — ระหว่างมิติมายาบรรเลงทั้งสองแบบ ไม่ติดลิมิต 2 แต่กดได้สูงสุด 6 ครั้งต่อเทิร์น)
   const bardDimOn = isBard && ((me?.statuses?.soulDim || 0) > 0 || (me?.statuses?.bloodDim || 0) > 0);
   const bardNoteLocked = isBard && (!!me?.bardPending || (me?.bardNotesUsed || 0) >= (bardDimOn ? 6 : 2));
+  // ---------- ไค ชิซากิ ----------
+  const isKai = ch?.id === "kai";
+  const kaiOverhaulReady = isKai && (me?.kaiOverhaulSlots?.length || 0) >= 2;
+  const kaiRivalId = isKai && ((me?.statuses?.kaiRival1 || 0) > 0 || (me?.statuses?.kaiRival2 || 0) > 0) ? me?.kaiRivalId : null;
   // ---------- ชเรด เอลัน ----------
   const isShrade = ch?.id === "shrade_elan";
   // แด่เพื่อนรักของฉัน: ระหว่างชาร์จจั่วการ์ด/ใช้สกิลอื่นไม่ได้ (แต่ชนะจั่วยังโจมตีได้)
@@ -2184,6 +2259,9 @@ export default function Game({ state, lowQ }) {
   const noticeRef = useRef(null);
   const noticeStartRef = useRef(0);
   useEffect(() => { noticeRef.current = notice; }, [notice]);
+  // ไค ชิซากิ: สุ่มเสียงพูดทุกครั้งที่ใช้สกิล (พื้นฐาน/รอง/Overhaul ล้วนเด้ง skillFlash) — ตามแพทเทิร์นเสียงสุ่มของนานายะ
+  const playersRef = useRef(state.players);
+  useEffect(() => { playersRef.current = state.players; }, [state.players]);
   useEffect(() => {
     const onFlash = (f) => {
       if (!flashRef.current) flashStartRef.current = Date.now();
@@ -2195,6 +2273,8 @@ export default function Game({ state, lowQ }) {
       } else if (f.sound) {
         playSfx(f.sound);
       }
+      const caster = (playersRef.current || []).find((pl) => pl.name === f.by);
+      if (caster?.character?.id === "kai") playSfx(`kaiVoice${1 + Math.floor(Math.random() * 5)}`);
     };
     socket.on("skillFlash", onFlash);
     return () => socket.off("skillFlash", onFlash);
@@ -2260,6 +2340,12 @@ export default function Game({ state, lowQ }) {
     if (tier === "ultimate" && ch?.id === "kotone") { setKawaiiSel(true); setSkillOpen(false); return; }
     // เทเปา: ท่าไม้ตาย นายเป็นคนทำตัวเองนะ เข้าโหมดเลือกเป้าหมายก่อนส่งไป server
     if (tier === "ultimate" && ch?.id === "tepeu") { setTpSel(true); setSkillOpen(false); return; }
+    // ไค ชิซากิ: สกิลพื้นฐาน/รอง เข้าโหมดเลือกเป้าหมายก่อนส่งไป server (เลือกตัวเองได้ทั้งคู่)
+    if (tier === "basic" && ch?.id === "kai") { setKaiCreateSel(true); setSkillOpen(false); return; }
+    if (tier === "secondary" && ch?.id === "kai") { setKaiPunishSel(true); setSkillOpen(false); return; }
+    // ผู้สังหารจอมมหาเวทย์: สกิลพื้นฐาน/รอง เข้าโหมดเลือกเป้าหมายก่อนส่งไป server (เลือกตัวเองไม่ได้)
+    if (tier === "basic" && ch?.id === "mageslayer") { setMsMarkSel(true); setSkillOpen(false); return; }
+    if (tier === "secondary" && ch?.id === "mageslayer") { setMsRuptureSel(true); setSkillOpen(false); return; }
     socket.emit("useSkill", { tier });
     setSkillOpen(false);
   };
@@ -2297,6 +2383,24 @@ export default function Game({ state, lowQ }) {
   const pickTp = (id) => {
     socket.emit("useSkill", { tier: "ultimate", targets: [id] });
     setTpSel(false);
+  };
+  // เลือกเป้าหมายมือซ้ายแห่งการรังสรรค์/มือขวาแห่งการลงทัณฑ์ (ไค ชิซากิ) -> ส่งไป server ทันที
+  const pickKaiCreate = (id) => {
+    socket.emit("useSkill", { tier: "basic", targets: [id] });
+    setKaiCreateSel(false);
+  };
+  const pickKaiPunish = (id) => {
+    socket.emit("useSkill", { tier: "secondary", targets: [id] });
+    setKaiPunishSel(false);
+  };
+  // เลือกเป้าหมาย Witch Mark / Mana Rupture (ผู้สังหารจอมมหาเวทย์) -> ส่งไป server ทันที
+  const pickMsMark = (id) => {
+    socket.emit("useSkill", { tier: "basic", targets: [id] });
+    setMsMarkSel(false);
+  };
+  const pickMsRupture = (id) => {
+    socket.emit("useSkill", { tier: "secondary", targets: [id] });
+    setMsRuptureSel(false);
   };
   // เลือกเป้าหมาย Weapon ของ DoomGuy -> ส่งไป server ทันที
   const pickDoom = (id) => {
@@ -2419,6 +2523,18 @@ export default function Game({ state, lowQ }) {
     if (tpSel && (phase !== "PLAYING" || me?.skillUsed || done)) setTpSel(false);
   }, [tpSel, phase, me?.skillUsed, done]);
   useEffect(() => {
+    if (kaiCreateSel && (phase !== "PLAYING" || me?.skillUsed || done)) setKaiCreateSel(false);
+  }, [kaiCreateSel, phase, me?.skillUsed, done]);
+  useEffect(() => {
+    if (kaiPunishSel && (phase !== "PLAYING" || me?.skillUsed || done)) setKaiPunishSel(false);
+  }, [kaiPunishSel, phase, me?.skillUsed, done]);
+  useEffect(() => {
+    if (msMarkSel && (phase !== "PLAYING" || me?.skillUsed || done)) setMsMarkSel(false);
+  }, [msMarkSel, phase, me?.skillUsed, done]);
+  useEffect(() => {
+    if (msRuptureSel && (phase !== "PLAYING" || me?.skillUsed || done)) setMsRuptureSel(false);
+  }, [msRuptureSel, phase, me?.skillUsed, done]);
+  useEffect(() => {
     if (appleOpen && (phase !== "PLAYING" || done)) setAppleOpen(false);
   }, [appleOpen, phase, done]);
   useEffect(() => {
@@ -2460,7 +2576,10 @@ export default function Game({ state, lowQ }) {
   // สถานะ+handler ของทุกโหมดเลือกเป้าหมาย มัดรวมไว้ที่เดียว ใช้ร่วมกันทั้ง layout มือถือและจอใหญ่ (ดู isTargetable/resolveAttackPick)
   const targetChain = {
     anataSel, dawnSel, appleSel, bbSel, shSel, skSel, doomSel, saObSel, saLocaSel, bgSel, kawaiiSel, bardPending, nanayaSel, tpSel,
+    kaiCreateSel, kaiPunishSel, msMarkSel, msRuptureSel,
     pickAnata, pickDawn, pickGive, pickBb, pickSh, pickSk, pickDoom, pickSaOb, pickSaLoca, pickBg, pickKawaii, pickBard, pickNanaya, pickTp,
+    pickKaiCreate, pickKaiPunish, pickMsMark, pickMsRupture,
+    kaiRivalId,
   };
 
   // ============================================================
@@ -2593,6 +2712,32 @@ export default function Game({ state, lowQ }) {
             <button onClick={() => { clickSound(); setNanayaSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
           </div>
         )}
+        {kaiCreateSel && (
+          <div className="shrink-0 text-center mt-1.5 text-hard">
+            <span className="text-lg font-black text-echo-gold animate-pulse">🎨 แตะเลือกเป้าหมายมือซ้ายแห่งการรังสรรค์</span>
+            <button onClick={() => { clickSound(); pickKaiCreate(me.id); }} className="ml-3 text-sm font-bold bg-echo-gold text-gray-900 rounded-full px-3 py-1">เลือกตัวเอง</button>
+            <button onClick={() => { clickSound(); setKaiCreateSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
+          </div>
+        )}
+        {kaiPunishSel && (
+          <div className="shrink-0 text-center mt-1.5 text-hard">
+            <span className="text-lg font-black text-echo-hp animate-pulse">⚔️ แตะเลือกเป้าหมายมือขวาแห่งการลงทัณฑ์</span>
+            <button onClick={() => { clickSound(); pickKaiPunish(me.id); }} className="ml-3 text-sm font-bold bg-echo-gold text-gray-900 rounded-full px-3 py-1">เลือกตัวเอง</button>
+            <button onClick={() => { clickSound(); setKaiPunishSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
+          </div>
+        )}
+        {msMarkSel && (
+          <div className="shrink-0 text-center mt-1.5 text-hard">
+            <span className="text-lg font-black text-echo-hp animate-pulse">🩸 แตะเลือกเป้าหมาย Witch Mark</span>
+            <button onClick={() => { clickSound(); setMsMarkSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
+          </div>
+        )}
+        {msRuptureSel && (
+          <div className="shrink-0 text-center mt-1.5 text-hard">
+            <span className="text-lg font-black text-echo-hp animate-pulse">💥 แตะเลือกเป้าหมาย Mana Rupture</span>
+            <button onClick={() => { clickSound(); setMsRuptureSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
+          </div>
+        )}
 
         {/* กลางจอ: กองการ์ดกลาง ทับตำแหน่งโลโก้เดิม (โลโก้เป็นแค่วอเตอร์มาร์กจางๆ ด้านหลัง) */}
         <div className="flex-1 min-h-0 grid place-items-center pointer-events-none">
@@ -2683,7 +2828,7 @@ export default function Game({ state, lowQ }) {
                   <SkillSlot label="สกิลรอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || (me.skillUsed && !isBard && !isDoomguy) || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked} onUse={requestSkillUse} ammo={isApple ? me.appleGiveUses : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : isKotone && overworkMe ? ktCost(ch?.secondary) : undefined} />
                 </div>
                 <div className="translate-y-1.5">
-                  {isBard ? <BardComposeSlot me={me} /> : <SkillSlot label="ท่าไม้ตาย" tier="ultimate" skill={ch?.ultimate} points={me.skillPoints} disabled={(done || phase !== "PLAYING" || noSkill || moonCellOn || beatMe || me.skillUsed || ultimateActive || fourthLocked || doomUltLocked || takutoUltLockedNow || tepeuCookLocked || tepeuPonderLocked || offerLocked || ktUltLocked || shUltLocked || shCharging || rgCharging || phenexTaunting || hikaruUltLocked)} onUse={requestSkillUse} cost={undefined} />}
+                  {isBard ? <BardComposeSlot me={me} /> : isKai ? <KaiOverhaulSlot me={me} /> : <SkillSlot label="ท่าไม้ตาย" tier="ultimate" skill={ch?.ultimate} points={me.skillPoints} disabled={(done || phase !== "PLAYING" || noSkill || moonCellOn || beatMe || me.skillUsed || ultimateActive || fourthLocked || doomUltLocked || takutoUltLockedNow || tepeuCookLocked || tepeuPonderLocked || offerLocked || ktUltLocked || shUltLocked || shCharging || rgCharging || phenexTaunting || hikaruUltLocked)} onUse={requestSkillUse} cost={undefined} />}
                 </div>
               </div>
               {noSkill && phase === "PLAYING" && !done && (
@@ -3027,6 +3172,36 @@ export default function Game({ state, lowQ }) {
         </div>
       )}
 
+      {/* โหมดเลือกเป้าหมายมือซ้ายแห่งการรังสรรค์/มือขวาแห่งการลงทัณฑ์ (ไค ชิซากิ) — เลือกตัวเองได้ */}
+      {kaiCreateSel && (
+        <div className="absolute top-[22%] left-1/2 -translate-x-1/2 z-40 text-center text-hard whitespace-nowrap">
+          <span className="text-xl font-black text-echo-gold animate-pulse bg-black/60 rounded-full px-5 py-1.5">🎨 คลิกเลือกเป้าหมายมือซ้ายแห่งการรังสรรค์</span>
+          <button onClick={() => { clickSound(); pickKaiCreate(me.id); }} className="ml-3 text-sm font-bold bg-echo-gold text-gray-900 rounded-full px-3 py-1">เลือกตัวเอง</button>
+          <button onClick={() => { clickSound(); setKaiCreateSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
+        </div>
+      )}
+      {kaiPunishSel && (
+        <div className="absolute top-[22%] left-1/2 -translate-x-1/2 z-40 text-center text-hard whitespace-nowrap">
+          <span className="text-xl font-black text-echo-hp animate-pulse bg-black/60 rounded-full px-5 py-1.5">⚔️ คลิกเลือกเป้าหมายมือขวาแห่งการลงทัณฑ์</span>
+          <button onClick={() => { clickSound(); pickKaiPunish(me.id); }} className="ml-3 text-sm font-bold bg-echo-gold text-gray-900 rounded-full px-3 py-1">เลือกตัวเอง</button>
+          <button onClick={() => { clickSound(); setKaiPunishSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
+        </div>
+      )}
+
+      {/* โหมดเลือกเป้าหมาย Witch Mark / Mana Rupture (ผู้สังหารจอมมหาเวทย์) — เลือกได้เฉพาะคนอื่น */}
+      {msMarkSel && (
+        <div className="absolute top-[22%] left-1/2 -translate-x-1/2 z-40 text-center text-hard whitespace-nowrap">
+          <span className="text-xl font-black text-echo-hp animate-pulse bg-black/60 rounded-full px-5 py-1.5">🩸 คลิกเลือกเป้าหมาย Witch Mark</span>
+          <button onClick={() => { clickSound(); setMsMarkSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
+        </div>
+      )}
+      {msRuptureSel && (
+        <div className="absolute top-[22%] left-1/2 -translate-x-1/2 z-40 text-center text-hard whitespace-nowrap">
+          <span className="text-xl font-black text-echo-hp animate-pulse bg-black/60 rounded-full px-5 py-1.5">💥 คลิกเลือกเป้าหมาย Mana Rupture</span>
+          <button onClick={() => { clickSound(); setMsRuptureSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
+        </div>
+      )}
+
       {/* DoomGuy (patch 2.2 full): โหมดเลือกเป้าหมาย Weapon (เฉพาะอาวุธที่ต้องเลือกเป้าหมาย) */}
       {doomSel && (
         <div className="absolute top-[22%] left-1/2 -translate-x-1/2 z-40 text-center text-hard whitespace-nowrap">
@@ -3168,7 +3343,7 @@ export default function Game({ state, lowQ }) {
                     <SkillSlot size="lg" label="รอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || (me.skillUsed && !isBard && !isDoomguy) || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked} onUse={requestSkillUse} ammo={isApple ? me.appleGiveUses : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : isKotone && overworkMe ? ktCost(ch?.secondary) : undefined} />
                   </div>
                   <div className="w-40 sm:w-48">
-                    {isBard ? <BardComposeSlot me={me} /> : <SkillSlot size="lg" label="ท่าไม้ตาย" tier="ultimate" skill={ch?.ultimate} points={me.skillPoints} disabled={(done || phase !== "PLAYING" || noSkill || moonCellOn || beatMe || me.skillUsed || ultimateActive || monsterMe || fourthLocked || doomUltLocked || takutoUltLockedNow || tepeuCookLocked || tepeuPonderLocked || offerLocked || ktUltLocked || shUltLocked || shCharging || rgCharging || phenexTaunting)} onUse={requestSkillUse} cost={undefined} />}
+                    {isBard ? <BardComposeSlot me={me} /> : isKai ? <KaiOverhaulSlot me={me} /> : <SkillSlot size="lg" label="ท่าไม้ตาย" tier="ultimate" skill={ch?.ultimate} points={me.skillPoints} disabled={(done || phase !== "PLAYING" || noSkill || moonCellOn || beatMe || me.skillUsed || ultimateActive || monsterMe || fourthLocked || doomUltLocked || takutoUltLockedNow || tepeuCookLocked || tepeuPonderLocked || offerLocked || ktUltLocked || shUltLocked || shCharging || rgCharging || phenexTaunting)} onUse={requestSkillUse} cost={undefined} />}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

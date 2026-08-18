@@ -309,7 +309,7 @@ function healHp(p, amount) {
   const heal = Math.min(maxHpOf(p) - p.hp, amount);
   if (heal > 0) p.hp += heal;
   if (heal > 0 && !linkMirror) {
-    const b = linkedBuddyOf(p);
+    const b = linkedBuddyOf(p) || CHAR_HOOKS.kai.kaiLinkedBuddyOf(engine, p);
     if (b) {
       linkMirror = true;
       const bh = healHp(b, heal);
@@ -334,7 +334,7 @@ function healArmor(p, amount) {
   const heal = Math.max(0, Math.min(maxArmorOf(p) - p.armor, amount));
   if (heal > 0) p.armor += heal;
   if (heal > 0 && !linkMirror) {
-    const b = linkedBuddyOf(p);
+    const b = linkedBuddyOf(p) || CHAR_HOOKS.kai.kaiLinkedBuddyOf(engine, p);
     if (b) {
       linkMirror = true;
       const bh = healArmor(b, heal);
@@ -438,6 +438,11 @@ function linkedBuddyOf(p) {
   const b = players[p.linkedWith];
   return (b && b.alive && b.id !== p.id && (b.statuses.linked || 0) > 0) ? b : null;
 }
+// ---------- ไค ชิซากิ (kai) ----------
+//  "เชื่อมต่อ" (kaiLink) — โค้ดแยกอิสระจาก linkedBuddyOf ของ Bard ข้างบนโดยสิ้นเชิง (ดู characters/kai.js)
+//  kaiOverhaulSlots: เกมมีห้องเดียว ไม่มีระบบ multi-room (grep แล้วไม่พบ rooms[) — module-level array
+//  [{ playerId, status: "kaiCreation"|"kaiPunishment" }] สูงสุด 2 — ครบ 2 = ปลดล็อกปุ่ม Overhaul
+let kaiOverhaulSlots = [];
 // ---------- เรียวกิ ชิกิ (patch 2.0.5 / rework 2.0.6) ----------
 // ค่าคงที่ของชิกิเองส่วนใหญ่ย้ายไปอยู่ characters/shiki.js แล้ว — เหลือแค่ที่ shared infra ในไฟล์นี้ยังใช้อยู่
 const SHIKI_DEATHLINE_MAX = 6;   // เส้นชีวิตสะสมถึง 6 -> โจมตีปกติระหว่างท่าไม้ตาย 1 = สังหารทันที (ใช้เป็น gate ก่อนเรียก CHAR_HOOKS.shiki)
@@ -550,6 +555,7 @@ function clearWitherLines() {
 }
 // มอบเส้นชีวิตจากสกิลติดตัว/สกิลรอง (โหมดท่าไม้ตาย 2: +1/ครั้ง และแหล่งปกติให้ได้ไม่เกิน 3)
 function shikiGiveLifeline(shiki, target, amount) {
+  if (resistActive(target)) return 0; // ต้านสถานะผิดปกติ: ไม่ได้เส้นชีวิตเพิ่ม (สแตคเดิมที่มีอยู่ก่อนหน้าไม่หาย)
   const cur = target.statuses.deathline || 0;
   if ((shiki.shikiUlt || "deatheye") === "wither") {
     if (cur >= SHIKI_WITHER_PASSIVE_CAP) return 0;
@@ -887,7 +893,7 @@ const TEMARI_ANATA_DRAWS = 3;    // ANATA WAAAAAAAA: บังคับจั่
 //  และแยก ยามฟ้าสาง/เส้นชีวิต ออกไปลดทีละ 1 แทน — ดูใน st === "song")
 const DEBUFF_KEYS = ["discord", "sleep", "stun", "nodraw", "noskill", "sena",
   "energy", "nohealing", "moonmark", "overwork", "unplug", "weak", "fragile", "spellburden",
-  "oblada", "calamity", "hburn", "phenexBanUlt", "nanayaSeal", "miyakoSeal", "armorSeal", "invert"];
+  "oblada", "calamity", "hburn", "phenexBanUlt", "nanayaSeal", "miyakoSeal", "invert", "manaSeal"];
 // เกราะสูงสุดของผู้เล่น: ปกติ 2 — ระหว่างสวมเกราะราชัน (ท่าไม้ตายคุวากาตะ) เพิ่ม +3 เป็น 5
 // ระหว่างสกิลติดตัว 3 เอวา 13 (เลือด <= 3) เพิ่ม +1
 // ระหว่าง Lie Like Vortigern (โอเบรอน) เป้าหมายได้เพดานเกราะ +1
@@ -941,6 +947,7 @@ function instantDeath(p) {
   // ริต้า เบอร์นัล (สกิลติดตัว 2 patch 2.1.7, characters/phenex.js): ตกรอบจริงขณะท่าไม้ตาย 2 ยังทำงานอยู่ -> ปลดปล่อยความเจ็บปวดที่สะสมทั้งหมดก่อนตาย
   if (p.characterId === "phenex") CHAR_HOOKS.phenex.maybeReleasePainOnDeath(engine, p);
   p.hp = 0; p.alive = false; p.result = "dead"; p.locked = true;
+  CHAR_HOOKS.kai.pruneOverhaulSlots(engine); // ไค ชิซากิ: ผู้ถือรังสรรค์/ลงทัณฑ์ตกรอบ -> ลบออกจาก Overhaul tracker
   // ยูนะ: เป้าหมายที่ได้รับพร (Delete/Smile for You/Longing) ตาย/หมดสภาพ -> เพลง+บัฟยูนะปิดลงทันที
   //  ยกเว้น Break Beat Bark เพราะมีผลทั้งสนาม ไม่ผูกกับผู้เล่นคนใดคนหนึ่งโดยเฉพาะ
   if (yunaEffect && yunaEffect !== "beatbark" && yunaTargetId === p.id) {
@@ -1023,6 +1030,8 @@ function displayImg(p) {
   }
   // โอกูริ แคป: ระหว่างร่าง Zone (GrayBeast) = ภาพ zone_form
   if (p.characterId === "oguri" && (p.statuses.graybeast || 0) > 0) return OGURI_ZONE_IMG;
+  // ผู้สังหารจอมมหาเวทย์: เคยใช้ Witch Mark ไปแล้ว (ถาวร) = MS02.png แทน MS01.png ปกติ
+  if (p.characterId === "mageslayer") return p.mageslayerHasMarked ? "/characters/mageslayer/MS02.png" : "/characters/mageslayer/MS01.png";
   // ริดดี้ มาร์เซนาส: ล็อบบี้ = riddhe.jpg — ลงสนามเป็นบันชี / NT-D (ท่าไม้ตาย 1) / ร่างดำมืด (ท่าไม้ตาย 2 หรือถาวรหลังสกิลติดตัว 3)
   if (p.characterId === "riddhe") {
     if (gameState === "LOBBY") return p.img;
@@ -1128,6 +1137,14 @@ function activeSkillMusic() {
     }
   }
   if (bestTepeu) return bestTepeu;
+  // Mana Burden (ผู้สังหารจอมมหาเวทย์): เพลง mageslayer_ult เล่นค้างตราบใดที่ตัวเองยังมีภาระเวทติดตัวอยู่ (ผูกอายุกับ spellburden 5 เทิร์นของตัวเอง)
+  let bestMageslayer = null;
+  for (const p of alivePlayers()) {
+    if (p.characterId === "mageslayer" && (p.statuses.spellburden || 0) > 0) {
+      if (!bestMageslayer || (p.transformAt || 0) > bestMageslayer.at) bestMageslayer = { music: "mageslayer_ult", at: p.transformAt || 0 };
+    }
+  }
+  if (bestMageslayer) return bestMageslayer;
   // MOON*CELL (คิชินามิ ฮาคุโนะ patch 2.2.1): เพลง hakuno_theme เล่นค้างระหว่างท่าไม้ตายทำงาน
   let bestHakuno = null;
   for (const p of alivePlayers()) {
@@ -1173,7 +1190,7 @@ function loseHp(p) {
   // ไม่อยากให้ใครต้องเจ็บปวด (ริต้า เบอร์นัล, characters/phenex.js): ระหว่างล่อเป้า สะสม "ความเจ็บปวด" +1 ทุกๆ 1 หน่วยเลือดจริงที่เสียไป
   CHAR_HOOKS.phenex.onHpLost(p);
   if (!linkMirror) {
-    const b = linkedBuddyOf(p);
+    const b = linkedBuddyOf(p) || CHAR_HOOKS.kai.kaiLinkedBuddyOf(engine, p);
     if (b && !sealActive(b)) {
       linkMirror = true;
       loseHp(b);
@@ -1189,7 +1206,7 @@ function loseArmor(p) {
   // ไม่อยากให้ใครต้องเจ็บปวด (ริต้า เบอร์นัล, characters/phenex.js): ระหว่างล่อเป้า สะสม "ความเจ็บปวด" +1 ทุกๆ 1 หน่วยเกราะที่เสียไป
   CHAR_HOOKS.phenex.onArmorLost(p);
   if (!linkMirror) {
-    const b = linkedBuddyOf(p);
+    const b = linkedBuddyOf(p) || CHAR_HOOKS.kai.kaiLinkedBuddyOf(engine, p);
     if (b && !sealActive(b) && b.armor > 0) {
       linkMirror = true;
       loseArmor(b);
@@ -1249,6 +1266,8 @@ function dealMixed(p, n, isNormalAttack) { // เกราะก่อนแล�
 function addSkill(p, n) {
   // ชะงัก (โอกูริ Rework): ฟื้นฟูแต้มสกิลไม่ได้ทุกช่องทาง ระหว่างติดสถานะนี้
   if (((p.statuses && p.statuses.stagger) || 0) > 0) return;
+  if (((p.statuses && p.statuses.manaSeal) || 0) > 0) return; // ผนึกพลังงาน (Universal): ฟื้นฟูแต้มสกิลไม่ได้ทุกช่องทาง
+  if (p.characterId === "mageslayer") return; // Song's Curse: ถาวร ไม่ใช่สถานะ ไม่ต้านได้ — การขโมย/Mana Rupture ทะลุผ่านเพราะไม่เรียก addSkill
   const before = p.skillPoints;
   p.skillPoints = Math.min(maxSkillOf(p), p.skillPoints + n); // Bard: เพดานพลังงาน 9
   p.gainedSkill += p.skillPoints - before;
@@ -1410,6 +1429,14 @@ function resetCombat(p) {
   p.bloodSection = 0;       // ท่อนทำนองแห่งโลหิต (ครบ 5 = มิติมายาบรรเลงโลหิต)
   p.soulSection = 0;        // ท่อนทำนองแห่งวิญญาณ (ครบ 5 = มิติมายาบรรเลงวิญญาณ)
   p.linkedWith = null;      // Resonance: id ผู้เล่นที่ถูกเชื่อมผลด้วย
+  // ---------- ไค ชิซากิ (kai) ----------
+  p.kaiLinkWith = null;     // เชื่อมต่อ (Overhaul#1): id คู่เชื่อม (มิเรอร์กัน — แยกจาก linkedWith ของ Bard)
+  p.kaiRivalId = null;      // โทสะระงับด้วยโทสะ (Overhaul#3): id คู่ปรับที่ถูกบังคับโจมตี
+  // ---------- ผู้สังหารจอมมหาเวทย์ (mageslayer) ----------
+  p.mageslayerMarkedId = null;      // ตราล่าเวท: id เป้าหมายที่มาร์กอยู่ (เคลื่อนย้ายได้)
+  p.mageslayerHasMarked = false;    // เคยใช้ Witch Mark หรือยัง (ถาวร — ขับเคลื่อนภาพโปรไฟล์ MS01→MS02)
+  p.mageslayerRuptureTargetId = null; // Mana Rupture: เป้าหมายที่เล็งไว้ (ผลทำงานหลังเปิดไพ่)
+  p.mageslayerLockedBurden = false; // Mana Burden: Bard ที่ติดตราล่าเวทตอนโดน — ล้าง spellburden ไม่ได้แม้ต้านสถานะ
   // ---------- เรียวกิ ชิกิ (patch 2.0.6) ----------
   //  p.shikiUlt คงไว้ตามที่เลือกตอนเข้าห้อง (deatheye | wither) — ไม่รีเซ็ตระหว่างแมตช์
   p.witherAdded = 0;        // เส้นชีวิตที่ความตายที่โรยราแจกให้คนนี้ (สูงสุด 3 — จบท่าแล้วลบออกคืน)
@@ -1722,6 +1749,10 @@ function buildStateFor(viewerId) {
         bloodSection: p.bloodSection || 0, // Bard: ท่อนทำนองแห่งโลหิต (ครบ 5 = มิติโลหิต)
         soulSection: p.soulSection || 0,   // Bard: ท่อนทำนองแห่งวิญญาณ (ครบ 5 = มิติวิญญาณ)
         bardPending: p.bardPending ? { name: p.bardPending.name, need: p.bardPending.need, allowSelf: p.bardPending.allowSelf } : null, // Bard: บทเพลงรอเลือกเป้าหมาย
+        // ไค ชิซากิ: สรุป Overhaul tracker (ชื่อผู้ถือ+ประเภทสถานะ) — เฉพาะผู้เล่นไคเท่านั้น (ตัวอื่นเห็น undefined)
+        kaiOverhaulSlots: p.characterId === "kai" ? kaiOverhaulSlots.map((s) => ({ playerId: s.playerId, name: (players[s.playerId] && players[s.playerId].name) || "", status: s.status })) : undefined,
+        mageslayerHasMarked: p.characterId === "mageslayer" ? !!p.mageslayerHasMarked : undefined, // ผู้สังหารจอมมหาเวทย์: เคยใช้ Witch Mark หรือยัง
+        kaiRivalId: mine ? (p.kaiRivalId || null) : undefined, // ไค ชิซากิ: คู่ปรับที่ถูกบังคับโจมตี (เห็นแค่ตัวเอง — ฝั่งอื่นเช็คจาก statuses.kaiRival1/2 ได้)
         shikiUlt: p.shikiUlt || "deatheye", // ชิกิ: ท่าไม้ตายที่เลือกตอนเข้าห้อง (deatheye | wither)
         stamina: p.stamina || 0,           // โอกูริ แคป: Stamina ชาร์จสะสม (ทรัพยากรท่าไม้ตาย)
         oguriEnergy: p.oguriEnergy || 0,   // โอกูริ แคป: Energy สะสม (สูงสุด 16 — ทรัพยากร Breakfast/Training)
@@ -1769,6 +1800,7 @@ function buildStateFor(viewerId) {
   };
 }
 function broadcastState() {
+  CHAR_HOOKS.kai.pruneOverhaulSlots(engine); // เผื่อสถานะรังสรรค์/ลงทัณฑ์หายไปนอกช่องทาง Overhaul (เช่นถูกล้าง)
   for (const id of Object.keys(players)) io.to(id).emit("state", buildStateFor(id));
 }
 function broadcastPositions() {
@@ -1861,6 +1893,7 @@ function startMatch() {
   dayForceUntil = 0;
   yunaLongingUsed = false; yunaWindowEnd = 0; yunaEffect = null; yunaTargetId = null; yunaMusicSeq = 0; yunaLongingPendingId = null; yunaPity = 0;
   allyWinFlag = false;
+  kaiOverhaulSlots = []; // ไค ชิซากิ: ล้าง tracker Overhaul ทุกครั้งที่เริ่มแมตช์ใหม่
   // อาริมะ มิยาโกะ (characters/miyako.js): เจอ โทโนะ ชิกิ หรือ นานายะ ชิกิ ในเกมเดียวกัน -> เล่นวีดีโอ arima_shiki.mp4 ก่อนเริ่มเทิร์นแรก
   cutsceneQueue = [];
   if (CHAR_HOOKS.miyako.maybeQueueRivalIntro(engine)) {
@@ -2117,7 +2150,7 @@ function dealRound() {
     // MOON*CELL (คิชินามิ ฮาคุโนะ patch 2.2.1): เกราะไม่ฟื้นเลยระหว่างท่าไม้ตายทำงาน รวมถึงตัวเอง
     // [โหมงานหนัก] (โคโตเนะ patch 2.2.2): เปลี่ยนไปพังโล่แทนเกราะแล้ว — เกราะฟื้นได้ตามปกติ
     // ผุพัง (สถานะ Universal patch 2.2 beta — ไวท์เล็น "ฉันขอรับไปนะคะ"): เกราะไม่ฟื้นระหว่างมีผล
-    if (!p.armorLocked && !((p.statuses.armorSeal || 0) > 0) && !((p.statuses.decay || 0) > 0) && !moonCellActive() && roundNumber % 2 === 0) {
+    if (!p.armorLocked && !((p.statuses.decay || 0) > 0) && !moonCellActive() && roundNumber % 2 === 0) {
       healArmor(p, 1);
     }
     // เสือนอนกิน (เจ้าแห่งเน็ตบ้าน): ฟื้นพลังชีวิต 1 หน่วยในเทิร์นถัดไป (กรณีไม่มีคู่สัญญา)
@@ -2247,7 +2280,7 @@ function hit(id) {
   }
   if (drawn) onCardDrawn(p, drawn);
   p.busted = bustedOf(p);
-  if (p.busted) { voidUltimateOnBust(p); maybeMoonBurst(p); }
+  if (p.busted) { voidUltimateOnBust(p); maybeMoonBurst(p); CHAR_HOOKS.mageslayer.onBustOrLoseRoll(engine, p); }
   // ไพ่แตก: ไม่ล็อกอัตโนมัติ — ยังกดสกิล/ใช้ไอเทมได้ต่อไป จนกว่าจะกดเปิดไพ่เอง หรือทุกคนเปิดไพ่ครบ
   broadcastState();
   checkAllLocked();
@@ -2600,6 +2633,29 @@ function useSkill(id, tier, targets, item) {
     tepeuKillTarget = CHAR_HOOKS.tepeu.prepareKillTarget(engine, p, targets);
     if (!tepeuKillTarget) return;
   }
+  // ---------- ไค ชิซากิ (characters/kai.js): มือซ้ายแห่งการรังสรรค์ / มือขวาแห่งการลงทัณฑ์ — Overhaul ไม่ผ่านช่องนี้ (ดู kaiOverhaul()) ----------
+  if (p.characterId === "kai" && tier === "ultimate") return; // Overhaul ไม่ใช่ปุ่มสกิลปกติ — กดเองไม่ได้
+  const isKaiCreation = p.characterId === "kai" && tier === "basic";
+  const isKaiPunishment = p.characterId === "kai" && tier === "secondary";
+  let kaiMarkTarget = null;
+  if (isKaiCreation || isKaiPunishment) {
+    kaiMarkTarget = CHAR_HOOKS.kai.prepareMarkTarget(engine, p, targets);
+    if (!kaiMarkTarget) return;
+  }
+  // ---------- ผู้สังหารจอมมหาเวทย์ (characters/mageslayer.js): Witch Mark / Mana Rupture / Mana Burden ----------
+  const isMsWitchMark = p.characterId === "mageslayer" && tier === "basic";
+  let msWitchMarkTarget = null;
+  if (isMsWitchMark) {
+    msWitchMarkTarget = CHAR_HOOKS.mageslayer.prepareWitchMarkTarget(engine, p, targets);
+    if (!msWitchMarkTarget) return;
+  }
+  const isMsRupture = p.characterId === "mageslayer" && tier === "secondary";
+  let msRuptureTarget = null;
+  if (isMsRupture) {
+    msRuptureTarget = CHAR_HOOKS.mageslayer.prepareRuptureTarget(engine, p, targets);
+    if (!msRuptureTarget) return;
+  }
+  const isMsBurden = p.characterId === "mageslayer" && tier === "ultimate";
 
   if (st === "beam" && (p.beamAmmo || 0) <= 0) return; // Beam Magnum กระสุนหมด ใช้ไม่ได้
   if (st === "beamplus" && (p.beamAmmo || 0) <= 0) return; // Beam Magnum Plus (ริดดี้) กระสุนหมด ใช้ไม่ได้
@@ -2645,7 +2701,7 @@ function useSkill(id, tier, targets, item) {
   }
 
   // Rainbow Pudding (คุวากาตะ patch 2.2 alpha): characters/kuwagata.js
-  if (isPudding) CHAR_HOOKS.kuwagata.applyBasicPudding(p, engine.log);
+  if (isPudding) CHAR_HOOKS.kuwagata.applyBasicPudding(engine, p);
 
   // ---------- Gambler the gambling (characters/gambler.js) ----------
   let flashSuffix = ""; // ต่อท้ายชื่อสกิลบนป้ายเด้ง เพื่อบอกผลเสี่ยงโชคให้ทุกคนเห็น
@@ -2703,6 +2759,16 @@ function useSkill(id, tier, targets, item) {
   if (isTepeuCook) CHAR_HOOKS.tepeu.applyCookEffect(engine, p);
   if (isTepeuPonder) CHAR_HOOKS.tepeu.applyPonderEffect(engine, p);
   if (isTepeuKill && tepeuKillTarget) flashSuffix = CHAR_HOOKS.tepeu.applyKillEffect(engine, p, tepeuKillTarget, skill.name);
+  // ---------- ไค ชิซากิ (characters/kai.js) ----------
+  if (isKaiCreation && kaiMarkTarget) flashSuffix = CHAR_HOOKS.kai.applyMark(engine, p, kaiMarkTarget, "kaiCreation", "รังสรรค์");
+  if (isKaiPunishment && kaiMarkTarget) flashSuffix = CHAR_HOOKS.kai.applyMark(engine, p, kaiMarkTarget, "kaiPunishment", "ลงทัณฑ์");
+  // ---------- ผู้สังหารจอมมหาเวทย์ (characters/mageslayer.js) ----------
+  if (isMsWitchMark && msWitchMarkTarget) flashSuffix = CHAR_HOOKS.mageslayer.applyWitchMark(engine, p, msWitchMarkTarget);
+  if (isMsRupture && msRuptureTarget) flashSuffix = CHAR_HOOKS.mageslayer.applyRuptureEffect(engine, p, msRuptureTarget, skill.name);
+  if (isMsBurden) {
+    p.transformAt = ++transformCounter; // Mana Burden: BGM mageslayer_ult ใช้ลำดับนี้ตัดสินว่าใครล่าสุด
+    CHAR_HOOKS.mageslayer.applyManaBurden(engine, p);
+  }
   // ---------- โอกูริ แคป (Rework, characters/oguri.js) ----------
   if (isBreakfast) flashSuffix = CHAR_HOOKS.oguri.applyBreakfast(engine, p);
   if (isOguriTrain) flashSuffix = CHAR_HOOKS.oguri.applyTraining(engine, p);
@@ -2819,6 +2885,9 @@ function useSkill(id, tier, targets, item) {
   // ข้อเสียโคโตเนะ (characters/kotone.js): 40% เมื่อใช้สกิลใดๆ จะเจอท่านประธานเซนะจัง -> เทิร์นถัดไปทำอะไรไม่ได้เลย
   if (isKotone) CHAR_HOOKS.kotone.maybeTriggerSena(engine, p);
 
+  // ผู้สังหารจอมมหาเวทย์ (characters/mageslayer.js): ทุกครั้งที่ผู้เล่นคนใดใช้สกิลสำเร็จ — เช็คว่าถูกตราล่าเวทมาร์กอยู่ไหม
+  CHAR_HOOKS.mageslayer.onTargetUsedSkill(engine, p);
+
   // สกิลช่วงจั่วการ์ด (instant): เด้งโชว์ทันทีบนกระดานของทุกคน ไม่ต้องรอเปิดไพ่/ไม่ตัดจอดำ
   if (skill.instant) {
     // Apple guy: ป้ายเด้งของสกิลพื้นฐานโชว์รูปของที่เลือก
@@ -2832,7 +2901,7 @@ function useSkill(id, tier, targets, item) {
   roundSkills.push({ playerId: id, name: skill.name, img: skill.img || null, status: st });
 
   p.busted = bustedOf(p);
-  if (p.busted) { voidUltimateOnBust(p); maybeMoonBurst(p); }
+  if (p.busted) { voidUltimateOnBust(p); maybeMoonBurst(p); CHAR_HOOKS.mageslayer.onBustOrLoseRoll(engine, p); }
   // ไพ่แตก/ถึงเพดานพอดี: ไม่ล็อกอัตโนมัติ — ยังกดสกิล/ใช้ไอเทมได้ต่อไป จนกว่าจะกดเปิดไพ่เอง หรือทุกคนเปิดไพ่ครบ
 
   // วีดีโอสวนกลับที่ค้างคิว (Wonder of U ซาโตรุ) — เล่นทันทีช่วงจั่วการ์ด
@@ -2913,11 +2982,11 @@ function resolveRenew(t, accept, timeout) {
     maybeBeatSave(t);
     maybeBeatMode(t);
     maybeEva3(t);
-    t.statuses.nohealing = Math.max(t.statuses.nohealing || 0, 1);
+    if (!resistActive(t)) t.statuses.nohealing = Math.max(t.statuses.nohealing || 0, 1);
     b.contractPartner = null;
     b.contractTurns = 0;
     t.contractWith = null;
-    lastLog.push(`📵 ${t.name} ${timeout ? "ไม่ตอบ" : "ปฏิเสธ"}การต่อสัญญากับ ${b.name} — เสียเลือด 2 ไม่สนเกราะ ติด "ไร้ทางเยียวยา" (ฟื้นเลือดตัวเองไม่ได้ 1 เทิร์น) และสัญญาสิ้นสุด`);
+    lastLog.push(`📵 ${t.name} ${timeout ? "ไม่ตอบ" : "ปฏิเสธ"}การต่อสัญญากับ ${b.name} — เสียเลือด 2 ไม่สนเกราะ${resistActive(t) ? " (ต้านสถานะผิดปกติ — ไม่ติดไร้ทางเยียวยา)" : " ติด \"ไร้ทางเยียวยา\" (ฟื้นเลือดตัวเองไม่ได้ 1 เทิร์น)"} และสัญญาสิ้นสุด`);
     io.emit("skillFlash", { name: `ชำระค่าบริการ — ${t.name} ยกเลิกสัญญา`, img: "/characters/broadband_man/broadband_man.jpg", by: b.name, color: POSITION_COLORS[b.position] || "#9B4F96" });
   }
   if (t.alive && t.hp <= 0) {
@@ -3071,6 +3140,27 @@ function bardTarget(id, targets) {
   bardPerform(p, song.pattern, valid, true);
   // วีดีโอสวนกลับที่ค้างคิว (Wonder of U ซาโตรุ) — เล่นทันทีช่วงจั่วการ์ด
   if (gameState === "PLAYING" && cutsceneQueue.length) pausePlayingForCutscene();
+  broadcastState();
+  checkAllLocked();
+}
+// ไค ชิซากิ (characters/kai.js): กดปุ่ม Overhaul — ต้องมีมาร์กรังสรรค์/ลงทัณฑ์ครบ 2 หน่วยบนกระดานก่อนถึงกดได้
+function kaiOverhaul(id) {
+  const p = players[id];
+  if (!p || !p.alive || p.characterId !== "kai") return;
+  if (gameState !== "PLAYING" || p.locked) return;
+  if (kaiOverhaulSlots.length < 2) return;
+  const [a, b] = kaiOverhaulSlots.slice(0, 2);
+  const holderA = players[a.playerId];
+  const holderB = players[b.playerId];
+  if (!holderA || !holderA.alive || !holderB || !holderB.alive) return;
+  CHAR_HOOKS.kai.resolveOverhaul(engine, holderA, a.status, holderB, b.status, p);
+  kaiOverhaulSlots = [];
+  for (const player of Object.values(players)) {
+    delete player.statuses.kaiCreation; delete player.statuses.kaiPunishment;
+    if (player.statusAmt) { delete player.statusAmt.kaiCreation; delete player.statusAmt.kaiPunishment; }
+  }
+  p.transformAt = ++transformCounter;
+  io.emit("skillFlash", { name: "Overhaul", img: displayImg(p), by: p.name, color: POSITION_COLORS[p.position] || "#9B4F96" });
   broadcastState();
   checkAllLocked();
 }
@@ -3251,6 +3341,7 @@ function resolveRound() {
       // Beat Mode กันตาย: ทำงานทันทีแม้ความเสียหายถึงตายมาจากการแพ้จั่ว/แตก
       maybeBeatSave(l);
       addSkill(l, 1); // โดนความเสียหายเพราะแต้มห่างจาก 21 มากที่สุด +1
+      CHAR_HOOKS.mageslayer.onBustOrLoseRoll(engine, l);
       firePassive(l, "lose");
       lastLog.push(`${l.name} แต้มน้อยสุด รับความเสียหาย -${lossDmg}`);
     }
@@ -3317,6 +3408,8 @@ function afterResolve() {
   CHAR_HOOKS.tepeu.resolveAllKills(engine);
   // ---------- Ashen Trail: Cinderella Gray (โอกูริ, characters/oguri.js): หลังเปิดไพ่ — โจมตีทุกคนที่ไพ่แตก ----------
   CHAR_HOOKS.oguri.onAfterResolveAshenTrail(engine);
+  // ---------- ผู้สังหารจอมมหาเวทย์ (characters/mageslayer.js): Mana Rupture — ผลทำงานหลังเปิดไพ่ทุกคน ----------
+  CHAR_HOOKS.mageslayer.resolveAllRuptures(engine);
 
   const activated = [];
   for (const p of alivePlayers()) {
@@ -3483,6 +3576,8 @@ function doAttack(byId, targetId) {
   if (!attacker || !target || !target.alive || target.id === attacker.id) return;
   if (sealActive(target)) return; // เรจูอาคมบัญชา (อมตะ): เลือกโจมตีไม่ได้
   if (attacker.characterId === "satoru" && !moonCellActive()) return; // ซาโตรุ (patch 2.0.8.2): โจมตีธรรมดาไม่ได้เลย (ยกเว้นระหว่าง MOON*CELL)
+  // ไค ชิซากิ: โทสะระงับด้วยโทสะ — มีคู่ปรับ (kaiRival1/kaiRival2 ยังไม่หมด) บังคับเป้าหมายมีแค่คู่ปรับเท่านั้น
+  if (attacker.kaiRivalId && ((attacker.statuses.kaiRival1 || 0) > 0 || (attacker.statuses.kaiRival2 || 0) > 0) && target.id !== attacker.kaiRivalId) return;
   clearPhaseTimer();
   attacker.nanayaReattackReady = false; // หัวใจฆาตกร (นานายะ ชิกิ): กำลังใช้โอกาสโจมตีซ้ำนี้อยู่ (หรือไม่เกี่ยวข้องกับตัวละครนี้)
 
@@ -3538,11 +3633,13 @@ function doAttack(byId, targetId) {
     if (Math.random() * 100 < evadePct) {
       // patch 2.1.3.5: ถูกโจมตีไม่ได้แต้มสกิลอีกต่อไป (แม้หลบพ้น)
       target.wasAttacked = true;
+      CHAR_HOOKS.mageslayer.onAttackDodgeSteal(engine, attacker, target); // ตราล่าเวท: หลบหลีกได้ยังถูกขโมยพลังงาน 1 หน่วยเสมอ
       lastLog.push(`💨 หลบหลีก! ${target.name} หลบการโจมตีของ ${attacker.name} ได้ (${evadePct}%) — เหลือหลบหลีกอีก ${target.statuses.evade || 0} ครั้ง`);
       lastAttack = {
         id: ++attackSeq,
         byName: attacker.name, byImg: displayImg(attacker), byColor: POSITION_COLORS[attacker.position] || "#888",
         byDoomWeapon: attacker.characterId === "doomguy" ? attacker.doomWeapon : undefined, // DoomGuy: อาวุธที่ใช้ยิงตอนนี้ (เสียงยิงฝั่ง client)
+        byAttackSound: attacker.characterId === "mageslayer" ? "mageslayer_attack" : undefined, // ผู้สังหารจอมมหาเวทย์: เสียงโจมตีปกติเฉพาะตัว (BA.mp3)
         targetName: target.name, targetImg: displayImg(target), targetColor: POSITION_COLORS[target.position] || "#888",
         dmg: 0, dodge: true, fxMs: ATTACKFX_TIME * 1000,
         skills: [{ name: `หลบหลีก (${evadePct}%)`, img: BARD_CRIMSON_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888", side: "def" }],
@@ -3597,6 +3694,7 @@ function doAttack(byId, targetId) {
         id: ++attackSeq,
         byName: attacker.name, byImg: displayImg(attacker), byColor: POSITION_COLORS[attacker.position] || "#888",
         byDoomWeapon: attacker.characterId === "doomguy" ? attacker.doomWeapon : undefined, // DoomGuy: อาวุธที่ใช้ยิงตอนนี้ (เสียงยิงฝั่ง client)
+        byAttackSound: attacker.characterId === "mageslayer" ? "mageslayer_attack" : undefined, // ผู้สังหารจอมมหาเวทย์: เสียงโจมตีปกติเฉพาะตัว (BA.mp3)
         targetName: target.name, targetImg: displayImg(target), targetColor: POSITION_COLORS[target.position] || "#888",
         dmg: 0, dodge: true, fxMs: ATTACKFX_TIME * 1000,
         skills: [{ name: "อย่าได้ไล่ตามหัวหน้า (การโจมตีถูกลบล้าง)", img: SATORU_PROFILE_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888", side: "def" }],
@@ -3723,6 +3821,8 @@ function doAttack(byId, targetId) {
     !!(DOOM_WEAPONS[attacker.doomWeapon] || DOOM_WEAPONS.shotgun).pierce;
   if (attackerBeat || profitAtk > 0 || phenexPurgeAtk || doomPierceAtk) dealDirect(target, dmg, true); // ประกายเขี้ยวปฏิปักษ์ / กำไรเท่าตัวโว้ย / อย่าอยู่เลย แกน่ะ!: ทะลุเกราะเข้าเลือดจริง
   else dealMixed(target, dmg, true);               // กฎปกติ: ลดเกราะก่อน ถ้าไม่มีเกราะจึงเข้าเลือดจริง
+  // ผู้สังหารจอมมหาเวทย์ (characters/mageslayer.js): ขโมยพลังงาน (min1/max4) / ผนึกพลังงานถ้าเป้าหมายพลังงาน 0 / เคลียร์ Fury stack
+  CHAR_HOOKS.mageslayer.onAttackPostDamage(engine, attacker, target, dmg);
   // สกิลรอง (ฟุจิตะ โคโตเนะ, characters/kotone.js): บัฟพลังโจมตีพื้นฐาน +2 ใช้แล้วหมดไปทันทีเมื่อได้โจมตี
   CHAR_HOOKS.kotone.onAttackConsumeDanceBuff(engine, attacker);
   // Ginga Strium (ฮิคารุ, characters/hikaru.js): โจมตีโดนเป้าหมาย -> ติดลุกไหม้ให้เป้าหมาย / ถูกโจมตีขณะอยู่ในร่างนี้ -> ผู้โจมตีติดลุกไหม้สวนกลับ
@@ -3742,6 +3842,8 @@ function doAttack(byId, targetId) {
         if (purgeKey === "riddheguard") { const rb = riddheAllied(target); if (rb) delete rb.statuses.riddheward; }
         if (isBardDim) { target.bloodSection = 0; target.soulSection = 0; }
         lastLog.push(`🚫 ${attacker.name} อย่าอยู่เลย แกน่ะ! — ลบและปิดการใช้งาน ${ultName} ของ ${target.name} ทันที!`);
+      } else if (resistActive(target)) {
+        lastLog.push(`🛡️ ${target.name} ต้านสถานะผิดปกติ — อย่าอยู่เลย แกน่ะ! ไม่มีผล`);
       } else {
         target.statuses.phenexBanUlt = Math.max(target.statuses.phenexBanUlt || 0, PHENEX_BAN_ULT_TURNS);
         lastLog.push(`🚫 ${attacker.name} อย่าอยู่เลย แกน่ะ! — ${target.name} ไม่มีท่าไม้ตายทำงานอยู่ บังคับห้ามใช้ท่าไม้ตาย ${PHENEX_BAN_ULT_TURNS} เทิร์นแทน`);
@@ -3873,10 +3975,10 @@ function doAttack(byId, targetId) {
   }
 
   // การหลับไหลอันไม่สิ้นสุด (โอเบรอน patch 1.7.6): ยามกลางวัน การโจมตีปกติติด "ยามฟ้าสาง" +1 แก่เป้าหมาย
-  //  (สะสมสูงสุด 3 — คนที่กำลังหลับไหลไม่ติดเพิ่ม)
+  //  (สะสมสูงสุด 5 — คนที่กำลังหลับไหลไม่ติดเพิ่ม — เดิมค้างเพดานเก่า 3 จากตอนแก้จุดอื่นเป็น 5 แล้วไม่ครบ)
   let dawnApplied = false;
-  if (oberonDayAtk && target.alive && !((target.statuses.sleep || 0) > 0)) {
-    target.statuses.dawn = Math.min(3, (target.statuses.dawn || 0) + 1);
+  if (oberonDayAtk && target.alive && !((target.statuses.sleep || 0) > 0) && !resistActive(target)) {
+    target.statuses.dawn = Math.min(5, (target.statuses.dawn || 0) + 1);
     dawnApplied = true;
     lastLog.push(`🌅 การหลับไหลอันไม่สิ้นสุด: ${target.name} ติดยามฟ้าสาง +1`);
   }
@@ -3982,6 +4084,7 @@ function doAttack(byId, targetId) {
     id: ++attackSeq,
     byName: attacker.name, byImg: displayImg(attacker), byColor: POSITION_COLORS[attacker.position] || "#888",
         byDoomWeapon: attacker.characterId === "doomguy" ? attacker.doomWeapon : undefined, // DoomGuy: อาวุธที่ใช้ยิงตอนนี้ (เสียงยิงฝั่ง client)
+        byAttackSound: attacker.characterId === "mageslayer" ? "mageslayer_attack" : undefined, // ผู้สังหารจอมมหาเวทย์: เสียงโจมตีปกติเฉพาะตัว (BA.mp3)
     targetName: target.name, targetImg: displayImg(target), targetColor: POSITION_COLORS[target.position] || "#888",
     dmg, aoe: ginga || beamPlusAtk || unibeam2Atk || storiumAtk, revenge: isRevenge, skills: fxSkills,
     fxMs: (fxSkills.length ? ATTACKFX_TIME + 2 : ATTACKFX_TIME) * 1000,
@@ -4061,6 +4164,11 @@ function endTurn() {
       if (k === "kotoneAtk") continue; // โคโตเนะ: คงอยู่จนกว่าจะได้โจมตี (ไม่ลดเทิร์น — เหมือน empower)
       if (k === "deathline") continue; // เส้นตาย (ชิกิ): สแตคถาวร จนกว่าจะถูกชิกิโจมตีปกติระหว่างท่าไม้ตาย
       if (k === "tepeuCook" || k === "tepeuPonder") continue; // เทเปา: ป้ายสถานะแสดงผลเฉยๆ — engine ลบเองตาม tepeuCookTurns/tepeuPonderTurns (ดูด้านล่าง)
+      // ---------- ไค ชิซากิ (kai) ----------
+      if (k === "kaiCreation" || k === "kaiPunishment") continue; // รังสรรค์/ลงทัณฑ์: มาร์กถาวร ไม่ลดเทิร์น — หายเฉพาะผ่าน Overhaul หรือถูกล้าง
+      // ---------- ผู้สังหารจอมมหาเวทย์ (mageslayer) ----------
+      if (k === "mageslayerMark") continue; // ตราล่าเวท: ถาวรจนกว่าจะย้าย/ถูกล้าง
+      if (k === "mageslayerFury") continue; // Fury: สแตคพลังโกรธ ไม่ใช่ตัวนับเทิร์น — ใช้หมดพร้อมกันตอนโจมตี
       // ---------- โอกูริ แคป (patch 2.0.8.1) ----------
       if (k === "graybeast") continue;  // ร่าง Zone: ถาวรจนกว่าจะเข้าร่างหมดแรง
       // burnout (ร่างหมดแรง): เดิมถูกยกเว้นไม่ลดเทิร์นตรงนี้ แต่ไม่มีจุดไหนในโค้ดเคลียร์ทิ้งเองเลย (ไม่มี delete p.statuses.burnout ที่ไหนทั้งไฟล์)
@@ -4080,6 +4188,11 @@ function endTurn() {
         }
         // เชื่อมผลจบลง (Resonance): ตัดลิงก์ทั้งสองฝั่ง
         if (k === "linked") p.linkedWith = null;
+        // ไค ชิซากิ: เชื่อมต่อ/คู่ปรับ หมดอายุ -> ล้าง mirror ทั้งสองฝั่ง (โค้ดแยกจาก Resonance ของ Bard)
+        if (k === "kaiLink") CHAR_HOOKS.kai.onExpireKaiLink(p);
+        if (k === "kaiRival1" || k === "kaiRival2") CHAR_HOOKS.kai.onExpireKaiRival(p);
+        // ผู้สังหารจอมมหาเวทย์: ภาระเวทหมดอายุตามธรรมชาติ -> ล้างล็อก Mana Burden (ถ้ามี)
+        if (k === "spellburden") delete p.mageslayerLockedBurden;
         // ไม่อยากให้ใครต้องเจ็บปวด (ริต้า เบอร์นัล patch 2.1.7): หมดเวลาพอดีเทิร์นนี้ — ยังนับว่า "ตายขณะท่าไม้ตายทำงาน"
         //  ต่อไปอีก 1 จังหวะจบเทิร์น เผื่อตายจากผลติกท้ายเทิร์นเดียวกัน (ล้างค่านี้ทิ้งตอนเริ่มเทิร์นถัดไปใน dealRound)
         if (k === "phenexTaunt") p.phenexTauntGrace = true;
@@ -4131,7 +4244,7 @@ function endTurn() {
         o.statusAmt = { ...o.moonCellBackup.statusAmt };
         delete o.moonCellBackup;
       }
-      if (o.alive) o.statuses.nohealing = Math.max(o.statuses.nohealing || 0, HAKUNO_NORECOVER_TURNS);
+      if (o.alive && !resistActive(o)) o.statuses.nohealing = Math.max(o.statuses.nohealing || 0, HAKUNO_NORECOVER_TURNS);
     }
     lastLog.push(`🌙 ${moonCellEndedBy.name} คำสาปแห่งดวงจันทร์ MOON*CELL สิ้นสุดลง — คืนบัฟ/ดีบัฟที่ถูกล้างไว้ทั้งหมด และทุกคน (ยกเว้น ${moonCellEndedBy.name}) ติดสถานะ "ไร้ทางเยียวยา" ${HAKUNO_NORECOVER_TURNS} เทิร์น`);
   }
@@ -4307,6 +4420,7 @@ function backToLobby() {
   oberonDevour = 0;
   dayForceUntil = 0;
   yunaLongingUsed = false; yunaWindowEnd = 0; yunaEffect = null; yunaTargetId = null; yunaMusicSeq = 0; yunaLongingPendingId = null; yunaPity = 0;
+  kaiOverhaulSlots = []; // ไค ชิซากิ: ล้าง tracker Overhaul เมื่อกลับล็อบบี้
   lastLog = [];
   cutsceneQueue = [];
   cutsceneInfo = null;
@@ -4480,6 +4594,8 @@ io.on('connection', (socket) => {
       shradeForm: false,
       bardNotes: [], bardNotesUsed: 0, bardPending: null,
       bloodSection: 0, soulSection: 0, linkedWith: null,
+      kaiLinkWith: null, kaiRivalId: null,
+      mageslayerMarkedId: null, mageslayerHasMarked: false, mageslayerRuptureTargetId: null, mageslayerLockedBurden: false,
       shikiUlt: shikiUlt === "wither" ? "wither" : "deatheye", witherAdded: 0,
       oguriEnergy: OGURI_ENERGY_START, stamina: 0, oguriChargeCapBonus: 0, oguriZoneTurns: 0, staggerNext: 0,
       maxHpPenalty: 0, wouGuardCd: 0, calamityDraw: 0, locaOffer: null,
@@ -4550,6 +4666,7 @@ io.on('connection', (socket) => {
   onPlayerEvent(socket, 'allyBreakAnswer', (id, { cancel } = {}) => answerAllyBreak(id, !!cancel), 4);
   onPlayerEvent(socket, 'allyFinalAnswer', (id, { keep } = {}) => answerAllyFinal(id, !!keep), 4);
   onPlayerEvent(socket, 'bardTarget', (id, { targets } = {}) => bardTarget(id, targets), 8);
+  onPlayerEvent(socket, 'kaiOverhaul', (id) => kaiOverhaul(id), 4);
   onPlayerEvent(socket, 'contractAnswer', (id, { accept } = {}) => answerContract(id, !!accept), 4);
   onPlayerEvent(socket, 'attack', (id, { targetId } = {}) => doAttack(id, targetId), 6);
   onPlayerEvent(socket, 'nanayaToggleEye', (id) => nanayaToggleEye(id), 4);
@@ -4658,6 +4775,8 @@ const engine = {
   drawToScore,
   get centralDeck() { return centralDeck; },
   setCentralDeck(v) { centralDeck = v; },
+  get kaiOverhaulSlots() { return kaiOverhaulSlots; },
+  setKaiOverhaulSlots(v) { kaiOverhaulSlots = v; },
   voidUltimateOnBust,
   maybeMoonBurst,
   sealActive,

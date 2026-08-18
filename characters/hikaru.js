@@ -68,8 +68,9 @@ module.exports = {
     p.seen.gingastrium = true;
     p.transformAt = engine.nextTransformCounter();
     engine.triggerCutscene(p, "gingastrium");
-    p.statuses.hburn = Math.min(HIKARU_BURN_MAX, (p.statuses.hburn || 0) + HIKARU_STRIUM_SELF_BURN);
-    engine.log(`🔥🎵 ${p.name} Ginga Strium! แปลงร่าง ${HIKARU_STRIUM_TURNS} เทิร์น (แทนที่ร่าง Ginga) พลังโจมตี +1 ติดลุกไหม้ตัวเอง ${HIKARU_STRIUM_SELF_BURN} หน่วย (สกิลรองเปลี่ยนเป็นลำแสงสโตเรียม)`);
+    const selfResisted = engine.resistActive(p);
+    if (!selfResisted) p.statuses.hburn = Math.min(HIKARU_BURN_MAX, (p.statuses.hburn || 0) + HIKARU_STRIUM_SELF_BURN);
+    engine.log(`🔥🎵 ${p.name} Ginga Strium! แปลงร่าง ${HIKARU_STRIUM_TURNS} เทิร์น (แทนที่ร่าง Ginga) พลังโจมตี +1${selfResisted ? " (ต้านสถานะผิดปกติของตัวเอง — ไม่ติดลุกไหม้)" : ` ติดลุกไหม้ตัวเอง ${HIKARU_STRIUM_SELF_BURN} หน่วย`} (สกิลรองเปลี่ยนเป็นลำแสงสโตเรียม)`);
   },
 
   // เรียกจาก doAttack() หลังคำนวณดาเมจ — Ginga Strium: โจมตีโดนเป้าหมาย -> ติดลุกไหม้ให้เป้าหมาย / ถูกโจมตีขณะอยู่ในร่างนี้ -> ผู้โจมตีติดลุกไหม้สวนกลับ

@@ -87,23 +87,26 @@ module.exports = {
     if (engine.satoruOnTargeted(t, p, `สกิล ${skillName} `).negated) {
       return " — ถูกลบล้าง";
     }
-    t.unplugHold = t.unplugHold || {};
+    const resisted = engine.resistActive(t);
     const stripped = [];
-    for (const k of engine.UNPLUG_BUFFS) {
-      if ((t.statuses[k] || 0) > 0) {
-        t.unplugHold[k] = Math.max(t.unplugHold[k] || 0, t.statuses[k]);
-        delete t.statuses[k];
-        stripped.push(k);
+    if (!resisted) {
+      t.unplugHold = t.unplugHold || {};
+      for (const k of engine.UNPLUG_BUFFS) {
+        if ((t.statuses[k] || 0) > 0) {
+          t.unplugHold[k] = Math.max(t.unplugHold[k] || 0, t.statuses[k]);
+          delete t.statuses[k];
+          stripped.push(k);
+        }
       }
+      t.statuses.unplug = 1; // ระหว่างติด: บัฟคู่สัญญา (เกราะ +1 / โจมตี +1) ก็ไม่ทำงานด้วย
     }
-    t.statuses.unplug = 1; // ระหว่างติด: บัฟคู่สัญญา (เกราะ +1 / โจมตี +1) ก็ไม่ทำงานด้วย
-    engine.dealDirect(t, 1); // ความเสียหาย 1 หน่วยแบบไม่สนเกราะ
+    engine.dealDirect(t, 1); // ความเสียหาย 1 หน่วยแบบไม่สนเกราะ — ไม่ใช่สถานะ ไม่โดนต้าน
     engine.maybeBeatSave(t);
     engine.maybeBeatMode(t);
     engine.maybeEva3(t);
     engine.maybeWakeKotone(t);
     t.wasAttacked = true;
-    engine.log(`🔌 ${p.name} กระชากสายแลน — บัฟของ ${t.name} หายไปชั่วคราว 1 เทิร์น${stripped.length ? ` (ถอด ${stripped.length} บัฟ)` : ""} และรับความเสียหาย -1 ไม่สนเกราะ`);
+    engine.log(`🔌 ${p.name} กระชากสายแลน — ${resisted ? `${t.name} ต้านสถานะผิดปกติ ไม่เสียบัฟ` : `บัฟของ ${t.name} หายไปชั่วคราว 1 เทิร์น${stripped.length ? ` (ถอด ${stripped.length} บัฟ)` : ""}`} และรับความเสียหาย -1 ไม่สนเกราะ`);
     if (t.alive && t.hp <= 0) {
       engine.instantDeath(t);
       if (!t.alive) engine.log(`💀 ${t.name} เลือดจริงหมด ตกรอบ!`);

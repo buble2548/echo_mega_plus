@@ -111,7 +111,9 @@ module.exports = {
   onAttackConsumeInvert(engine, attacker, target) {
     delete attacker.statuses.hakunoInvertReady;
     if (!target.alive) return;
-    if ((target.statuses.invert || 0) > 0) {
+    if (engine.resistActive(target)) {
+      engine.log(`🛡️ ${target.name} ต้านสถานะผิดปกติ — ไม่ติดผกผัน`);
+    } else if ((target.statuses.invert || 0) > 0) {
       engine.log(`🌓 ${attacker.name} ข้าขอบัญชา — ${target.name} ติดผกผันอยู่แล้ว ระยะเวลาไม่เพิ่มขึ้น สกิลเสียเปล่า`);
     } else {
       target.statuses.invert = HAKUNO_INVERT_TURNS;
@@ -123,7 +125,11 @@ module.exports = {
   onAttackConsumeNoRegen(engine, attacker, target) {
     delete attacker.statuses.hakunoNoRegenReady;
     if (!target.alive) return;
-    target.statuses.armorSeal = Math.max(target.statuses.armorSeal || 0, HAKUNO_NORECOVER_TURNS);
+    if (engine.resistActive(target)) {
+      engine.log(`🛡️ ${target.name} ต้านสถานะผิดปกติ — ไม่ติดเกราะไม่ฟื้น/ไร้ทางเยียวยา`);
+      return;
+    }
+    target.statuses.decay = Math.max(target.statuses.decay || 0, HAKUNO_NORECOVER_TURNS);
     target.statuses.nohealing = Math.max(target.statuses.nohealing || 0, HAKUNO_NORECOVER_TURNS);
     engine.log(`🌕 ${attacker.name} ข้าขอบัญชา — ${target.name} เกราะฟื้นไม่ได้ และติดสถานะไร้ทางเยียวยา ${HAKUNO_NORECOVER_TURNS} เทิร์น!`);
   },

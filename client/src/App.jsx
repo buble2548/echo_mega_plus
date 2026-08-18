@@ -180,7 +180,8 @@ export default function App() {
     if (prevPhase.current !== "ATTACKING" && phase === "ATTACKING") {
       const doomWeapon = state?.attack?.byDoomWeapon;
       const doomShoot = doomWeapon && DOOM_WEAPON_SOUNDS[doomWeapon]?.shoot;
-      playSfx(doomShoot || "attack");
+      const attackSound = state?.attack?.byAttackSound;
+      playSfx(doomShoot || attackSound || "attack");
     }
     prevPhase.current = phase;
   }, [stage, phase, cycle, skillMusic, skillMusicSeq, lowQ]);

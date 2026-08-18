@@ -49,13 +49,15 @@ function applyDebuff(p, key, amount, turns) {
 }
 
 // ดีบัฟพื้นฐานที่ "ต้านสถานะผิดปกติ" ล้างออกได้ทั้งหมด
-const BASIC_DEBUFF_CLEAR = ["discord", "sleep", "stun", "nodraw", "noskill", "weak", "fragile", "spellburden", "oblada", "calamity", "hburn", "phenexBanUlt", "nanayaSeal", "miyakoSeal", "armorSeal", "invert", "nohealing"];
+const BASIC_DEBUFF_CLEAR = ["discord", "sleep", "stun", "nodraw", "noskill", "weak", "fragile", "spellburden", "oblada", "calamity", "hburn", "phenexBanUlt", "nanayaSeal", "miyakoSeal", "invert", "nohealing", "manaSeal"];
 // ดีบัฟที่ยังไม่เกิดผลทันที (ยามฟ้าสาง / เส้นชีวิต): โดนล้าง = ลดลงทีละ 1 หน่วย ไม่หายทั้งหมด
 const SOFT_DEBUFF_STEP = ["dawn", "deathline"];
 
 function cleanseDebuffs(p) {
   let purged = 0;
   for (const k of BASIC_DEBUFF_CLEAR) {
+    // Mana Burden (ผู้สังหารจอมมหาเวทย์): Bard ที่ติดตราล่าเวทอยู่ตอนโดนภาระเวท — ล้างสถานะนี้ด้วยต้านสถานะผิดปกติไม่ได้
+    if (k === "spellburden" && p.mageslayerLockedBurden) continue;
     if ((p.statuses[k] || 0) > 0) {
       delete p.statuses[k];
       if (p.statusAmt) delete p.statusAmt[k];

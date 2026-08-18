@@ -84,13 +84,18 @@ module.exports = {
   // เรียกจาก useSkill() ในส่วน effect — แสงจันทร์ส่องวิญญาณ: เปิดแต้มการ์ดเป้าหมายให้ทุกคนเห็น (ร่างปกติ: ท่วงทำนอง +2 / ร่างสปาด้า: moonmark) คืน flashSuffix
   applyMoonEffect(engine, p, t, skillName) {
     if (engine.satoruOnTargeted(t, p, `สกิล ${skillName} `).negated) return " — ถูกลบล้าง";
-    t.statuses.promo = 1; // กลไกเดียวกับใบโปรโมทสินค้า: ทุกคนเห็นแต้มการ์ดตลอดเทิร์นนี้
+    const resisted = engine.resistActive(t);
+    if (!resisted) t.statuses.promo = 1; // กลไกเดียวกับใบโปรโมทสินค้า: ทุกคนเห็นแต้มการ์ดตลอดเทิร์นนี้
     if (!p.shradeForm) {
       p.statuses.melody = Math.min(SHRADE_MELODY_MAX, (p.statuses.melody || 0) + 2);
-      engine.log(`🌕 ${p.name} แสงจันทร์ส่องวิญญาณ — เปิดแต้มการ์ดของ ${t.name} ให้ทุกคนเห็น และท่วงทำนอง +2 (สะสม ${p.statuses.melody}/${SHRADE_MELODY_MAX})`);
+      engine.log(resisted
+        ? `🛡️ ${t.name} ต้านสถานะผิดปกติ — ไม่ถูกเปิดแต้มการ์ด — ${p.name} ยังได้ท่วงทำนอง +2 (สะสม ${p.statuses.melody}/${SHRADE_MELODY_MAX})`
+        : `🌕 ${p.name} แสงจันทร์ส่องวิญญาณ — เปิดแต้มการ์ดของ ${t.name} ให้ทุกคนเห็น และท่วงทำนอง +2 (สะสม ${p.statuses.melody}/${SHRADE_MELODY_MAX})`);
     } else {
-      t.statuses.moonmark = 1; // แตกเมื่อไหร่ เจ็บ 1 ทันที (หมดผลตอนจบเทิร์น)
-      engine.log(`🌕 ${p.name} แสงจันทร์ส่องวิญญาณ (สปาด้า) — เปิดแต้มการ์ดของ ${t.name} ให้ทุกคนเห็น หากไพ่แตกในเทิร์นนี้จะรับความเสียหาย 1 หน่วยทันที`);
+      if (!resisted) t.statuses.moonmark = 1; // แตกเมื่อไหร่ เจ็บ 1 ทันที (หมดผลตอนจบเทิร์น)
+      engine.log(resisted
+        ? `🛡️ ${t.name} ต้านสถานะผิดปกติ — แสงจันทร์ส่องวิญญาณ (สปาด้า) ไม่มีผล`
+        : `🌕 ${p.name} แสงจันทร์ส่องวิญญาณ (สปาด้า) — เปิดแต้มการ์ดของ ${t.name} ให้ทุกคนเห็น หากไพ่แตกในเทิร์นนี้จะรับความเสียหาย 1 หน่วยทันที`);
     }
     engine.triggerCutscene(p, "shradeMoon"); // ครั้งแรกเล่นวีดีโอ shrade_skill2.mp4 / ครั้งถัดไปแจ้งเตือนเล็กๆ
     if (engine.hasQueuedCutscene()) engine.pausePlayingForCutscene();
@@ -111,6 +116,11 @@ module.exports = {
 
   // เรียกจาก useSkill() ในส่วน effect — แด่เพื่อนรักของฉัน (ท่าไม้ตาย 2): เริ่มชาร์จ 3 เทิร์น
   activateFinal(engine, p) {
+    // ต้านสถานะผิดปกติของตัวเอง (ถ้ามีติดอยู่ตอนกด) จะกันชาร์จท่าไม้ตายนี้ไม่ให้เริ่มด้วย — ตามกฎเดียวกับดีบัฟทุกตัวในเกม
+    if (engine.resistActive(p)) {
+      engine.log(`🛡️ ${p.name} ต้านสถานะผิดปกติของตัวเอง — แด่เพื่อนรักของฉัน เริ่มชาร์จไม่ได้`);
+      return;
+    }
     p.statuses.shradecharge = SHRADE_CHARGE_TURNS + 1; // +1 ชดเชยการลดสถานะตอนจบเทิร์น
     p.transformAt = engine.nextTransformCounter();
     engine.log(`🎻 ${p.name} แด่เพื่อนรักของฉัน — เริ่มบรรเลงบทเพลงสุดท้าย! อีก ${SHRADE_CHARGE_TURNS} เทิร์นจะปลดปล่อย (ระหว่างนี้จั่ว/ใช้สกิลไม่ได้)`);

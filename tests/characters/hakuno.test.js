@@ -118,13 +118,30 @@ test('onAttackConsumeInvert: no-op against an already-dead target (but still cle
   assert.equal(dead.statuses.invert || 0, 0);
 });
 
-test('onAttackConsumeNoRegen: applies armorSeal + nohealing to the target, clears the ready flag', () => {
+test('onAttackConsumeNoRegen: applies decay (armor won\'t regen) + nohealing to the target, clears the ready flag', () => {
   const attacker = mkPlayer({ hakunoGender: 'female', statuses: { hakunoNoRegenReady: 1 } });
   const target = mkPlayer({ characterId: 'tohno' });
   hakuno.onAttackConsumeNoRegen(engine, attacker, target);
   assert.equal(attacker.statuses.hakunoNoRegenReady, undefined);
-  assert.equal(target.statuses.armorSeal, 3);
+  assert.equal(target.statuses.decay, 3);
   assert.equal(target.statuses.nohealing, 3);
+});
+
+test('onAttackConsumeNoRegen: resist blocks decay + nohealing entirely, still clears the ready flag', () => {
+  const attacker = mkPlayer({ hakunoGender: 'female', statuses: { hakunoNoRegenReady: 1 } });
+  const target = mkPlayer({ characterId: 'tohno', statuses: { resist: 1 } });
+  hakuno.onAttackConsumeNoRegen(engine, attacker, target);
+  assert.equal(attacker.statuses.hakunoNoRegenReady, undefined);
+  assert.equal(target.statuses.decay || 0, 0);
+  assert.equal(target.statuses.nohealing || 0, 0);
+});
+
+test('onAttackConsumeInvert: resist blocks invert entirely, still clears the ready flag', () => {
+  const attacker = mkPlayer({ hakunoGender: 'male', statuses: { hakunoInvertReady: 1 } });
+  const target = mkPlayer({ characterId: 'tohno', statuses: { resist: 1 } });
+  hakuno.onAttackConsumeInvert(engine, attacker, target);
+  assert.equal(attacker.statuses.hakunoInvertReady, undefined);
+  assert.equal(target.statuses.invert || 0, 0);
 });
 
 test('applyCommandSpell: cmd 1 fills skill points, cmd 2 heals full, else forces card score to 21', () => {

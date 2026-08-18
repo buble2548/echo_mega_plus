@@ -55,6 +55,10 @@ module.exports = {
   onRoundStartOverworkTrigger(engine, p) {
     if (!p.overworkNext) return;
     p.overworkNext = false;
+    if (engine.resistActive(p)) {
+      engine.log(`🛡️ ${p.name} ต้านสถานะผิดปกติของตัวเอง — ไม่ติด [โหมงานหนัก]`);
+      return;
+    }
     p.statuses.overwork = 2; // คงอยู่ 2 เทิร์น — Sleeping time ลบก่อนได้
     p.shield = 0;
     engine.log(`🥵 ${p.name} ติดสถานะ [โหมงานหนัก] 2 เทิร์น — โล่พังทั้งหมด ฟื้นโล่ไม่ได้ ใช้แต้มสกิลเพิ่ม 1 และเสี่ยงสตั้น 10% ทุกเทิร์น`);
@@ -77,9 +81,13 @@ module.exports = {
     }
     if (p.senaNext) {
       p.senaNext = false;
-      p.statuses.sena = 1;
-      p.locked = true;
-      engine.log(`🏃‍♀️ ${p.name} มัวแต่หลบหนีท่านประธานเซนะจัง — ทำอะไรไม่ได้เลยทั้งเทิร์น!`);
+      if (engine.resistActive(p)) {
+        engine.log(`🛡️ ${p.name} ต้านสถานะผิดปกติของตัวเอง — ไม่ต้องหลบหนีท่านประธานเซนะจัง`);
+      } else {
+        p.statuses.sena = 1;
+        p.locked = true;
+        engine.log(`🏃‍♀️ ${p.name} มัวแต่หลบหนีท่านประธานเซนะจัง — ทำอะไรไม่ได้เลยทั้งเทิร์น!`);
+      }
     }
     if (this.overworkActive(p) && !p.locked && Math.random() < KOTONE_STUN_CHANCE) {
       if (engine.applyDebuff(p, "stun", null, 1)) {
@@ -105,15 +113,19 @@ module.exports = {
   applyDanceEffect(engine, p) {
     p.coins = Math.max(0, (p.coins || 0) - KOTONE_DANCE_COIN_COST);
     p.statuses.kotoneAtk = 1; // คงอยู่จนกว่าจะได้โจมตี (ไม่ลดเทิร์น — เหมือน empower)
-    p.statusAmt = p.statusAmt || {};
-    p.statuses.spellburden = Math.max(p.statuses.spellburden || 0, KOTONE_PIERCE_BURDEN_TURNS);
-    p.statusAmt.spellburden = Math.min(engine.SPELLBURDEN_MAX, (p.statusAmt.spellburden || 0) + 1);
-    engine.log(`💃 ${p.name} ใช้ coin ${KOTONE_DANCE_COIN_COST} เหรียญฝึกซ้อม — การโจมตีครั้งถัดไปพลังโจมตี +${KOTONE_DANCE_ATK_BONUS} (เทิร์นถัดไปใช้แต้มสกิลเพิ่ม +1 — เหลือ coin ${p.coins})`);
+    const selfResisted = engine.resistActive(p);
+    if (!selfResisted) {
+      p.statusAmt = p.statusAmt || {};
+      p.statuses.spellburden = Math.max(p.statuses.spellburden || 0, KOTONE_PIERCE_BURDEN_TURNS);
+      p.statusAmt.spellburden = Math.min(engine.SPELLBURDEN_MAX, (p.statusAmt.spellburden || 0) + 1);
+    }
+    engine.log(`💃 ${p.name} ใช้ coin ${KOTONE_DANCE_COIN_COST} เหรียญฝึกซ้อม — การโจมตีครั้งถัดไปพลังโจมตี +${KOTONE_DANCE_ATK_BONUS}${selfResisted ? " (ต้านสถานะผิดปกติของตัวเอง — ไม่ติดภาระเวท)" : " (เทิร์นถัดไปใช้แต้มสกิลเพิ่ม +1)"} — เหลือ coin ${p.coins}`);
   },
 
   // เรียกจาก useSkill() ในส่วน effect — Sleeping time: หลับนิ่ง 3 เทิร์นตายตัว + ลบ [โหมงานหนัก] + ฮีลตัวเองทันที + กันถูกเลือกโจมตี
   applyKSleepEffect(engine, p) {
-    p.statuses.ksleep = KOTONE_KSLEEP_TURNS;
+    const selfResisted = engine.resistActive(p); // ต้านสถานะผิดปกติของตัวเอง กัน "หลับ" (ksleep) ไม่ให้ติดได้ — ผลดีอื่นๆ ของสกิล (ฮีล/seal/ล้างโหมงานหนัก) ยังทำงานตามปกติ
+    if (!selfResisted) p.statuses.ksleep = KOTONE_KSLEEP_TURNS;
     p.statuses.seal = Math.max(p.statuses.seal || 0, KOTONE_KSLEEP_SEAL_TURNS); // ศัตรูไม่สามารถโจมตีได้ 1 เทิร์น
     p.nightWork = 0;
     p.overworkNext = false;
@@ -122,7 +134,7 @@ module.exports = {
       engine.log(`😌 ${p.name} ได้นอนพักเสียที — สถานะ [โหมงานหนัก] หายไป`);
     }
     const heal = engine.healHp(p, KOTONE_KSLEEP_HEAL);
-    engine.log(`😴 ${p.name} Sleeping time — หลับ ${KOTONE_KSLEEP_TURNS} เทิร์น ฟื้นพลังชีวิต +${heal} และศัตรูไม่สามารถเลือกโจมตีได้ 1 เทิร์นแรก (ตื่นแล้วรับ [เช้าที่สดใส])`);
+    engine.log(`😴 ${p.name} Sleeping time — ${selfResisted ? "ต้านสถานะผิดปกติของตัวเอง ไม่ติดหลับ แต่" : `หลับ ${KOTONE_KSLEEP_TURNS} เทิร์น`} ฟื้นพลังชีวิต +${heal} และศัตรูไม่สามารถเลือกโจมตีได้ 1 เทิร์นแรก (ตื่นแล้วรับ [เช้าที่สดใส])`);
   },
 
   // เรียกจาก useSkill() ในส่วน effect (ทุกครั้งที่ใช้สกิลไม่ว่าตัวไหน) — ข้อเสียโคโตเนะ: โอกาสเจอท่านประธานเซนะจัง

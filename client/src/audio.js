@@ -54,6 +54,16 @@ const FILES = {
   takuto2: "/characters/takuto/upadate/takuto_theme2.m4a", // เพลงประจำตัวหลังสกิลติดตัว 1 กันตายทำงาน (สึงาชิ ทาคุโตะ patch 2.2.4)
   tepeu: "/characters/tepeu/tepeu_theme.mp3", // เพลงระหว่างฉากหลัง "นายเป็นคนทำตัวเองนะ" ทำงาน (เทเปา ชิกิ)
   tepeu_skill1_2: "/characters/tepeu/tepeu_skill1_2.m4a", // เสียงกดสกิลพื้นฐาน/สกิลรอง (เทเปา ชิกิ)
+  // ไค ชิซากิ: เสียงพากย์สุ่มทุกครั้งที่ใช้สกิล (พื้นฐาน/รอง/Overhaul)
+  kaiVoice1: "/characters/kai/voice/kai_voice1.m4a",
+  kaiVoice2: "/characters/kai/voice/kai_voice2.m4a",
+  kaiVoice3: "/characters/kai/voice/kai_voice3.m4a",
+  kaiVoice4: "/characters/kai/voice/kai_voice4.m4a",
+  kaiVoice5: "/characters/kai/voice/kai_voice5.m4a",
+  // ผู้สังหารจอมมหาเวทย์: เสียงโจมตีปกติเฉพาะตัว / เสียงหลัง Mana Rupture / เพลงระหว่างมี Mana Burden (spellburden) ติดตัวเอง
+  mageslayer_attack: "/characters/mageslayer/BA.mp3",
+  mageslayer_skill2: "/characters/mageslayer/SFX_Skill_2.mp3",
+  mageslayer_ult: "/characters/mageslayer/BGM_Ult.mp3",
   // เสียงอาวุธ DoomGuy (patch 2.2 full): เสียงโจมตี/เสียงใช้สกิลรอง Weapon แยกตามอาวุธที่ถืออยู่
   doomguy_cs_shoot: "/characters/doomguy/sound/CS Shoot.mp3",
   doomguy_cs_skill: "/characters/doomguy/sound/CS Skill.mp3",

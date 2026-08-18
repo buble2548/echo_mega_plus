@@ -45,10 +45,16 @@ module.exports = {
   applyWeaponEffect(engine, p, doomW, doomTarget) {
     const wname = doomW.name;
     if (doomW.effect === "explode" && doomTarget) {
-      doomTarget.statuses.doomExplode = 1;
-      engine.log(`💣 ${p.name} ${wname} — ${doomTarget.name} ติดสถานะระเบิด! (โจมตีโดนเมื่อไหร่จะระเบิดใส่คนอื่นสุ่ม 2 คน -1)`);
+      if (engine.resistActive(doomTarget)) {
+        engine.log(`🛡️ ${doomTarget.name} ต้านสถานะผิดปกติ — ${wname} ไม่มีผล`);
+      } else {
+        doomTarget.statuses.doomExplode = 1;
+        engine.log(`💣 ${p.name} ${wname} — ${doomTarget.name} ติดสถานะระเบิด! (โจมตีโดนเมื่อไหร่จะระเบิดใส่คนอื่นสุ่ม 2 คน -1)`);
+      }
     } else if (doomW.effect === "lockon" && doomTarget) {
-      if (Math.random() < engine.DOOM_LOCKON_CHANCE) {
+      if (engine.resistActive(doomTarget)) {
+        engine.log(`🛡️ ${doomTarget.name} ต้านสถานะผิดปกติ — ${wname} ไม่มีผล`);
+      } else if (Math.random() < engine.DOOM_LOCKON_CHANCE) {
         doomTarget.statuses.doomLockon = 1;
         engine.log(`🎯 ${p.name} ${wname} — ล็อคเป้า ${doomTarget.name} สำเร็จ! (โดนโจมตีครั้งถัดไปแรงขึ้น +1)`);
       } else {

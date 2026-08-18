@@ -61,8 +61,12 @@ module.exports = {
     const it = APPLE_ITEMS[itemKey];
     if (itemKey === "drink") {
       // เพิ่มแต้มสกิล 1 / เสียเลือด 1 ต่อเทิร์น คงอยู่ 2 เทิร์น (+1 ชดเชยการลดสถานะตอนจบเทิร์น)
-      t.statuses.energy = Math.max(t.statuses.energy || 0, 3);
-      engine.log(`🥤 ${p.name} เอาไปสิ — มอบเครื่องดื่มชูกำลังให้ ${t.name} (แต้มสกิล +1 / เสียเลือด 1 ต่อเทิร์น 2 เทิร์น)`);
+      if (engine.resistActive(t)) {
+        engine.log(`🛡️ ${t.name} ต้านสถานะผิดปกติ — เครื่องดื่มชูกำลังไม่มีผล`);
+      } else {
+        t.statuses.energy = Math.max(t.statuses.energy || 0, 3);
+        engine.log(`🥤 ${p.name} เอาไปสิ — มอบเครื่องดื่มชูกำลังให้ ${t.name} (แต้มสกิล +1 / เสียเลือด 1 ต่อเทิร์น 2 เทิร์น)`);
+      }
     } else if (itemKey === "iphone") {
       // ฟื้นเกราะ 2 หน่วย แต่เสียพลังชีวิต 1 หน่วยแบบไม่สนเกราะ
       engine.healArmor(t, 2);
@@ -77,8 +81,12 @@ module.exports = {
       }
     } else {
       // ใบโปรโมทสินค้า: แต้มการ์ดของผู้รับถูกเปิดเผยให้ทุกคนเห็น คงอยู่ 1 เทิร์น
-      t.statuses.promo = 1;
-      engine.log(`📢 ${p.name} เอาไปสิ — แปะใบโปรโมทสินค้าให้ ${t.name} (ทุกคนเห็นแต้มการ์ดตลอดเทิร์นนี้)`);
+      if (engine.resistActive(t)) {
+        engine.log(`🛡️ ${t.name} ต้านสถานะผิดปกติ — ใบโปรโมทสินค้าไม่มีผล`);
+      } else {
+        t.statuses.promo = 1;
+        engine.log(`📢 ${p.name} เอาไปสิ — แปะใบโปรโมทสินค้าให้ ${t.name} (ทุกคนเห็นแต้มการ์ดตลอดเทิร์นนี้)`);
+      }
     }
     // บัฟพลังโจมตี: มอบของแต่ละครั้ง +1 หน่วย ซ้อนทับได้สูงสุด 2 หน่วย แต่ละหน่วยคิดระยะเวลาคงอยู่แยกกัน
     p.appleAtkBuffs = p.appleAtkBuffs || [];

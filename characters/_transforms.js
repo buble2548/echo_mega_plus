@@ -167,5 +167,8 @@ module.exports = function buildTransforms(img) {
     phenexRebirth: { img: img.PHENEX_NTD_IMG, video: "/characters/rita/phenex_passive.mp4", title: "ถ้าเลือกได้ อยากเกิดเป็นอะไรหรอ?", label: "สกิลติดตัวทำงาน", seconds: 11, music: null, afterReveal: false },
     // phenexRelease: สกิลติดตัว 2 ขอแค่ได้พบกันอีก — ตกรอบจริง ปลดปล่อยความเจ็บปวดสะสมใส่เป้าหมาย (วีดีโอจริง 5.69 วิ)
     phenexRelease: { img: img.PHENEX_BASE_IMG, video: "/characters/rita/phenex_passive2.mp4", title: "ขอแค่ได้พบกันอีก", label: "ปลดปล่อยความเจ็บปวด", seconds: 6, music: null, afterReveal: false },
+    // ---------- ผู้สังหารจอมมหาเวทย์ ----------
+    // mageslayerWitchMark: สกิลพื้นฐาน Witch Mark — เล่นทันทีตอนกด (ก่อนเปิดการ์ด)
+    mageslayerWitchMark: { img: "/characters/mageslayer/Pic_skill_1.jpg", video: "/characters/mageslayer/VDO_Skill_1.mp4", title: "WITCH MARK", label: "ใช้สกิล", seconds: 6, music: null, afterReveal: false },
   };
 };
