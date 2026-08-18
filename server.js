@@ -520,6 +520,10 @@ function moonCellActive() {
 function takumiBlackoutActive() {
   return Object.values(players).some((pp) => (pp.statuses && pp.statuses.takumiBlackout) > 0);
 }
+// DoomGuy: มี [ระเบิด]/[ล็อคเป้า] ค้างอยู่บนใครสักคนไหม (Combat Shotgun/Heavy Cannon) — ค้างอยู่ระหว่างนี้กด Quick Swap สุ่มปืนใหม่ไม่ได้ จนกว่าจะโดนใช้ (โดนโจมตี)
+function doomWeaponMarkPending() {
+  return Object.values(players).some((pp) => (pp.statuses && (pp.statuses.doomExplode > 0 || pp.statuses.doomLockon > 0)));
+}
 // ยูนะ — Break Beat Bark! ทำงานอยู่ไหม (บัฟทั้งสนาม ไม่ใช่สถานะผู้เล่นคนเดียว เหมือน moonCellActive)
 function yunaBeatBarkActive() {
   return yunaEffect === "beatbark" && roundNumber <= yunaWindowEnd;
@@ -1782,6 +1786,7 @@ function buildStateFor(viewerId) {
         doomCharge: p.characterId === "doomguy" ? (p.doomCharge || 0) : undefined, // DoomGuy: ชาร์จ Crucible (เต็ม 5)
         doomWeaponHasEffect: p.characterId === "doomguy" ? !!(DOOM_WEAPONS[p.doomWeapon] || DOOM_WEAPONS.shotgun).effect : undefined, // DoomGuy: ปืนกระบอกนี้กดใช้ความสามารถพิเศษได้ไหม (Plasma Rifle/BFG 9000 ไม่มี)
         doomQuickSwapUsed: p.characterId === "doomguy" ? !!p.doomQuickSwapUsed : undefined, // DoomGuy: Quick Swap ใช้ไปแล้วในเทิร์นนี้หรือยัง (1 ครั้ง/เทิร์น)
+        doomWeaponMarkPending: p.characterId === "doomguy" ? doomWeaponMarkPending() : undefined, // DoomGuy: [ระเบิด]/[ล็อคเป้า] ค้างอยู่ — สุ่มปืนใหม่ (Quick Swap) ไม่ได้จนกว่าจะโดนใช้
         gamblerUses: p.gamblerUses, // แกมเบลอร์: จำนวนวอสก้าหน่อยน้องคงเหลือ
         profit: p.profit || 0,      // แกมเบลอร์: บัฟกำไรเท่าตัวโว้ยสะสม
         sunriseDrop: p.sunriseDrop || 0, // โอเบรอน: จำนวนเทิร์นที่จะเสียเลือด 1/เทิร์นจากรุ่งอรุณแห่งวันใหม่
@@ -2645,6 +2650,7 @@ function useSkill(id, tier, targets, item) {
   // ---------- DoomGuy (patch 2.2 full): Quick Swap (สกิลพื้นฐาน) 1 ครั้งต่อเทิร์น / Weapon (สกิลรอง) แปรตามอาวุธที่ถืออยู่ ----------
   const isDoomSwap = p.characterId === "doomguy" && tier === "basic";
   if (isDoomSwap && p.doomQuickSwapUsed) return; // ใช้ได้ 1 ครั้งต่อเทิร์น
+  if (isDoomSwap && doomWeaponMarkPending()) return; // Combat Shotgun/Heavy Cannon: [ระเบิด]/[ล็อคเป้า] ยังค้างอยู่ — สุ่มปืนใหม่ไม่ได้จนกว่าจะโดนใช้
   const isDoomWeapon = p.characterId === "doomguy" && tier === "secondary";
   const doomW = isDoomWeapon ? (DOOM_WEAPONS[p.doomWeapon] || DOOM_WEAPONS.shotgun) : null;
   if (isDoomWeapon) cost = doomW.cost;

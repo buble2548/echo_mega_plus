@@ -1460,6 +1460,20 @@ function DoomChargeBadge({ me, ch }) {
     </span>
   );
 }
+// ทาคุมิ ฟุจิวาระ: แจ้งเตือนเกียร์ปัจจุบัน (1-6) — เกียร์ 3 ขึ้นไปพลังโจมตี +1, เกียร์ 6 รวม +3
+function TakumiGearBadge({ me, ch }) {
+  if (!ch || ch.id !== "takumi") return null;
+  const gear = Math.max(1, Math.min(6, me.takumiGear || 1));
+  const bonus = gear >= 6 ? 3 : gear >= 3 ? 1 : 0;
+  return (
+    <span
+      className={`text-xs font-bold rounded-full px-2 py-0.5 whitespace-nowrap ${gear >= 6 ? "bg-echo-gold text-gray-900" : bonus > 0 ? "bg-black/55 text-echo-gold" : "bg-black/55"}`}
+      title="เกียร์ธรรมดา — เกียร์ 3 ขึ้นไป พลังโจมตี +1 / เกียร์ 6 รวม +3 — ลงเกียร์กลับมาที่ 1 พอดี ฟื้นพลังชีวิตตามระยะที่ลดมา (สูงสุด 4)"
+    >
+      ⚙️ เกียร์ {gear}/6{bonus > 0 ? ` (+${bonus})` : ""}
+    </span>
+  );
+}
 // สึงาชิ ทาคุโตะ (patch 2.2 new): แจ้งเตือนดวงดาวสะสมได้เท่าไหร่แล้ว (ครบ 5 = Apprivoise! ทันที)
 function TakutoStarBadge({ me, ch }) {
   if (!ch || ch.id !== "takuto" || me.statuses?.apprivoise) return null;
@@ -2194,7 +2208,7 @@ export default function Game({ state, lowQ }) {
   const isDoomguy = ch?.id === "doomguy";
   const doomUltLocked = isDoomguy && (me?.doomCharge || 0) < 5; // Crucible: ต้องมีชาร์จครบ 5
   // สกิลติดตัว: ไม่ติดคูลดาวน์การใช้สกิล — Quick Swap (สกิลพื้นฐาน) และ Weapon (สกิลรอง) ไม่นับเป็นการใช้สกิลของเทิร์น กดได้ทั้งคู่ในเทิร์นเดียวกัน
-  const doomBasicLocked = isDoomguy && !!me?.doomQuickSwapUsed; // Quick Swap เอง ยังจำกัด 1 ครั้ง/เทิร์นตามปกติ
+  const doomBasicLocked = isDoomguy && (!!me?.doomQuickSwapUsed || !!me?.doomWeaponMarkPending); // Quick Swap เอง ยังจำกัด 1 ครั้ง/เทิร์นตามปกติ + ล็อกถ้ามี [ระเบิด]/[ล็อคเป้า] ค้างอยู่
   const doomNoEffectLocked = isDoomguy && me?.doomWeaponHasEffect === false; // ปืนกระบอกนี้ไม่มีความสามารถพิเศษให้กด (BFG 9000)
   // ---------- สึงาชิ ทาคุโตะ (patch 2.2 new / 2.2.4 / 2.2.5) ----------
   const isTakuto = ch?.id === "takuto";
@@ -2828,6 +2842,7 @@ export default function Game({ state, lowQ }) {
                 <StatusChips p={me} left />
                 <DoomChargeBadge me={me} ch={ch} />
                 <TakutoStarBadge me={me} ch={ch} />
+                <TakumiGearBadge me={me} ch={ch} />
                 <span className="ml-auto flex items-center gap-1.5">
                   <span className="flex gap-1 p-1 rounded-lg bg-black/25">
                     {Array.from({ length: me.maxSkill }, (_, i) => (
@@ -3267,6 +3282,7 @@ export default function Game({ state, lowQ }) {
                   <div className="font-black text-lg sm:text-xl text-hard truncate max-w-[9rem] sm:max-w-[12rem]" style={{ fontFamily: P_DISPLAY }}>{me.character.name}</div>
                   <DoomChargeBadge me={me} ch={ch} />
                   <TakutoStarBadge me={me} ch={ch} />
+                  <TakumiGearBadge me={me} ch={ch} />
                 </div>
                 {isHakuno && <HakunoCommandButton me={me} usable={hakunoCmdUsable} onOpen={() => setHakunoCmdOpen(true)} className="w-14 h-11 shrink-0 mt-1" />}
                 {me.maxHp == null ? (
