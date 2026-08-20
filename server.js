@@ -2703,14 +2703,14 @@ function useSkill(id, tier, targets, item) {
     if (!shikiLifelineTarget) return;
   }
   // ---------- เจ้าหญิงราก (patch 2.2.7, characters/princess_shiki.js) ----------
-  const isPShikiSeal = p.characterId === "princess_shiki" && tier === "basic"; // อย่าทำอะไรไม่เข้าท่าเลย
+  const isPShikiSeal = p.characterId === "princess_shiki" && tier === "secondary"; // อย่าทำอะไรไม่เข้าท่าเลย
   let pshikiSealTarget = null;
   if (isPShikiSeal) {
     pshikiSealTarget = CHAR_HOOKS.princess_shiki.prepareSealTarget(engine, p, targets);
     if (!pshikiSealTarget) return;
   }
-  // อืม ฉันเข้าใจแล้ว (สกิลรอง): ชักดาบยังค้างอยู่ กดซ้ำไม่ได้ (ไม่งั้นเสียเลือด 3 ฟรี)
-  const isPShikiBlade = p.characterId === "princess_shiki" && tier === "secondary";
+  // อืม ฉันเข้าใจแล้ว (สกิลพื้นฐาน): ชักดาบยังค้างอยู่ กดซ้ำไม่ได้ (ไม่งั้นเสียเลือด 3 ฟรี)
+  const isPShikiBlade = p.characterId === "princess_shiki" && tier === "basic";
   if (isPShikiBlade && !CHAR_HOOKS.princess_shiki.canCastBlade(p)) return;
   // ---------- แบทแมน (patch 2.2.7, characters/bat_ben.js) ----------
   const isBatStealth = p.characterId === "bat_ben" && tier === "basic";     // เร้นเงา
@@ -3670,7 +3670,7 @@ function afterSummary() {
   }
   // เจ้าหญิงราก (characters/princess_shiki.js): สกิลติดตัว — โจมตีปกติไม่ได้เลย เว้นแต่ติด "ชักดาบ"
   if (winner && winner.alive && CHAR_HOOKS.princess_shiki.cannotAttack(winner)) {
-    lastLog.push(`👁️ ${winner.name} ไม่ได้ชักดาบออกมา — ไม่มีเทิร์นโจมตี (สกิลติดตัว · ใช้สกิลรอง "อืม ฉันเข้าใจแล้ว" เพื่อโจมตีได้)`);
+    lastLog.push(`👁️ ${winner.name} ไม่ได้ชักดาบออกมา — ไม่มีเทิร์นโจมตี (สกิลติดตัว · ใช้สกิลพื้นฐาน "อืม ฉันเข้าใจแล้ว" เพื่อโจมตีได้)`);
     endTurn();
     return;
   }
