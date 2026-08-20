@@ -51,10 +51,33 @@ test('onRoundStartTick: non-oguri players are ignored entirely', () => {
   assert.equal(p.stamina, 0);
 });
 
-test('onRoundStartTick: charges stamina every round within [8,16]', () => {
+// ช่วง Stamina ที่ชาร์จได้ต่อเทิร์น — ต้องตรงกับ OGURI_CHARGE_GAIN_MIN/MAX ใน characters/oguri.js เสมอ
+// (เทสต์เดิมฮาร์ดโค้ด [8,16] ไว้ตั้งแต่ก่อน Rework แล้วไม่ได้แก้ตามตอนลดเป็น 6-12 — ผลคือแดงแบบสุ่ม
+//  ~29% ของการรัน เฉพาะรอบที่สุ่มได้ 6 หรือ 7 เท่านั้น ทั้งที่โค้ดเกมถูกต้องอยู่แล้ว)
+const CHARGE_GAIN_MIN = 6;
+const CHARGE_GAIN_MAX = 12;
+
+test(`onRoundStartTick: charges stamina every round within [${CHARGE_GAIN_MIN},${CHARGE_GAIN_MAX}]`, () => {
   const p = mkPlayer();
   oguri.onRoundStartTick(engine, p);
-  assert.ok(p.stamina >= 8 && p.stamina <= 16, `expected 8-16, got ${p.stamina}`);
+  assert.ok(
+    p.stamina >= CHARGE_GAIN_MIN && p.stamina <= CHARGE_GAIN_MAX,
+    `expected ${CHARGE_GAIN_MIN}-${CHARGE_GAIN_MAX}, got ${p.stamina}`,
+  );
+});
+
+// กันเทสต์ด้านบนหลุดจากค่าจริงอีกรอบ: ยิงหลายครั้งให้ครอบคลุมทั้งช่วง แล้วเช็คว่าขอบล่าง/บนที่เจอจริง
+// ไม่หลุดออกนอก [MIN,MAX] — ถ้ามีการปรับสมดุลค่าชาร์จอีกครั้งโดยไม่แก้เทสต์ อันนี้จะแดงทุกรอบ (ไม่ใช่แดงสุ่ม)
+test('onRoundStartTick: stamina gain never falls outside the declared range across many rolls', () => {
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < 300; i++) {
+    const p = mkPlayer();
+    oguri.onRoundStartTick(engine, p);
+    lo = Math.min(lo, p.stamina);
+    hi = Math.max(hi, p.stamina);
+  }
+  assert.ok(lo >= CHARGE_GAIN_MIN, `rolled ${lo}, below declared min ${CHARGE_GAIN_MIN}`);
+  assert.ok(hi <= CHARGE_GAIN_MAX, `rolled ${hi}, above declared max ${CHARGE_GAIN_MAX}`);
 });
 
 test('onRoundStartTick: entering GrayBeast when golden-era stacks reach OGURI_GOLD_MAX(3)', () => {
