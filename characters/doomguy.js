@@ -1,6 +1,6 @@
 // ============================================================
 //  ดูมกาย (DoomGuy, patch 2.2 full) — Quick Swap / Weapon (ความสามารถพิเศษตามอาวุธ) / Crucible (ท่าไม้ตาย) /
-//  สกิลติดตัว (ฮีล+ชาร์จ Crucible ทุกครั้งที่โจมตี) / สกิลติดตัว 2 (เสมอแต้มยังได้โจมตี 60%)
+//  สกิลติดตัว (ฮีล+ชาร์จ Crucible ทุกครั้งที่โจมตี) / สกิลติดตัว 2 (เสมอแต้มยังได้โจมตี 75%)
 //  ย้ายออกมาจาก server.js — ดู characters/index.js สำหรับไฟล์มัดรวม
 //  หมายเหตุ: ตาราง `DOOM_WEAPONS`/`rollDoomWeapon`/ค่าคงที่ atk พื้นฐาน (DOOM_CRUCIBLE_ATK) ยังอยู่ server.js
 //  เพราะถูกอ่านตรงๆ ใน doAttack()'s shared damage-sum expression (`doomBaseAtk`/`doomPierceAtk`) — นอกขอบเขต Phase 1
@@ -151,11 +151,13 @@ module.exports = {
     engine.log(`⚔️ Crucible! ${p.name} คว้าดาบแห่งการล่า — บังคับทุกคนจั่วเพิ่ม ${engine.DOOM_CRUCIBLE_BUST_DRAWS} ใบ บวกแต้มการ์ด +${engine.DOOM_CRUCIBLE_BUST_BONUS} การันตีแตกทันที (แม้เปิดไพ่/ล็อกไปแล้ว) รับความเสียหาย -${engine.DOOM_CRUCIBLE_BUST_DMG} (พลังโจมตี 7 หน่วย คงอยู่จนกว่าจะได้โจมตี 1 ครั้ง)`);
   },
 
-  // เรียกจาก resolveRound() ตอนตัดสินผู้ชนะ — สกิลติดตัว: เสมอแต้มปกติไม่มีเทิร์นโจมตี แต่มีโอกาส 60% ยังได้โจมตี คืน true ถ้าทำงาน
+  // เรียกจาก resolveRound() ตอนตัดสินผู้ชนะ (ก่อนสุ่มผู้ชนะจากคนที่เสมอกัน) — สกิลติดตัว: เสมอแต้มปกติไม่มี
+  //  เทิร์นโจมตี แต่มีโอกาส DOOM_TIE_ATTACK_CHANCE (75%) ที่จะได้เป็นผู้ชนะและยังได้โจมตี คืน true ถ้าทำงาน
   tryTieAttack(engine, winner) {
     if (!(winner && winner.alive && winner.characterId === "doomguy")) return false;
+    if (engine.passiveSealed(winner)) return false; // สกิลติดตัวถูกปิดอยู่ (อันนี้ของนายรึเปล่า ฯลฯ)
     if (Math.random() >= engine.DOOM_TIE_ATTACK_CHANCE) return false;
-    engine.log(`🎲 ${winner.name} สกิลติดตัว — เสมอแต้มแต่ยังได้โจมตี!`);
+    engine.log(`🎲 ${winner.name} Rip and Tear — เสมอแต้มแต่ยังได้โจมตี! (โอกาส ${Math.round(engine.DOOM_TIE_ATTACK_CHANCE * 100)}%)`);
     return true;
   },
 

@@ -722,6 +722,7 @@ let phaseTimerId = null;
 let attackerId = null;
 let roundWinnerId = null;
 let roundTiedWin = false;  // ผู้ชนะได้จากการเสมอแต้ม -> ไม่มีเทิร์นโจมตีรอบนี้
+let doomTieAttack = false; // DoomGuy สกิลติดตัว: เสมอแต้มแล้วโรลติด -> ได้เป็นผู้ชนะและได้โจมตีรอบนี้
 let roundNumber = 0;
 let centralDeck = []; // กองกลาง 43 ใบ (สับใหม่ทุกรอบใน dealRound())
 let lastLog = [];
@@ -2124,6 +2125,7 @@ function dealRound() {
   attackerId = null;
   roundWinnerId = null;
   roundTiedWin = false;
+  doomTieAttack = false;
   cutsceneQueue = []; // ล้างคิวเก่าก่อนเสมอ — ต้องอยู่ก่อน rollWindow/CHAR_HOOKS ด้านล่างทั้งหมด ไม่งั้นคัตซีนที่เพิ่งคิวไว้จะโดนล้างทิ้งไปด้วย
   cutsceneInfo = null;
   lastAttack = null;
@@ -3451,7 +3453,18 @@ function resolveRound() {
 
   if (best >= 0) {
     const tied = combatants.filter((p) => val(p) === best);
-    const w = tied[Math.floor(Math.random() * tied.length)];
+    // DoomGuy (characters/doomguy.js) สกิลติดตัว: เสมอแต้มกับผู้เล่นอื่น -> โรล DOOM_TIE_ATTACK_CHANCE
+    //  "ก่อน" สุ่มผู้ชนะ ติดแล้วได้เป็นผู้ชนะและได้เทิร์นโจมตีทันที
+    //  บั๊กเดิม (แก้ที่นี่): โรลนี้เคยอยู่ใน afterSummary() ซึ่งทำงานหลังสุ่มผู้ชนะไปแล้ว และเช็คเฉพาะคนที่
+    //  ถูกสุ่มได้เท่านั้น -> ถ้าดูมกายเสมอแต่ไม่ถูกสุ่ม ก็ไม่ได้โรลเลย ทำให้โอกาสจริงถูกหารด้วยจำนวนคนที่เสมอ
+    //  (เสมอ 2 คน = 37.5% / 3 คน = 25% / 4 คน = 18.7% แทนที่จะเป็น 75% ตามที่คำอธิบายสกิลระบุไว้)
+    let w = null;
+    if (tied.length > 1) {
+      for (const d of tied.filter((p) => p.characterId === "doomguy")) {
+        if (CHAR_HOOKS.doomguy.tryTieAttack(engine, d)) { w = d; doomTieAttack = true; break; }
+      }
+    }
+    if (!w) w = tied[Math.floor(Math.random() * tied.length)];
     roundWinnerId = w.id;
     roundTiedWin = tied.length > 1; // เสมอแต้มกัน -> ยังได้แต้มสกิล/ท่าไม้ตายทำงานปกติ แต่ไม่มีเทิร์นโจมตี
     w.isWinner = true;
@@ -3462,7 +3475,10 @@ function resolveRound() {
     if ((w.gold || 0) < GOLD_MAX) w.gold = Math.min(GOLD_MAX, (w.gold || 0) + GOLD_WIN_BONUS);
     // patch 2.1.3.5: ชนะจั่วการ์ดไม่ได้แต้มสกิลอีกต่อไป
     firePassive(w, "win");
-    if (tied.length > 1) lastLog.push(`เสมอที่ ${best} แต้ม — สุ่มผู้ชนะได้ ${w.name} (เสมอ ไม่มีเทิร์นโจมตี)`);
+    if (tied.length > 1) {
+      if (doomTieAttack) lastLog.push(`เสมอที่ ${best} แต้ม — ${w.name} สกิลติดตัว Rip and Tear ทำงาน (โอกาส ${Math.round(DOOM_TIE_ATTACK_CHANCE * 100)}%) ได้เป็นผู้ชนะและยังได้โจมตี!`);
+      else lastLog.push(`เสมอที่ ${best} แต้ม — สุ่มผู้ชนะได้ ${w.name} (เสมอ ไม่มีเทิร์นโจมตี)`);
+    }
   }
 
   if (best !== worst) {
@@ -3674,8 +3690,9 @@ function afterSummary() {
     endTurn();
     return;
   }
-  // DoomGuy (characters/doomguy.js) สกิลติดตัว: ปกติเสมอแต้มจะไม่มีเทิร์นโจมตี — มีโอกาส 60% ที่จะยังได้โจมตี
-  const doomTieOverride = winner && winner.alive && roundTiedWin ? CHAR_HOOKS.doomguy.tryTieAttack(engine, winner) : false;
+  // DoomGuy (characters/doomguy.js) สกิลติดตัว: ปกติเสมอแต้มจะไม่มีเทิร์นโจมตี — โรล 75% ไปแล้วตอนตัดสิน
+  //  ผู้ชนะใน resolveRound() (ห้ามโรลซ้ำที่นี่ ไม่งั้นโอกาสจริงจะกลายเป็น 0.75 x 0.75 = 56%)
+  const doomTieOverride = doomTieAttack && !!winner && winner.alive && winner.characterId === "doomguy";
   if (winner && winner.alive && (!roundTiedWin || doomTieOverride)) {
     const targets = attackableTargets(winner.id);
     if (targets.length > 0) {
@@ -3881,11 +3898,14 @@ function doAttack(byId, targetId) {
 
   // ---------- "เนตรมณะ" (สถานะ Universal patch 2.2.7 — เจ้าหญิงราก "ทุกอย่างจะต้องราบรื่น") ----------
   //  ใครก็ตามที่ติดบัฟนี้ โจมตีปกติแล้วมีโอกาสสังหารเป้าหมายทันที 20% (คิดแยกจาก/หลังเนตรของแต่ละตัวละคร)
+  //  วีดีโอสังหารขึ้นเฉพาะตอนเจ้าหญิงรากเป็นผู้ลงมือเอง — ตัวละครอื่นที่ได้บัฟไปสังหารเงียบๆ
   if (netramanaActive(attacker) && !killSealed(attacker)) {
     const netraChance = miyakoKillChance(target, NETRAMANA_KILL_CHANCE);
     if (Math.random() < netraChance) {
       if (appleGuyDodgesKill(attacker, target)) return; // Apple guy: หลบสังหารทันทีได้
-      queueCutscene(attacker, "pshikiKill"); // เล่นวีดีโอก่อนสังหารทุกครั้ง
+      // วีดีโอสังหารเล่นเฉพาะตอนเจ้าหญิงรากเป็นคนลงมือเองเท่านั้น — คนอื่นที่ยืมบัฟนี้ไปใช้
+      //  สังหารได้เงียบๆ (ขึ้นแค่ป้ายสรุปการโจมตี) กันวีดีโอของเจ้าหญิงรากเด้งใส่ทั้งสนามทุกครั้งที่ใครก็ตามสังหารสำเร็จ
+      if (attacker.characterId === "princess_shiki") queueCutscene(attacker, "pshikiKill");
       instantDeath(target);
       target.wasAttacked = true;
       if (!target.alive) lastLog.push(`👁️✨💀 เนตรมณะ — ${attacker.name} มองทะลุความตายของ ${target.name} (โอกาส ${Math.round(netraChance * 100)}%) — สังหารทันที!`);
