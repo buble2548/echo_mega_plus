@@ -11,6 +11,7 @@
 //         fragile (เปราะบาง: ดาเมจที่ได้รับ +N) / sleep (หลับใหล) / stun (สตั้น)
 //         nodraw (ห้ามจั่ว) / noskill (ห้ามใช้สกิล) / nohealing (ไร้ทางเยียวยา: ฟื้นเลือดจริงไม่ได้)
 //         invert (ผกผัน: กลับด้านบัฟ/การฟื้นฟูทั้งหมด) / hburn (ลุกไหม้: ดาเมจ 1/เทิร์น สะสมได้ — ดู tickBurn)
+//  บัฟ (ต่อ): netramana (เนตรมณะ: โจมตีปกติมีโอกาสสังหารทันที NETRAMANA_KILL_CHANCE — ดู netramanaActive)
 //  จำนวน (amount) ของสถานะเก็บแยกใน p.statusAmt[key] — p.statuses[key] เก็บจำนวนเทิร์น/ครั้งตามเดิม
 //
 //  evade (หลบหลีก) เป็นกรณีพิเศษ ไม่ผ่าน applyBuff/statusAmtOf แบบตัวอื่น: แต่ละสแตคมีอายุของตัวเอง
@@ -113,6 +114,14 @@ function tickBurn(engine, p) {
   if (p.statuses.hburn <= 0) delete p.statuses.hburn;
 }
 
+// "เนตรมณะ" (netramana, สถานะ Universal patch 2.2.7 — เจ้าหญิงราก "ทุกอย่างจะต้องราบรื่น"):
+//  ผู้ที่ติดบัฟนี้ โจมตีปกติแล้วมีโอกาสสังหารเป้าหมายทันที 20% — ตัวละครไหนก็ติด/ให้ติดได้
+//  จุดโรลจริงอยู่ใน doAttack() ของ server.js (ต้องใช้ cutscene/lastAttack/เฟสโจมตี จึงเป็น pure predicate ที่นี่)
+const NETRAMANA_KILL_CHANCE = 0.20;
+function netramanaActive(p) {
+  return !!p && ((p.statuses && p.statuses.netramana) || 0) > 0;
+}
+
 const EVADE_STACK_MAX = 3;   // หลบหลีก: สะสมสแตคพร้อมกันได้สูงสุด 3
 const EVADE_STACK_TURNS = 2; // หลบหลีก: แต่ละสแตคมีอายุของตัวเอง 2 เทิร์น แล้วหมดไปเอง (ไม่เกี่ยวกับสแตคอื่น ไม่ต่ออายุกันเอง)
 
@@ -165,6 +174,8 @@ module.exports = {
   noHealActive,
   invertActive,
   tickBurn,
+  NETRAMANA_KILL_CHANCE,
+  netramanaActive,
   EVADE_STACK_MAX,
   EVADE_STACK_TURNS,
   grantEvadeStack,

@@ -34,6 +34,8 @@ const bard = require("./bard");
 const kai = require("./kai");
 const mageslayer = require("./mageslayer");
 const takumi = require("./takumi");
+const bat_ben = require("./bat_ben");
+const princess_shiki = require("./princess_shiki");
 
 const CHARACTER_MODULES = [
   tohno,
@@ -63,6 +65,8 @@ const CHARACTER_MODULES = [
   kai,
   mageslayer,
   takumi,
+  bat_ben,
+  princess_shiki,
 ];
 
 const CHAR_HOOKS = {};

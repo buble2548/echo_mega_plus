@@ -176,5 +176,17 @@ module.exports = function buildTransforms(img) {
     takumiBlackoutStart: { img: "/characters/takumi/takumi_skill3.jpg", video: "/characters/takumi/takumi_skill3_first.mp4", title: "ถึงจะมองไม่เห็น แต่ฉันยังอยู่", label: "ปล่อยท่าไม้ตาย", seconds: 8, music: "forever", afterReveal: false }, // takumi_skill3_first.mp4 ~7.99s
     // takumiBlackoutBust: ทริกเกอร์ — คนแรกที่ไพ่แตกระหว่างบังตากระดาน (เล่นก่อนสรุปผล ผ่าน afterResolve()'s queueCutscene)
     takumiBlackoutBust: { img: "/characters/takumi/takumi_skill3.jpg", video: "/characters/takumi/takumi_skill3_second.mp4", title: "ถึงจะมองไม่เห็น แต่ฉันยังอยู่", label: "ไพ่แตก", seconds: 10, music: null, afterReveal: false }, // takumi_skill3_second.mp4 ~9.86s
+    // ---------- แบทแมน (เบน แอฟเฟล็ก) (patch 2.2.7) ----------
+    // seconds วัดจากความยาววีดีโอจริง (+buffer ~0.5-1 วิ กันตัดก่อนจบ)
+    // batStealthBurst: สกิลพื้นฐาน เร้นเงา — เล่นตอนสถานะหมดเวลาเอง (ท้ายเทิร์น) ก่อนระเบิดใส่ทุกคน
+    batStealthBurst: { img: "/characters/bat_ben/bat_ben_skill1.jpg", video: "/characters/bat_ben/bat_ben_skill1.mp4", title: "เร้นเงา", label: "ออกจากเงามืด", seconds: 10, music: null, afterReveal: false }, // bat_ben_skill1.mp4 ~9.48s
+    // batKarmaSend: สกิลรอง นายลืมของน่ะ — เล่นตอนเลือกเป้าหมายส่งต่อความเสียหาย ก่อนความเสียหายเกิดขึ้น
+    batKarmaSend: { img: "/characters/bat_ben/bat_ben_skill2.jpg", video: "/characters/bat_ben/bat_ben_skill2.mp4", title: "นายลืมของน่ะ", label: "ส่งคืนความเสียหาย", seconds: 7, music: null, afterReveal: false }, // bat_ben_skill2.mp4 ~6.28s
+    // batTaunt: ท่าไม้ตาย เข้ามาเลย — เล่นทันทีตอนกด (ก่อนเปิดการ์ด) แล้วเพลง bat_ben_theme เล่นค้าง
+    batTaunt: { img: "/characters/bat_ben/bat_ben_skill3.jpg", video: "/characters/bat_ben/bat_ben_skill3.mp4", title: "เข้ามาเลย", label: "ปล่อยท่าไม้ตาย", seconds: 10, music: "bat_ben", afterReveal: false }, // bat_ben_skill3.mp4 ~8.92s
+    // ---------- เจ้าหญิงราก (เรียวกิ ชิกิ) (patch 2.2.7) ----------
+    // pshikiKill: สกิลติดตัว Mystical Eye of Death Perception (Truth) — สังหารทันทีสำเร็จตอนได้โจมตีปกติ
+    //  ยังไม่มีวีดีโอเฉพาะตัว (ผู้ใช้ยังไม่ได้ส่งมา) — ใช้วีดีโอสังหารของเรียวกิ ชิกิ ตัวเดียวกันไปก่อน
+    pshikiKill: { img: "/characters/princess_shiki/p_shiki_skill3.jpg", video: "/characters/shiki/shiki_skill3.2_hit.mp4", title: "ทุกอย่างจะต้องราบรื่น", label: "สังหารด้วยเนตรมณะ", seconds: 9, music: null, afterReveal: false },
   };
 };

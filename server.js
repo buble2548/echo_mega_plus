@@ -42,6 +42,9 @@ const {
   consumeEvadeStack,
   tickEvadeStacks,
 } = require("./characters/_universal_status");
+// "เนตรมณะ" (สถานะ Universal patch 2.2.7): โจมตีปกติมีโอกาสสังหารทันที — ตรรกะ predicate อยู่ไฟล์เดียวกัน
+//  แต่จุดโรลจริงอยู่ใน doAttack() ของไฟล์นี้ (ต้องใช้ cutscene/lastAttack/เฟสโจมตี)
+const { NETRAMANA_KILL_CHANCE, netramanaActive } = require("./characters/_universal_status");
 // ยูนะ — ไอดอลเอฟเฟกต์สนาม (ไม่ใช่ตัวละครที่เล่นได้ ไม่อยู่ใน CHARACTERS/CHAR_HOOKS — require ตรงๆ เหมือน _universal_status)
 const YunaMod = require("./characters/yuna");
 
@@ -375,6 +378,12 @@ function dayCycleIndex(n) {
   const block = m > 0 ? Math.floor((m - 1) / CYCLE_TURNS) : 0;
   return Math.floor(block / 2) + 1;
 }
+// patch 2.2.7: คืนที่กี่ของเกม (นับตามบล็อกวงจร ไม่ใช่จำนวนคืน) — ใช้เป็นคีย์ "1 ครั้งต่อ 1 คืน"
+//  ของสกิลติดตัวแบทแมน (อัศวินรัตติกาล) — เลื่อนตาม cycleShift เหมือน isNightRound เสมอ
+function nightCycleIndex(n) {
+  const m = n - cycleShift;
+  return m > 0 ? Math.floor((m - 1) / CYCLE_TURNS) : 0;
+}
 // patch 2.1.7: แต้มสกิลโบนัสตอนเช้า — แจกเฉพาะเช้าที่ 2, 4, 6, ... (เช้าที่ 1, 3, 5, ... ไม่มีโบนัส)
 function morningBonusActive(n) {
   const bardCycle = CHAR_HOOKS.bard.dimCycle(engine);
@@ -455,6 +464,10 @@ const SHIKI_WITHER_ATK_CAP = 5;  // ความตายที่โรยร�
 const SHIKI_PROFILE_IMG = "/characters/shiki/shiki.jpg";
 const SHIKI_DEATH_IMG = "/characters/shiki/shiki_death.jpg"; // ร่างระหว่างท่าไม้ตาย ฉันมองเห็นมันแล้ว
 const SHIKI_WITHER_IMG = "/characters/shiki/shiki2.jpg";     // ร่างระหว่างท่าไม้ตาย 2 ความตายที่โรยรา
+// เจ้าหญิงราก (patch 2.2.7): รูปที่ใช้บนป้ายสรุปการโจมตีตอน "เนตรมณะ" สังหารสำเร็จ (สถานะ Universal ใช้ร่วมทุกตัวละคร)
+const PSHIKI_ULT_IMG = "/characters/princess_shiki/p_shiki_skill3.jpg";
+// แบทแมน (patch 2.2.7): รูปที่ใช้บนป้ายสรุปการโจมตีตอนล่อเป้า/สะท้อนความเสียหาย
+const BAT_SKILL3_IMG = "/characters/bat_ben/bat_ben_skill3.jpg";
 // ---------- โทโนะ ชิกิ (patch 2.1.7) ----------
 // ค่าคงที่/logic ส่วนใหญ่ย้ายไปอยู่ characters/tohno.js แล้ว — เหลือแค่ภาพที่โค้ดส่วนกลาง (TRANSFORMS/displayImg) ยังใช้อยู่
 const TOHNO_DEATH_IMG = CHAR_HOOKS.tohno.DEATH_IMG; // ร่างระหว่างสกิลติดตัวเปิดใช้งาน (ระดับ 2 ขึ้นไป)
@@ -481,6 +494,10 @@ function hasKillCapability(p) {
   if (p.characterId === "tohno") return true;
   if (p.characterId === "nanaya") return true;
   if (p.characterId === "shiki" && (((p.statuses.deatheye || 0) > 0) || ((p.statuses.wither || 0) > 0))) return true;
+  // เจ้าหญิงราก (patch 2.2.7): สกิลติดตัวคิดโอกาสสังหารจากเส้นชีวิตเสมอเมื่อได้โจมตีปกติ
+  if (p.characterId === "princess_shiki") return true;
+  // "เนตรมณะ" (สถานะ Universal patch 2.2.7): ใครติดบัฟนี้ก็มีความสามารถสังหารทันทีระหว่างที่บัฟยังอยู่
+  if (netramanaActive(p)) return true;
   return false;
 }
 // Apple guy: หลบหลีกสำเร็จระหว่างชิวๆครับน้องๆ สามารถรอดพ้นจากสกิลประเภท "สังหารทันที" ได้ด้วย
@@ -535,11 +552,15 @@ const SHIKI_CANCELABLE_ULTS = ["gingastrium", "rachan", "paradise", "golden", "f
   "bloodDim", "soulDim",    // patch 2.0.8.1: มิติมายาบรรเลงทั้งสอง (คีตกวี) นับเป็นท่าไม้ตาย — ยกเลิกย้อนหลังได้
   "victorybeat", "ashen",   // patch 2.0.8.1: ท่าไม้ตายโอกูริ แคป ทั้งสองท่า
   "riddhentd", "riddheguard", // patch 2.0.9: ท่าไม้ตายริดดี้ มาร์เซนาส ทั้งสองท่า
-  "phenexNtd", "phenexTaunt"]; // patch 2.1.6: ท่าไม้ตายริต้า เบอร์นัล ทั้งสองท่า
+  "phenexNtd", "phenexTaunt", // patch 2.1.6: ท่าไม้ตายริต้า เบอร์นัล ทั้งสองท่า
+  "batTaunt",                 // patch 2.2.7: เข้ามาเลย (แบทแมน)
+  "pshikiUlt"];               // patch 2.2.7: ทุกอย่างจะต้องราบรื่น (เจ้าหญิงราก)
 // ชื่อท่าไม้ตายจาก status (ใช้ตอนยกเลิกย้อนหลัง — บางท่าไม่มีใน TRANSFORMS/ข้อมูลสกิล)
 function shikiUltNameOf(p, key) {
   if (key === "shradecharge") return "แด่เพื่อนรักของฉัน";
   if (key === "wither") return "ความตายที่โรยรา";
+  if (key === "batTaunt") return "เข้ามาเลย";
+  if (key === "pshikiUlt") return "ทุกอย่างจะต้องราบรื่น";
   if (key === "deatheye") return "ฉันมองเห็นมันแล้ว";
   if (key === "chill") return "ชิวๆครับน้องๆ";
   if (key === "bloodDim") return "มิติมายาบรรเลงโลหิต";
@@ -1129,6 +1150,22 @@ function activeSkillMusic() {
     }
   }
   if (bestBard) return bestBard;
+  // เข้ามาเลย (แบทแมน patch 2.2.7): เพลง bat_ben_theme เล่นค้างตลอดที่ล่อเป้าอยู่
+  let bestBat = null;
+  for (const p of alivePlayers()) {
+    if (p.characterId === "bat_ben" && (p.statuses.batTaunt || 0) > 0) {
+      if (!bestBat || (p.transformAt || 0) > bestBat.at) bestBat = { music: "bat_ben", at: p.transformAt || 0 };
+    }
+  }
+  if (bestBat) return bestBat;
+  // ทุกอย่างจะต้องราบรื่น (เจ้าหญิงราก patch 2.2.7): เพลง p_shiki_theme เล่นค้างระหว่างท่าไม้ตายทำงาน
+  let bestPShiki = null;
+  for (const p of alivePlayers()) {
+    if (p.characterId === "princess_shiki" && (p.statuses.pshikiUlt || 0) > 0) {
+      if (!bestPShiki || (p.transformAt || 0) > bestPShiki.at) bestPShiki = { music: "p_shiki", at: p.transformAt || 0 };
+    }
+  }
+  if (bestPShiki) return bestPShiki;
   // ฉันมองเห็นมันแล้ว / ความตายที่โรยรา (ชิกิ): เพลงประจำท่าเล่นค้างระหว่างท่าไม้ตายทำงาน
   let bestShiki = null;
   for (const p of alivePlayers()) {
@@ -1226,6 +1263,8 @@ function loseHp(p) {
   p.hp--; p.dmgHp++;
   // ไม่อยากให้ใครต้องเจ็บปวด (ริต้า เบอร์นัล, characters/phenex.js): ระหว่างล่อเป้า สะสม "ความเจ็บปวด" +1 ทุกๆ 1 หน่วยเลือดจริงที่เสียไป
   CHAR_HOOKS.phenex.onHpLost(p);
+  // เร้นเงา (แบทแมน, characters/bat_ben.js): เสียเลือดจริงเมื่อไหร่ เร้นเงาสลายทันที (กับดักไม่ทำงาน)
+  CHAR_HOOKS.bat_ben.onDamaged(engine, p);
   if (!linkMirror) {
     const b = linkedBuddyOf(p) || CHAR_HOOKS.kai.kaiLinkedBuddyOf(engine, p);
     if (b && !sealActive(b)) {
@@ -1242,6 +1281,8 @@ function loseArmor(p) {
   CHAR_HOOKS.hikaru.onArmorLost(engine, p);
   // ไม่อยากให้ใครต้องเจ็บปวด (ริต้า เบอร์นัล, characters/phenex.js): ระหว่างล่อเป้า สะสม "ความเจ็บปวด" +1 ทุกๆ 1 หน่วยเกราะที่เสียไป
   CHAR_HOOKS.phenex.onArmorLost(p);
+  // เร้นเงา (แบทแมน, characters/bat_ben.js): เสียเกราะก็นับเป็นได้รับความเสียหายเช่นกัน
+  CHAR_HOOKS.bat_ben.onDamaged(engine, p);
   if (!linkMirror) {
     const b = linkedBuddyOf(p) || CHAR_HOOKS.kai.kaiLinkedBuddyOf(engine, p);
     if (b && !sealActive(b) && b.armor > 0) {
@@ -1353,7 +1394,10 @@ function skillByStatus(p, status) {
 function shikiCancelUltimate(slayer, victim, skillName, skillImg) {
   delete slayer.statuses.godslay; // ใช้ได้ 1 ครั้งต่อการชาร์จ (สะสมไม่ได้)
   const t = TRANSFORMS.shikiSeal;
-  lastLog.push(`👁️🗡️ ${slayer.name} นายมีฝีมือแค่ไหนหรอ? — ยกเลิกท่าไม้ตาย ${skillName} ของ ${victim.name}! (แต้มสกิลเสียฟรี)`);
+  // เจ้าหญิงราก (patch 2.2.7): ชาร์จตัวเดียวกัน แต่ชื่อท่าเป็น "อย่าทำอะไรไม่เข้าท่าเลย" และยกเลิกสำเร็จได้ฮีล
+  const slayerSkillName = slayer.characterId === "princess_shiki" ? "อย่าทำอะไรไม่เข้าท่าเลย" : "นายมีฝีมือแค่ไหนหรอ?";
+  lastLog.push(`👁️🗡️ ${slayer.name} ${slayerSkillName} — ยกเลิกท่าไม้ตาย ${skillName} ของ ${victim.name}! (แต้มสกิลเสียฟรี)`);
+  CHAR_HOOKS.princess_shiki.onSealSuccess(engine, slayer);
   if (!victim.cutsceneShown.shikiSeal) {
     victim.cutsceneShown.shikiSeal = true; // ครั้งแรกของเจ้าของท่าคนนี้ = เล่นวีดีโอเต็ม
     cutsceneQueue.push({
@@ -1540,6 +1584,9 @@ function resetCombat(p) {
   p.hakunoLowDraw = false;        // ข้าขอบัญชา (หญิง): จั่วเพิ่มเทิร์นนี้ได้แค่ 2/3 แต้ม
   p.hakunoCommandUses = HAKUNO_COMMAND_USES; // อาคมบัญชาระดับ EX+: ใช้ได้ 3 ครั้งต่อเกม
   p.moonCellBackup = null;        // MOON*CELL: บัฟ/ดีบัฟที่ถูกล้างไว้ชั่วคราวของผู้เล่นอื่น (คืนให้ตอนหมดฤทธิ์)
+  // ---------- แบทแมน (เบน แอฟเฟล็ก) (patch 2.2.7) ----------
+  p.batNightSaveUsedAt = null; // อัศวินรัตติกาล: กันตายใช้ไปแล้วในคืนที่เท่าไหร่ (null = ยังไม่ใช้เลย)
+  p.batKarmaAsk = null;        // นายลืมของน่ะ: รอเลือกเป้าหมายส่งต่อความเสียหาย { dmg, from, options: [id] }
   p.cutsceneShown = {}; // เล่นวีดีโอครั้งเดียวต่อเกม (per match)
   // เลือด/เกราะเริ่มเกม: คำนวณหลังรีเซ็ต statuses/maxHpPenalty/hakunoGender แล้วเท่านั้น
   // (maxHpOf/maxArmorOf อ่านค่าพวกนี้ — คำนวณก่อนหน้านั้นจะติดค่าเก่าจากแมตช์ที่แล้ว)
@@ -1584,7 +1631,8 @@ function buildStateFor(viewerId) {
         (p.characterId === "shiki" && (p.statuses.deatheye || 0) > 0) ||
         (p.characterId === "tohno" && (p.tohnoLevel || 1) >= 2) ||
         (p.characterId === "nanaya" && p.nanayaEyeOn) ||
-        (p.characterId === "tepeu" && (p.tepeuEyeTurns || 0) > 0)
+        (p.characterId === "tepeu" && (p.tepeuEyeTurns || 0) > 0) ||
+        (p.characterId === "princess_shiki" && (p.statuses.pshikiUlt || 0) > 0)
       ))
       ? "eye" : null;
   // มิติมายาบรรเลง (Bard): ฉากหลังเปลี่ยนตามสายมิติ "blood" | "soul" | null
@@ -1623,6 +1671,15 @@ function buildStateFor(viewerId) {
       .map((o) => ({ id: o.id, name: o.name, color: POSITION_COLORS[o.position] || "#9B4F96", img: displayImg(o) }));
     if (options.length) phenexReleaseAsk = { pain: viewer.phenexReleaseAsk.pain, options };
   }
+  // แบทแมน: นายลืมของน่ะ — เลือกเป้าหมายส่งต่อความเสียหายที่รับไว้ (ทุกเฟส เหมือนของริต้า เบอร์นัล)
+  let batKarmaAsk = null;
+  if (viewer && viewer.batKarmaAsk) {
+    const options = viewer.batKarmaAsk.options
+      .map((id) => players[id])
+      .filter((o) => o && o.alive)
+      .map((o) => ({ id: o.id, name: o.name, color: POSITION_COLORS[o.position] || "#9B4F96", img: displayImg(o) }));
+    if (options.length) batKarmaAsk = { dmg: viewer.batKarmaAsk.dmg, options };
+  }
   // สมุดการ์ดกองกลาง: การ์ดทั้ง 43 ใบตามลำดับคงที่ + ใบไหนถูกจั่วไปแล้วในรอบนี้ (centralDeck สับใหม่ทุกรอบ — สมุดนี้จึงนับเฉพาะรอบปัจจุบัน)
   const remainingCardKeys = new Set(centralDeck.map(cardKey));
   const deckLedger = canonicalDeckCards().map((c) => ({ ...c, drawn: !remainingCardKeys.has(cardKey(c)) }));
@@ -1642,6 +1699,7 @@ function buildStateFor(viewerId) {
     renewAsk,      // คำถามต่อสัญญาที่รอเราตอบ (ชำระค่าบริการ)
     locaOffer,     // ข้อเสนอผลโลกากากาที่รอเราตอบ (ซาโตรุ)
     phenexReleaseAsk, // ริต้า เบอร์นัล: เลือกเป้าหมายปลดปล่อยความเจ็บปวด (ขอแค่ได้พบกันอีก)
+    batKarmaAsk,      // แบทแมน: เลือกเป้าหมายส่งต่อความเสียหาย (นายลืมของน่ะ)
     // นานายะ ชิกิ (patch 2.1.9): หัวใจฆาตกร — กำลังรอเลือกโจมตีซ้ำ/ยกเลิกอยู่ (เฉพาะผู้เล่นที่เป็นเจ้าของสิทธิ์นี้)
     nanayaReattack: !!(viewer && viewer.nanayaReattackReady && gameState === "ATTACK" && attackerId === viewer.id),
     gameState,
@@ -2263,6 +2321,10 @@ function dealRound() {
       lastLog.push(`💤 ${p.name} หลับไหลจากคำลวงของราชาภูติ — ขยับไม่ได้ (เหลืออีก ${p.statuses.sleep} เทิร์น)`);
     }
 
+    // ---------- แบทแมน (characters/bat_ben.js): เหรียญกลางคืน / ฟื้นเลือดจากเร้นเงา / ฟื้นเลือดจากเข้ามาเลย ----------
+    CHAR_HOOKS.bat_ben.onRoundStartTick(engine, p);
+    // ---------- เจ้าหญิงราก (characters/princess_shiki.js): แต้มสกิลฟื้นเองทุกเทิร์น ----------
+    CHAR_HOOKS.princess_shiki.onRoundStartTick(engine, p);
     // ---------- ฟุจิตะ โคโตเนะ (characters/kotone.js): Sleeping time / [เช้าที่สดใส] / ท่านประธานเซนะจัง / [โหมงานหนัก] สุ่มสตั้น ----------
     CHAR_HOOKS.kotone.onRoundStartTick(engine, p);
     // สตั้น (สถานะพื้นฐาน patch 2.0.8): ทำอะไรไม่ได้จนจบเทิร์นหรือจนกว่าดีบัฟจะหมดเวลา
@@ -2640,6 +2702,21 @@ function useSkill(id, tier, targets, item) {
     shikiLifelineTarget = CHAR_HOOKS.shiki.prepareLifelineTarget(engine, p, targets);
     if (!shikiLifelineTarget) return;
   }
+  // ---------- เจ้าหญิงราก (patch 2.2.7, characters/princess_shiki.js) ----------
+  const isPShikiSeal = p.characterId === "princess_shiki" && tier === "basic"; // อย่าทำอะไรไม่เข้าท่าเลย
+  let pshikiSealTarget = null;
+  if (isPShikiSeal) {
+    pshikiSealTarget = CHAR_HOOKS.princess_shiki.prepareSealTarget(engine, p, targets);
+    if (!pshikiSealTarget) return;
+  }
+  // อืม ฉันเข้าใจแล้ว (สกิลรอง): ชักดาบยังค้างอยู่ กดซ้ำไม่ได้ (ไม่งั้นเสียเลือด 3 ฟรี)
+  const isPShikiBlade = p.characterId === "princess_shiki" && tier === "secondary";
+  if (isPShikiBlade && !CHAR_HOOKS.princess_shiki.canCastBlade(p)) return;
+  // ---------- แบทแมน (patch 2.2.7, characters/bat_ben.js) ----------
+  const isBatStealth = p.characterId === "bat_ben" && tier === "basic";     // เร้นเงา
+  if (isBatStealth && !CHAR_HOOKS.bat_ben.canCastStealth(p)) return;        // ซ่อนอยู่แล้ว ต่ออายุหนีกับดักไม่ได้
+  const isBatKarma = p.characterId === "bat_ben" && tier === "secondary";   // นายลืมของน่ะ
+  if (isBatKarma && !CHAR_HOOKS.bat_ben.canCastKarma(p)) return;            // ยังตั้งรับอยู่/ยังไม่ได้เลือกส่งต่อ
   // ---------- บานาจ ลิงก์ (patch 2.1.2, characters/banagher.js): Absorb shield — เลือกเป้าหมาย 1 คน (เลือกตัวเองได้) ----------
   const isBanagherShield = p.characterId === "banagher" && tier === "basic";
   let banagherShieldTarget = null;
@@ -2862,6 +2939,16 @@ function useSkill(id, tier, targets, item) {
     flashSuffix = CHAR_HOOKS.satoru.applyLocaEffect(engine, p, locaTarget);
   }
 
+  // ---------- แบทแมน (characters/bat_ben.js) ----------
+  if (st === "batStealth") CHAR_HOOKS.bat_ben.activateStealth(engine, p);
+  if (st === "batKarma") CHAR_HOOKS.bat_ben.activateKarma(engine, p);
+  if (st === "batTaunt") CHAR_HOOKS.bat_ben.activateTaunt(engine, p);
+  // ---------- เจ้าหญิงราก (characters/princess_shiki.js) ----------
+  if (isPShikiSeal && pshikiSealTarget) {
+    flashSuffix = CHAR_HOOKS.princess_shiki.applySealEffect(engine, p, pshikiSealTarget, skill.name);
+  }
+  if (st === "pshikiBlade") CHAR_HOOKS.princess_shiki.activateBlade(engine, p);
+  if (st === "pshikiUlt") CHAR_HOOKS.princess_shiki.activateUlt(engine, p);
   // ---------- ชิกิ: ท่าไม้ตายทั้งสอง (characters/shiki.js) — เปิดเนตรมารแห่งความมรณะ / ความตายที่โรยรา ----------
   if (st === "deatheye") CHAR_HOOKS.shiki.activateDeatheye(engine, p);
   if (st === "wither") CHAR_HOOKS.shiki.activateWither(engine, p);
@@ -3283,6 +3370,14 @@ function resolveRound() {
       if (p.alive) resolveLoca(p, players[p.locaOffer], false, true);
       else p.locaOffer = null;
     }
+    // แบทแมน: นายลืมของน่ะ — ยังไม่เลือกเป้าหมายส่งต่อก่อนเปิดไพ่รอบถัดไป = สุ่มให้
+    if (p.batKarmaAsk) {
+      const ask = p.batKarmaAsk;
+      p.batKarmaAsk = null;
+      const options = ask.options.map((id) => players[id]).filter((o) => o && o.alive);
+      const target = options.length ? options[Math.floor(Math.random() * options.length)] : null;
+      CHAR_HOOKS.bat_ben.resolveKarmaSend(engine, p, target, ask.dmg);
+    }
     // ริต้า เบอร์นัล: ขอแค่ได้พบกันอีก — ยังไม่เลือกเป้าหมายก่อนเปิดไพ่รอบถัดไป = สุ่มให้
     if (p.phenexReleaseAsk) {
       const ask = p.phenexReleaseAsk;
@@ -3567,6 +3662,18 @@ function afterSummary() {
     endTurn();
     return;
   }
+  // แบทแมน (characters/bat_ben.js): ระหว่างเร้นเงา ออกจากเงามืดมาโจมตีไม่ได้
+  if (winner && winner.alive && CHAR_HOOKS.bat_ben.cannotAttack(winner)) {
+    lastLog.push(`🌑 ${winner.name} ยังเร้นเงาอยู่ — ไม่ออกมาจากความมืด ไม่มีเทิร์นโจมตี`);
+    endTurn();
+    return;
+  }
+  // เจ้าหญิงราก (characters/princess_shiki.js): สกิลติดตัว — โจมตีปกติไม่ได้เลย เว้นแต่ติด "ชักดาบ"
+  if (winner && winner.alive && CHAR_HOOKS.princess_shiki.cannotAttack(winner)) {
+    lastLog.push(`👁️ ${winner.name} ไม่ได้ชักดาบออกมา — ไม่มีเทิร์นโจมตี (สกิลติดตัว · ใช้สกิลรอง "อืม ฉันเข้าใจแล้ว" เพื่อโจมตีได้)`);
+    endTurn();
+    return;
+  }
   // DoomGuy (characters/doomguy.js) สกิลติดตัว: ปกติเสมอแต้มจะไม่มีเทิร์นโจมตี — มีโอกาส 60% ที่จะยังได้โจมตี
   const doomTieOverride = winner && winner.alive && roundTiedWin ? CHAR_HOOKS.doomguy.tryTieAttack(engine, winner) : false;
   if (winner && winner.alive && (!roundTiedWin || doomTieOverride)) {
@@ -3657,6 +3764,8 @@ function doAttack(byId, targetId) {
   if (!attacker || !target || !target.alive || target.id === attacker.id) return;
   if (sealActive(target)) return; // เรจูอาคมบัญชา (อมตะ): เลือกโจมตีไม่ได้
   if (attacker.characterId === "satoru" && !moonCellActive()) return; // ซาโตรุ (patch 2.0.8.2): โจมตีธรรมดาไม่ได้เลย (ยกเว้นระหว่าง MOON*CELL)
+  if (CHAR_HOOKS.bat_ben.cannotAttack(attacker)) return;              // แบทแมน (patch 2.2.7): ระหว่างเร้นเงา โจมตีไม่ได้
+  if (CHAR_HOOKS.princess_shiki.cannotAttack(attacker)) return;       // เจ้าหญิงราก (patch 2.2.7): โจมตีไม่ได้ เว้นแต่ติดชักดาบ
   // ไค ชิซากิ: โทสะระงับด้วยโทสะ — มีคู่ปรับ (kaiRival1/kaiRival2 ยังไม่หมด) บังคับเป้าหมายมีแค่คู่ปรับเท่านั้น
   if (attacker.kaiRivalId && ((attacker.statuses.kaiRival1 || 0) > 0 || (attacker.statuses.kaiRival2 || 0) > 0) && target.id !== attacker.kaiRivalId) return;
   clearPhaseTimer();
@@ -3681,6 +3790,17 @@ function doAttack(byId, targetId) {
       lastLog.push(`🥺 ไม่อยากให้ใครต้องเจ็บปวด — ${phenexTaunter.name} ล่อเป้า! การโจมตีของ ${attacker.name} ถูกดึงจาก ${target.name} มาที่ตัวเอง`);
       target = phenexTaunter;
       phenexTaunted = true;
+    }
+  }
+
+  // ---------- แบทแมน: เข้ามาเลย — ล่อเป้าการโจมตีของทุกคนมาที่ตัวเอง 5 เทิร์น ----------
+  let batTaunted = false;
+  {
+    const batTaunter = CHAR_HOOKS.bat_ben.findTaunter(engine, attacker);
+    if (batTaunter && target.id !== batTaunter.id) {
+      lastLog.push(`🦇 เข้ามาเลย — ${batTaunter.name} ล่อเป้า! การโจมตีของ ${attacker.name} ถูกดึงจาก ${target.name} มาที่ตัวเอง`);
+      target = batTaunter;
+      batTaunted = true;
     }
   }
 
@@ -3751,6 +3871,41 @@ function doAttack(byId, targetId) {
   // ---------- โทโนะ ชิกิ: Mystic eye of death perception (patch 2.1.7) — ย้ายไป characters/tohno.js ----------
   if (attacker.characterId === "tohno") {
     if (CHAR_HOOKS.tohno.onAttack(engine, attacker, target)) return;
+  }
+
+  // ---------- เจ้าหญิงราก: Mystical Eye of Death Perception (Truth) (characters/princess_shiki.js) ----------
+  //  ได้โจมตีปกติเมื่อไหร่ (ผ่าน "ชักดาบ") คิดโอกาสสังหารจากเส้นชีวิตที่อยู่บนตัวเป้าหมาย (1 หน่วย = 10%)
+  if (attacker.characterId === "princess_shiki") {
+    if (CHAR_HOOKS.princess_shiki.onAttackDeathline(engine, attacker, target)) return;
+  }
+
+  // ---------- "เนตรมณะ" (สถานะ Universal patch 2.2.7 — เจ้าหญิงราก "ทุกอย่างจะต้องราบรื่น") ----------
+  //  ใครก็ตามที่ติดบัฟนี้ โจมตีปกติแล้วมีโอกาสสังหารเป้าหมายทันที 20% (คิดแยกจาก/หลังเนตรของแต่ละตัวละคร)
+  if (netramanaActive(attacker) && !killSealed(attacker)) {
+    const netraChance = miyakoKillChance(target, NETRAMANA_KILL_CHANCE);
+    if (Math.random() < netraChance) {
+      if (appleGuyDodgesKill(attacker, target)) return; // Apple guy: หลบสังหารทันทีได้
+      queueCutscene(attacker, "pshikiKill"); // เล่นวีดีโอก่อนสังหารทุกครั้ง
+      instantDeath(target);
+      target.wasAttacked = true;
+      if (!target.alive) lastLog.push(`👁️✨💀 เนตรมณะ — ${attacker.name} มองทะลุความตายของ ${target.name} (โอกาส ${Math.round(netraChance * 100)}%) — สังหารทันที!`);
+      else lastLog.push(`👁️✨💀 เนตรมณะ — ${attacker.name} มองทะลุความตายของ ${target.name} — แต่ ${target.name} เกิดใหม่หนีความตายไปได้!`);
+      lastAttack = {
+        id: ++attackSeq,
+        byName: attacker.name, byImg: displayImg(attacker), byColor: POSITION_COLORS[attacker.position] || "#888",
+        byDoomWeapon: attacker.characterId === "doomguy" ? attacker.doomWeapon : undefined,
+        targetName: target.name, targetImg: displayImg(target), targetColor: POSITION_COLORS[target.position] || "#888",
+        dmg: 0, kill: !target.alive,
+        skills: [{ name: "เนตรมณะ — สังหารทันที", img: PSHIKI_ULT_IMG, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888", side: "atk" }],
+      };
+      runCutsceneQueue(() => {
+        gameState = "ATTACKING";
+        startPhaseTimer(ATTACKFX_TIME + 2, endTurn);
+        broadcastState();
+      });
+      return;
+    }
+    miyakoSurvivedKillAttempt(target);
   }
 
   // ---------- นานายะ ชิกิ: Mystic eye of death perception (characters/nanaya.js) ----------
@@ -3863,6 +4018,10 @@ function doAttack(byId, targetId) {
 
   // ---------- ริต้า เบอร์นัล (characters/phenex.js): ฝันไปเถอะ — ตั้งรับ สะท้อนความเสียหายทั้งหมดกลับผู้โจมตีแทนที่จะรับเอง ----------
   if (CHAR_HOOKS.phenex.tryReflectHit(engine, attacker, target, dmg)) return;
+
+  // ---------- แบทแมน (characters/bat_ben.js): นายลืมของน่ะ — ดูดซับความเสียหายทั้งก้อนไว้ แล้วรอเลือกส่งต่อ ----------
+  //  ต้องอยู่ก่อนการลงความเสียหายจริงเสมอ (ทั้งตัวแบทแมนและผู้โจมตีจะไม่เจ็บ — เข้ามาเลยจึงไม่สะท้อนด้วย)
+  if (CHAR_HOOKS.bat_ben.tryKarmaAbsorb(engine, attacker, target, dmg)) return;
 
   // ลำแสงสโตเรียม (ฮิคารุ patch 2.1.3): เล่นวีดีโอก่อนสรุปผลความเสียหาย
   if (storiumAtk) {
@@ -4001,6 +4160,12 @@ function doAttack(byId, targetId) {
   if (miyakoHealAtk) CHAR_HOOKS.miyako.applyHealOnHit(engine, attacker);
   // เทเปา (characters/tepeu.js): การโจมตีปกติมอบสถานะ "เส้นชีวิต" ให้เป้าหมาย +1 เสมอ (ไม่ต้องติดครุ่นคิดก็ได้)
   CHAR_HOOKS.tepeu.grantDeathlineOnAttack(engine, attacker, target);
+  // เจ้าหญิงราก (characters/princess_shiki.js): สกิลติดตัว — ใครลงมือโจมตีเธอ คนนั้นติดเส้นชีวิต +1 ถาวร (สูงสุด 3)
+  CHAR_HOOKS.princess_shiki.grantDeathlineOnAttacked(engine, attacker, target);
+  // เจ้าหญิงราก: "ชักดาบ" ได้โจมตีจริงแล้ว -> ฟื้นพลังชีวิต +2
+  const pshikiBladeHeal = CHAR_HOOKS.princess_shiki.applyBladeHeal(engine, attacker);
+  // แบทแมน (characters/bat_ben.js): เข้ามาเลย — ความเสียหายที่ลงกับแบทแมน เกิดกับผู้โจมตีด้วยเท่ากัน
+  const batReflectDmg = CHAR_HOOKS.bat_ben.applyTauntReflect(engine, attacker, target, dmg);
   // หอกแห่งแคสเซียส (เอวา 13 patch 2.2 alpha, characters/eva13.js): การโจมตีปกติฟื้นเลือดตามความเสียหายที่ทำได้ — ใช้แล้วหมดไป
   CHAR_HOOKS.eva13.onAttackConsumeCassius(engine, attacker, dmg);
   // ย๊ากก! (อาริมะ มิยาโกะ patch 2.2.1 alpha): พลังโจมตี +1 ต่อการโจมตี — ถ้าใช้ร่วมกับเพลงหมัดอาริมะ
@@ -4159,6 +4324,9 @@ function doAttack(byId, targetId) {
   if (riddheAvAtk) addFx({ name: "อย่าทิ้งฉันไป +1 (ถาวร)", img: RIDDHE_NTD2_IMG, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
   if (riddheTaunted) addFx({ name: "Absorb Shield (ล่อเป้ามาที่ตัวเอง)", img: "/characters/riddhe/skill1/banshee_skill1.webp", by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
   if (phenexTaunted) addFx({ name: "ไม่อยากให้ใครต้องเจ็บปวด (ล่อเป้ามาที่ตัวเอง)", img: PHENEX_NTD_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
+  if (batTaunted) addFx({ name: "เข้ามาเลย (ล่อเป้ามาที่ตัวเอง)", img: BAT_SKILL3_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
+  if (batReflectDmg > 0) addFx({ name: `เข้ามาเลย — ความเสียหายเกิดกับผู้โจมตีด้วย -${batReflectDmg}`, img: BAT_SKILL3_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
+  if (pshikiBladeHeal > 0) addFx({ name: `อืม ฉันเข้าใจแล้ว (ฟื้นเลือด +${pshikiBladeHeal})`, img: "/characters/princess_shiki/p_shiki_skill1.jpg", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
 
   // อนิเมชันบอกว่าใครตีใคร
   lastAttack = {
@@ -4288,6 +4456,11 @@ function endTurn() {
         if (k === "ksleep" && p.characterId === "kotone") {
           CHAR_HOOKS.kotone.onSleepExpire(p);
           lastLog.push(`🌅 ${p.name} ตื่นนอนอย่างสดชื่น — ได้รับ [เช้าที่สดใส] 3 เทิร์น (แต้มสกิล +1 และโล่ +1 ทุกเทิร์น)`);
+        }
+        // เร้นเงาหมดเวลาเอง (แบทแมน patch 2.2.7, characters/bat_ben.js): เล่นวีดีโอ -> ระเบิดใส่ทุกคน + ใบ้สกิลคนอื่น
+        //  (โดนความเสียหายระหว่างทางจะสลายไปก่อนถึงตรงนี้ ผ่าน onDamaged() ใน loseHp/loseArmor — กับดักไม่ทำงาน)
+        if (k === "batStealth" && p.characterId === "bat_ben") {
+          CHAR_HOOKS.bat_ben.onStealthExpire(engine, p);
         }
         // ความตายที่โรยราหมดเวลา (ชิกิ patch 2.0.6.1): ลบเส้นชีวิตส่วนที่ท่าไม้ตายแจกไปออกจากทุกคน
         if (k === "wither" && p.characterId === "shiki") {
@@ -4752,6 +4925,30 @@ io.on('connection', (socket) => {
       broadcastState();
     }
   });
+  // แบทแมน: นายลืมของน่ะ — เลือกเป้าหมายส่งต่อความเสียหายที่รับไว้ (ตอบได้ทุกเฟส เหมือน phenexRelease)
+  onPlayerEvent(socket, 'batKarmaSend', (playerId, { targetId } = {}) => {
+    const p = players[playerId];
+    if (!p || !p.batKarmaAsk) return;
+    const ask = p.batKarmaAsk;
+    p.batKarmaAsk = null;
+    const options = ask.options.map((id) => players[id]).filter((o) => o && o.alive);
+    const target = options.find((o) => o.id === targetId) || null;
+    CHAR_HOOKS.bat_ben.resolveKarmaSend(engine, p, target, ask.dmg);
+    // คำตอบมาแบบ async นอกรอบปกติ — ต้องเล่นวีดีโอที่ค้างคิวโดยไม่ทำลาย gameState/ตัวจับเวลาของเฟสปัจจุบัน
+    //  (เหตุผลเดียวกับ phenexRelease ด้านบน — เรียก runCutsceneQueue ตรงๆ จะทำให้เกมค้างที่เฟส CUTSCENE)
+    if (cutsceneQueue.length) {
+      const resumeState = gameState;
+      const resumeSeconds = Math.max(3, timeLeft);
+      const resumeOnExpire = currentPhaseOnExpire;
+      runCutsceneQueue(() => {
+        gameState = resumeState;
+        if (resumeOnExpire) startPhaseTimer(resumeSeconds, resumeOnExpire);
+        broadcastState();
+      });
+    } else {
+      broadcastState();
+    }
+  });
   onPlayerEvent(socket, 'allyAnswer', (id, { accept } = {}) => answerAllyOffer(id, !!accept), 4);
   onPlayerEvent(socket, 'allyBreakAnswer', (id, { cancel } = {}) => answerAllyBreak(id, !!cancel), 4);
   onPlayerEvent(socket, 'allyFinalAnswer', (id, { keep } = {}) => answerAllyFinal(id, !!keep), 4);
@@ -4909,6 +5106,10 @@ const engine = {
   doAttack,
   alivePlayers,
   isNightRound,
+  nightCycleIndex,
+  GOLD_MAX,
+  NETRAMANA_KILL_CHANCE,
+  netramanaActive,
   statusAmtOf,
   calculateScore,
   applyBuff,

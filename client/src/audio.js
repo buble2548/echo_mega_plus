@@ -83,6 +83,10 @@ const FILES = {
   all_around: "/characters/takumi/all_around.mp3",
   secret_love: "/characters/takumi/secret_love.mp3",
   forever: "/characters/takumi/forever.mp3",
+  // แบทแมน (เบน แอฟเฟล็ก) patch 2.2.7: เพลงระหว่างท่าไม้ตาย "เข้ามาเลย" ทำงาน (ล่อเป้า 5 เทิร์น)
+  bat_ben: "/characters/bat_ben/bat_ben_theme.mp3",
+  // เจ้าหญิงราก (เรียวกิ ชิกิ) patch 2.2.7: เพลงระหว่างท่าไม้ตาย "ทุกอย่างจะต้องราบรื่น" ทำงาน
+  p_shiki: "/characters/princess_shiki/p_shiki_theme.m4a",
   action_button: "/effect_sound/action_button.wav",
   trun_change: "/effect_sound/trun_change.wav",
   attack: "/effect_sound/attack.wav",

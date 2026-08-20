@@ -76,6 +76,7 @@ characters.js          roster ตัวละคร (id/ชื่อ/รูป�
 characters/             โค้ดเอฟเฟกต์/พาสซีฟจริงของแต่ละตัวละคร แยกไฟล์ต่อคน (server.js require ผ่าน characters/index.js)
   index.js              รวม CHAR_HOOKS — ทุกตัวละครต้องลงทะเบียนที่นี่
   _universal_status.js  ระบบบัฟ/ดีบัฟกลางที่ตัวละครไหนก็ใช้ร่วมกันได้ (ไม่ใช่ตัวละคร ไม่มี id)
+                        เช่น เสริมพลัง/คุ้มครอง/ต้านสถานะผิดปกติ/หลบหลีก/ลุกไหม้/เนตรมณะ (โอกาสสังหาร 20%)
   <characterId>.js      เอฟเฟกต์สกิล/พาสซีฟของตัวละครนั้นๆ ← แก้ตัวละครที่นี่
 tests/                  test suite — `npm test` (Node built-in test runner, ไม่ต้องติดตั้ง dependency เพิ่ม)
 package.json            สคริปต์ start / build / client / test
