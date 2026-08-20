@@ -1264,8 +1264,6 @@ function loseHp(p) {
   p.hp--; p.dmgHp++;
   // ไม่อยากให้ใครต้องเจ็บปวด (ริต้า เบอร์นัล, characters/phenex.js): ระหว่างล่อเป้า สะสม "ความเจ็บปวด" +1 ทุกๆ 1 หน่วยเลือดจริงที่เสียไป
   CHAR_HOOKS.phenex.onHpLost(p);
-  // เร้นเงา (แบทแมน, characters/bat_ben.js): เสียเลือดจริงเมื่อไหร่ เร้นเงาสลายทันที (กับดักไม่ทำงาน)
-  CHAR_HOOKS.bat_ben.onDamaged(engine, p);
   if (!linkMirror) {
     const b = linkedBuddyOf(p) || CHAR_HOOKS.kai.kaiLinkedBuddyOf(engine, p);
     if (b && !sealActive(b)) {
@@ -1282,8 +1280,6 @@ function loseArmor(p) {
   CHAR_HOOKS.hikaru.onArmorLost(engine, p);
   // ไม่อยากให้ใครต้องเจ็บปวด (ริต้า เบอร์นัล, characters/phenex.js): ระหว่างล่อเป้า สะสม "ความเจ็บปวด" +1 ทุกๆ 1 หน่วยเกราะที่เสียไป
   CHAR_HOOKS.phenex.onArmorLost(p);
-  // เร้นเงา (แบทแมน, characters/bat_ben.js): เสียเกราะก็นับเป็นได้รับความเสียหายเช่นกัน
-  CHAR_HOOKS.bat_ben.onDamaged(engine, p);
   if (!linkMirror) {
     const b = linkedBuddyOf(p) || CHAR_HOOKS.kai.kaiLinkedBuddyOf(engine, p);
     if (b && !sealActive(b) && b.armor > 0) {
@@ -4477,8 +4473,8 @@ function endTurn() {
           CHAR_HOOKS.kotone.onSleepExpire(p);
           lastLog.push(`🌅 ${p.name} ตื่นนอนอย่างสดชื่น — ได้รับ [เช้าที่สดใส] 3 เทิร์น (แต้มสกิล +1 และโล่ +1 ทุกเทิร์น)`);
         }
-        // เร้นเงาหมดเวลาเอง (แบทแมน patch 2.2.7, characters/bat_ben.js): เล่นวีดีโอ -> ระเบิดใส่ทุกคน + ใบ้สกิลคนอื่น
-        //  (โดนความเสียหายระหว่างทางจะสลายไปก่อนถึงตรงนี้ ผ่าน onDamaged() ใน loseHp/loseArmor — กับดักไม่ทำงาน)
+        // เร้นเงาหมดเวลา (แบทแมน patch 2.2.7, characters/bat_ben.js): เล่นวีดีโอ -> ระเบิดใส่ทุกคน + ใบ้สกิลคนอื่น
+        //  patch 2.2.7.1: ทำงานเสมอเมื่อครบ 3 เทิร์น — โดนโจมตีระหว่างทางไม่ทำให้สถานะหลุดอีกแล้ว
         if (k === "batStealth" && p.characterId === "bat_ben") {
           CHAR_HOOKS.bat_ben.onStealthExpire(engine, p);
         }
