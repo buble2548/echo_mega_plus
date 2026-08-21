@@ -11,7 +11,6 @@ test.beforeEach(() => {
   engine.setUncleShopItems([]);
   engine.setGameState('PLAYING');
   engine.setRoundNumber(1);
-  engine.resetGutsCutscenes(); // วีดีโอกระสุนเล่นครั้งเดียวต่อเกม — ต้องรีเซ็ตไม่ให้เทสต์ก่อนหน้ากินโควตา
 });
 test.afterEach(() => engine.clearPhaseTimer()); // คัตซีนที่เกิดจากการยิงจริงจะตั้ง interval ค้างไว้
 
@@ -166,7 +165,25 @@ test('useInventoryItem: ยิงไม่ผ่านเงื่อนไข =
   assert.equal(p.gutsShotTurn, engine.roundNumber);
 });
 
-test('วีดีโอกระสุนแบบเดิมเล่นครั้งเดียวต่อเกม — ครั้งที่ 2 ไม่ตัดเข้าคัตซีน และผลเกิดทันที', () => {
+test('วีดีโอกระสุนนับแยกรายคน — คนที่ 2 ที่ยิงกระสุนแบบเดียวกันยังได้ดูวีดีโอของตัวเอง', () => {
+  const a = mkPlayer();
+  const b = mkPlayer();
+  const t = mkPlayer({ armor: 3 });
+  giveGun(a); giveGun(b);
+  const ammoA = giveAmmo(a, 'thunder');
+  const ammoB = giveAmmo(b, 'thunder');
+
+  engine.useInventoryItem(a.id, ammoA.uid, { targetId: t.id });
+  assert.equal(engine.gameState, 'CUTSCENE');
+  engine.clearPhaseTimer();
+  engine.setGameState('PLAYING');
+
+  engine.useInventoryItem(b.id, ammoB.uid, { targetId: t.id }); // คนละคน = ยังได้วีดีโอ
+  assert.equal(engine.gameState, 'CUTSCENE');
+  engine.clearPhaseTimer();
+});
+
+test('วีดีโอกระสุนแบบเดิมเล่นครั้งเดียวต่อเกมต่อคน — นัดที่ 2 ของคนเดิมไม่ตัดเข้าคัตซีน และผลเกิดทันที', () => {
   const p = mkPlayer();
   const t = mkPlayer({ armor: 3 });
   giveGun(p);

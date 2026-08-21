@@ -764,7 +764,6 @@ let allyWinFlag = false;  // ริดดี้ (patch 2.0.9): จบเกม�
 let shopItems = [];       // ร้านค้ามายา (patch 2.2 full): สินค้าส่วนกลางของรอบปัจจุบัน (สูงสุด 9 ชิ้น เปิดทุก 5 เทิร์น)
 let shopRoundSeq = 0;     // ลำดับรอบร้านค้า (ใช้สร้าง id สินค้าไม่ให้ซ้ำกันข้ามรอบ — ใช้ร่วมกันทั้ง 2 ร้าน)
 let uncleShopItems = [];  // ร้านขายของลุงเท่ง: สินค้าส่วนกลางของรอบปัจจุบัน (รีพร้อมร้านค้ามายา)
-let gutsCutsceneShown = {}; // กระสุน GUTS Select: วีดีโอเต็มจอของกระสุนแต่ละแบบเล่นครั้งเดียวต่อเกม (ทั้งโต๊ะ ไม่ใช่ต่อคน)
 
 // ---------- ยูนะ ไอดอลประจำสนาม (characters/yuna.js — ไม่ใช่ตัวละครที่เล่นได้ ไม่มี p เป็นของตัวเอง) ----------
 const YUNA_IMG = "/characters/yuna/yuna.png";
@@ -2033,7 +2032,6 @@ function startMatch() {
   yunaLongingUsed = false; yunaWindowEnd = 0; yunaEffect = null; yunaTargetId = null; yunaMusicSeq = 0; yunaLongingPendingId = null; yunaPity = 0;
   allyWinFlag = false;
   shopItems = []; uncleShopItems = []; // ล้างสต็อกร้านค้าเก่าค้างจากแมตช์ก่อน (รอเปิดใหม่ตอนเทิร์นที่ 5)
-  gutsCutsceneShown = {}; // วีดีโอกระสุนเล่นได้ใหม่ครั้งละ 1 รอบต่อแมตช์
   kaiOverhaulSlots = []; // ไค ชิซากิ: ล้าง tracker Overhaul ทุกครั้งที่เริ่มแมตช์ใหม่
   // อาริมะ มิยาโกะ (characters/miyako.js): เจอ โทโนะ ชิกิ หรือ นานายะ ชิกิ ในเกมเดียวกัน -> เล่นวีดีโอ arima_shiki.mp4 ก่อนเริ่มเทิร์นแรก
   cutsceneQueue = [];
@@ -2170,10 +2168,11 @@ function useInventoryItem(id, uid, opts = {}) {
     if (!target) return; // ยิงไม่ได้ = ไม่เสียกระสุน
     p.gutsShotTurn = roundNumber; // 1 นัดต่อเทิร์น — จองไว้ตั้งแต่ตอนกด กันยิงซ้ำระหว่างวีดีโอเล่นอยู่
     lastLog.push(`🔫 ${p.name} ยิง ${GUTS_AMMO[item.ammo].name} ใส่ ${target.name}!`);
-    // วีดีโอเต็มจอของกระสุนแต่ละแบบเล่นครั้งเดียวต่อเกม — ครั้งต่อไปเป็นการ์ดแจ้งเตือนเล็ก ไม่หยุดกระดาน
+    // วีดีโอเต็มจอของกระสุนแต่ละแบบเล่นครั้งเดียวต่อเกม "ต่อผู้ยิงแต่ละคน" (เก็บใน p.cutsceneShown เหมือน
+    //  วีดีโอแปลงร่างของตัวละคร — รีเซ็ตทุกแมตช์ใหม่ใน resetCombat) ครั้งต่อไปเป็นการ์ดแจ้งเตือนเล็ก ไม่หยุดกระดาน
     const key = GUTS_AMMO[item.ammo].cut;
-    if (gutsCutsceneShown[key]) notifyTransform(p, key);
-    else { gutsCutsceneShown[key] = true; cutsceneKey = key; }
+    if (p.cutsceneShown[key]) notifyTransform(p, key);
+    else { p.cutsceneShown[key] = true; cutsceneKey = key; }
     pendingShot = { item, target };
   } else {
     return;
@@ -5283,7 +5282,6 @@ const engine = {
   setShopItems(v) { shopItems = v; },
   get uncleShopItems() { return uncleShopItems; },
   setUncleShopItems(v) { uncleShopItems = v; },
-  resetGutsCutscenes() { gutsCutsceneShown = {}; },
   NETRAMANA_KILL_CHANCE,
   netramanaActive,
   statusAmtOf,
