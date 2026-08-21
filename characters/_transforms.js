@@ -188,5 +188,12 @@ module.exports = function buildTransforms(img) {
     // pshikiKill: สกิลติดตัว Mystical Eye of Death Perception (Truth) — สังหารทันทีสำเร็จตอนได้โจมตีปกติ
     //  ยังไม่มีวีดีโอเฉพาะตัว (ผู้ใช้ยังไม่ได้ส่งมา) — ใช้วีดีโอสังหารของเรียวกิ ชิกิ ตัวเดียวกันไปก่อน
     pshikiKill: { img: "/characters/princess_shiki/p_shiki_skill3.jpg", video: "/characters/shiki/shiki_skill3.2_hit.mp4", title: "ทุกอย่างจะต้องราบรื่น", label: "สังหารด้วยเนตรมณะ", seconds: 9, music: null, afterReveal: false },
+    // ---------- ปืนหน่วย GUTS Select (ร้านขายของลุงเท่ง) ----------
+    //  ไม่ใช่ของตัวละครไหน — เป็นไอเทมที่ใครซื้อก็ยิงได้ เล่นวีดีโอทุกครั้งที่ยิง (queueCutscene ตรงๆ ไม่ผ่าน triggerCutscene)
+    //  seconds วัดจาก mvhd atom จริง (+buffer ~0.5-1 วิ กันตัดก่อนจบ)
+    gutsShockwave: { img: "/item/guts_key/gomora_key.webp",    video: "/item/guts_key/shockwave_boost.mp4",    title: "SHOCKWAVE BULLET",   label: "ยิงปืนหน่วย GUTS Select", seconds: 10, music: null, afterReveal: false }, // shockwave_boost.mp4 ~9.51s
+    gutsGargorgon: { img: "/item/guts_key/gargorgon_key.webp", video: "/item/guts_key/gargorgon_ray.mp4",      title: "GARGORGON RAY",      label: "ยิงปืนหน่วย GUTS Select", seconds: 8,  music: null, afterReveal: false }, // gargorgon_ray.mp4 ~7.67s
+    gutsThunder:   { img: "/item/guts_key/eleking_key.webp",   video: "/item/guts_key/thunder_boost.mp4",      title: "THUNDER BULLET",     label: "ยิงปืนหน่วย GUTS Select", seconds: 6,  music: null, afterReveal: false }, // thunder_boost.mp4 ~5.38s
+    gutsNurse:     { img: "/item/guts_key/nurse_key.webp",     video: "/item/guts_key/nursedessei_cannon.mp4", title: "NURSEDESSEI CANNON", label: "ยิงปืนหน่วย GUTS Select", seconds: 15, music: null, afterReveal: false }, // nursedessei_cannon.mp4 ~14.40s
   };
 };

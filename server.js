@@ -70,6 +70,8 @@ const staticDir = useReact ? clientDist : path.join(__dirname, "public");
 const ASSET_BASE_URL = process.env.ASSET_BASE_URL; // เช่น https://pub-xxxx.r2.dev
 if (ASSET_BASE_URL) {
   app.get("/characters/*", (req, res) => res.redirect(302, ASSET_BASE_URL + req.path));
+  // ไฟล์ไอเทม (ปืนหน่วย GUTS Select + คีย์/วีดีโอกระสุน) เก็บที่เดียวกัน — /item/... บน R2
+  app.get("/item/*", (req, res) => res.redirect(302, ASSET_BASE_URL + req.path));
 }
 
 app.use(express.static(staticDir, {
@@ -122,6 +124,22 @@ const SHOP_SKILL_SIZES = [
   { size: "medium", amount: 4, price: 6 },
   { size: "large", amount: 6, price: 10 },
 ];
+// ---------- ร้านขายของลุงเท่ง + ปืนหน่วย GUTS Select ----------
+// ร้านที่ 2 สลับเข้าจากแถบในหน้าร้านค้า — รีสต็อกพร้อมร้านค้ามายาทุกๆ SHOP_INTERVAL_TURNS เทิร์น
+// ปืนเป็นไอเทมถาวร (มีได้กระบอกเดียว) กระสุนซื้อแยกอิสระ แต่ยิงไม่ได้ถ้าไม่มีปืน — ยิงได้ 1 นัด/เทิร์น ช่วงจั่วไพ่เท่านั้น
+const ITEM_BASE = "/item";
+const UNCLE_SHOP_MAX_ITEMS = 9;   // จำนวนสินค้าต่อรอบ (เท่าร้านค้ามายา)
+const GUTS_GUN_PRICE = 15;
+const GUTS_GUN_CHANCE = 0.30;     // 30% ออกปืน / 70% ออกกระสุน (เฉลี่ยเท่ากันทุกแบบ = 17.5% ต่อแบบ)
+const GUTS_CHAA_TURNS = 2;       // Thunder Bullet: สภาพชาคงอยู่ 2 เทิร์น
+const GUTS_NURSE_DMG = 4;         // Nursedessei Cannon: ดาเมจ (ลดเกราะก่อน)
+const GUTS_AMMO = {
+  shockwave: { id: "shockwave", name: "Shockwave Bullet",   price: 5,  img: `${ITEM_BASE}/guts_key/gomora_key.webp`,    cut: "gutsShockwave" },
+  gargorgon: { id: "gargorgon", name: "Gargorgon Ray",      price: 5,  img: `${ITEM_BASE}/guts_key/gargorgon_key.webp`, cut: "gutsGargorgon" },
+  thunder:   { id: "thunder",   name: "Thunder Bullet",     price: 5,  img: `${ITEM_BASE}/guts_key/eleking_key.webp`,   cut: "gutsThunder" },
+  nurse:     { id: "nurse",     name: "Nursedessei Cannon", price: 10, img: `${ITEM_BASE}/guts_key/nurse_key.webp`,     cut: "gutsNurse", breaksGun: true },
+};
+const GUTS_AMMO_IDS = Object.keys(GUTS_AMMO);
 // ---------- DoomGuy (patch 2.2 full) ----------
 const DOOM_BASE = "/characters/doomguy";
 const DOOM_WEAPONS = {
@@ -743,7 +761,8 @@ let lastAttack = null;    // ข้อมูลการโจมตีล่า
 let roundSkills = [];     // สกิลที่ใช้ในรอบ (เก็บประวัติ — instant เด้งตอนใช้ / หลังเปิดไพ่โชว์ตอนโจมตี)
 let allyWinFlag = false;  // ริดดี้ (patch 2.0.9): จบเกมแบบชนะทั้งคู่ (คงพันธมิตรตอนเหลือแค่คู่พันธมิตร)
 let shopItems = [];       // ร้านค้ามายา (patch 2.2 full): สินค้าส่วนกลางของรอบปัจจุบัน (สูงสุด 9 ชิ้น เปิดทุก 5 เทิร์น)
-let shopRoundSeq = 0;     // ลำดับรอบร้านค้า (ใช้สร้าง id สินค้าไม่ให้ซ้ำกันข้ามรอบ)
+let shopRoundSeq = 0;     // ลำดับรอบร้านค้า (ใช้สร้าง id สินค้าไม่ให้ซ้ำกันข้ามรอบ — ใช้ร่วมกันทั้ง 2 ร้าน)
+let uncleShopItems = [];  // ร้านขายของลุงเท่ง: สินค้าส่วนกลางของรอบปัจจุบัน (รีพร้อมร้านค้ามายา)
 
 // ---------- ยูนะ ไอดอลประจำสนาม (characters/yuna.js — ไม่ใช่ตัวละครที่เล่นได้ ไม่มี p เป็นของตัวเอง) ----------
 const YUNA_IMG = "/characters/yuna/yuna.png";
@@ -1458,7 +1477,9 @@ function resetCombat(p) {
   if (p.characterId === "eva13") p.statuses.rsHopper = EVA13_RSHOPPER_MAX; // RS-Hopper: เริ่มเกมเต็ม 3 ชาร์จ
   // ---------- ร้านค้ามายา + เศรษฐกิจเหรียญ (patch 2.2 full) ----------
   p.gold = 0;        // เหรียญสะสม (เพดาน 30)
-  p.inventory = [];  // ของที่ซื้อจากร้านค้ามายา รอใช้
+  p.inventory = [];  // ของที่ซื้อจากร้านค้า รอใช้ (รวมปืนหน่วย GUTS Select — หายทุกแมตช์ใหม่)
+  p.gutsShotTurn = 0;              // ปืนหน่วย GUTS Select: เทิร์นล่าสุดที่ยิงไป (1 นัด/เทิร์น)
+  p.gutsGargorgonPending = false;  // Gargorgon Ray: รอแปลงเป็นสตั้นตอนต้นเทิร์นถัดไป
   // ---------- DoomGuy (patch 2.2 full) ----------
   if (p.characterId === "doomguy") p.doomWeapon = DOOM_STARTING_WEAPON; // เริ่มเกมได้ Combat Shotgun เสมอ
   p.doomQuickSwapUsed = false; // Quick Swap: 1 ครั้งต่อเทิร์น
@@ -1719,6 +1740,7 @@ function buildStateFor(viewerId) {
     attack: gameState === "ATTACKING" ? lastAttack : null,
     log: (gameState === "SUMMARY" || gameState === "TRANSITION" || gameState === "GAMEOVER") ? lastLog : [],
     shop: shopItems, // ร้านค้ามายา (patch 2.2 full): สินค้าส่วนกลาง เห็นเหมือนกันทุกคน
+    uncleShop: uncleShopItems, // ร้านขายของลุงเท่ง: สินค้าส่วนกลาง (แถบที่ 2 ในหน้าร้านค้า)
     deckLedger, // สมุดการ์ด 43 ใบ + สถานะจั่วแล้ว/ยัง (ของรอบปัจจุบัน) — กดที่กองการ์ดกลางเพื่อดู
     players: Object.values(players).map((p) => {
       const mine = p.id === viewerId;
@@ -1837,6 +1859,7 @@ function buildStateFor(viewerId) {
         puddingCount: p.puddingCount || 0,
         gold: p.gold || 0, // ร้านค้ามายา (patch 2.2 full): เหรียญสะสม — ทุกคนเห็นของกันและกันได้
         inventory: mine ? (p.inventory || []) : null, // ของในคลัง — เห็นแค่ของตัวเอง
+        gutsShotTurn: mine ? (p.gutsShotTurn || 0) : undefined, // ปืน GUTS Select: ยิงไปแล้วเทิร์นไหน (เทียบกับ roundNumber = ยิงครบโควตาแล้ว)
         doomWeapon: p.doomWeapon || null, // DoomGuy: อาวุธที่ถืออยู่
         doomCharge: p.characterId === "doomguy" ? (p.doomCharge || 0) : undefined, // DoomGuy: ชาร์จ Crucible (เต็ม 5)
         doomWeaponHasEffect: p.characterId === "doomguy" ? !!(DOOM_WEAPONS[p.doomWeapon] || DOOM_WEAPONS.shotgun).effect : undefined, // DoomGuy: ปืนกระบอกนี้กดใช้ความสามารถพิเศษได้ไหม (Plasma Rifle/BFG 9000 ไม่มี)
@@ -1966,10 +1989,13 @@ function queueTransformAnnounce(p, kind) {
 }
 // พักช่วงจั่วการ์ดไว้ เล่น cutscene ให้จบ แล้วกลับมาจั่วต่อด้วยเวลาที่เหลือ
 // (ใช้กับสกิลที่แปลงร่างทันทีก่อนเปิดไพ่ เช่น MonsterLive)
-function pausePlayingForCutscene() {
+// after (ไม่บังคับ): งานที่ต้องทำ "หลังวีดีโอจบ" ก่อนกลับเข้าเฟสจั่วไพ่ — ใช้กับกระสุน GUTS Select
+//  ที่ต้องเล่นวีดีโอก่อนแล้วค่อยให้ผลเสียหาย/สถานะโผล่บนกระดาน (ไม่ใช่ลดเลือดไปตั้งแต่ก่อนวีดีโอเล่น)
+function pausePlayingForCutscene(after) {
   const remain = Math.max(3, timeLeft);
   clearPhaseTimer();
   runCutsceneQueue(() => {
+    if (after) after();
     gameState = "PLAYING";
     startPhaseTimer(remain, resolveRound);
     broadcastState();
@@ -2004,6 +2030,7 @@ function startMatch() {
   dayForceUntil = 0;
   yunaLongingUsed = false; yunaWindowEnd = 0; yunaEffect = null; yunaTargetId = null; yunaMusicSeq = 0; yunaLongingPendingId = null; yunaPity = 0;
   allyWinFlag = false;
+  shopItems = []; uncleShopItems = []; // ล้างสต็อกร้านค้าเก่าค้างจากแมตช์ก่อน (รอเปิดใหม่ตอนเทิร์นที่ 5)
   kaiOverhaulSlots = []; // ไค ชิซากิ: ล้าง tracker Overhaul ทุกครั้งที่เริ่มแมตช์ใหม่
   // อาริมะ มิยาโกะ (characters/miyako.js): เจอ โทโนะ ชิกิ หรือ นานายะ ชิกิ ในเกมเดียวกัน -> เล่นวีดีโอ arima_shiki.mp4 ก่อนเริ่มเทิร์นแรก
   cutsceneQueue = [];
@@ -2035,30 +2062,51 @@ function shopItemName(item) {
   if (item.type === "cardRemove") return "ยาลดไพ่";
   if (item.type === "skillPoint") return `ยาฟื้นแต้มสกิล +${item.value}`;
   if (item.type === "armor") return `ยาฟื้นเกราะ +${item.value}`;
+  if (item.type === "gutsGun") return "ปืนหน่วย GUTS Select";
+  if (item.type === "gutsAmmo") return (GUTS_AMMO[item.ammo] || {}).name || "กระสุน";
   return "สินค้า";
 }
-// เปิดร้านค้ามายา: สุ่มสินค้าใหม่ทั้งหมด (สูงสุด 9 ชิ้น สินค้าประเภทเดียวกันขึ้นซ้ำได้)
+// ---------- ร้านขายของลุงเท่ง ----------
+// สุ่มสินค้า 1 ชิ้น: ปืน 30% / กระสุน 70% (เฉลี่ยเท่ากันทุกแบบ)
+function rollUncleShopItem() {
+  if (Math.random() < GUTS_GUN_CHANCE) return { type: "gutsGun", price: GUTS_GUN_PRICE };
+  const ammo = GUTS_AMMO[GUTS_AMMO_IDS[Math.floor(Math.random() * GUTS_AMMO_IDS.length)]];
+  return { type: "gutsAmmo", ammo: ammo.id, price: ammo.price };
+}
+// เปิดร้านทั้ง 2 ร้านพร้อมกัน: สุ่มสินค้าใหม่ทั้งหมด (ร้านละ 9 ชิ้น สินค้าประเภทเดียวกันขึ้นซ้ำได้)
 function openShop() {
   shopRoundSeq++;
   shopItems = [];
   for (let i = 0; i < SHOP_MAX_ITEMS; i++) {
     shopItems.push({ id: `shop_${shopRoundSeq}_${i}`, ...rollShopItem(), sold: false, soldTo: null });
   }
+  uncleShopItems = [];
+  for (let i = 0; i < UNCLE_SHOP_MAX_ITEMS; i++) {
+    uncleShopItems.push({ id: `ushop_${shopRoundSeq}_${i}`, ...rollUncleShopItem(), sold: false, soldTo: null });
+  }
   lastLog.push(`🏪 ร้านค้ามายาเปิดแล้ว! มีสินค้า ${shopItems.length} ชิ้น: ${shopItems.map(shopItemName).join(", ")}`);
+  lastLog.push(`🛒 ร้านขายของลุงเท่งเปิดแล้ว! มีสินค้า ${uncleShopItems.length} ชิ้น: ${uncleShopItems.map(shopItemName).join(", ")}`);
+}
+// ผู้เล่นมีปืนหน่วย GUTS Select อยู่ในกระเป๋าหรือยัง (มีได้กระบอกเดียว)
+function hasGutsGun(p) {
+  return (p.inventory || []).some((it) => it.type === "gutsGun");
 }
 // ซื้อสินค้า: ใครกดก่อนได้ก่อน (Node เป็น single-thread — ประมวลผลทีละ event จึงไม่มี race condition จริง)
+//  หาจากทั้ง 2 ร้าน (id ไม่ซ้ำกันข้ามร้าน: shop_* กับ ushop_*)
 function buyShopItem(id, itemId) {
   const p = players[id];
   if (!p || !p.alive) return;
-  const item = shopItems.find((it) => it.id === itemId);
+  const item = shopItems.find((it) => it.id === itemId) || uncleShopItems.find((it) => it.id === itemId);
   if (!item || item.sold) return;
   if ((p.gold || 0) < item.price) return;
+  p.inventory = p.inventory || [];
+  if (item.type === "gutsGun" && hasGutsGun(p)) return; // ปืนมีได้กระบอกเดียว
   item.sold = true;
   item.soldTo = p.id;
   p.gold -= item.price;
-  p.inventory = p.inventory || [];
-  p.inventory.push({ uid: `${item.id}_${p.inventory.length}_${Date.now()}`, type: item.type, value: item.value, size: item.size });
-  lastLog.push(`🛍️ ${p.name} ซื้อ ${shopItemName(item)} จากร้านค้ามายา (-${item.price} เหรียญ)`);
+  p.inventory.push({ uid: `${item.id}_${p.inventory.length}_${Date.now()}`, type: item.type, value: item.value, size: item.size, ammo: item.ammo });
+  const shopName = item.id.startsWith("ushop_") ? "ร้านขายของลุงเท่ง" : "ร้านค้ามายา";
+  lastLog.push(`🛍️ ${p.name} ซื้อ ${shopItemName(item)} จาก${shopName} (-${item.price} เหรียญ)`);
   broadcastState();
 }
 // ใช้ของในคลัง
@@ -2074,6 +2122,8 @@ function useInventoryItem(id, uid, opts = {}) {
   const idx = (p.inventory || []).findIndex((it) => it.uid === uid);
   if (idx < 0) return;
   const item = p.inventory[idx];
+  let cutsceneKey = null;  // ตั้งค่าโดยกระสุน GUTS Select — ถ้ามีจะตัดเข้า CUTSCENE แทน broadcastState ปกติ
+  let pendingShot = null;  // { item, target } ของกระสุนที่ยิง — ให้ผลจริงตอนวีดีโอจบ
   if (item.type === "cardColor") {
     if (gameState !== "PLAYING" || p.locked) return; // ใช้ได้เฉพาะช่วงกำลังจั่วไพ่อยู่เท่านั้น
     const cardIndex = Number(opts.cardIndex);
@@ -2106,11 +2156,73 @@ function useInventoryItem(id, uid, opts = {}) {
   } else if (item.type === "tepeuMeal") {
     const healed = healHp(p, item.value);
     lastLog.push(`🍲 ${p.name} ใช้ "มื้อที่สุข" — ฟื้นพลังชีวิต +${healed} จากคลัง`);
+  } else if (item.type === "gutsGun") {
+    return; // ปืนเป็นไอเทมถาวร ไม่ใช่ของกดใช้ — ต้อง return ก่อนถึง splice ท้ายฟังก์ชัน ไม่งั้นปืนหายทันทีที่กด
+  } else if (item.type === "gutsAmmo") {
+    const target = gutsFireTargetOf(p, item, opts.targetId);
+    if (!target) return; // ยิงไม่ได้ = ไม่เสียกระสุน
+    p.gutsShotTurn = roundNumber; // 1 นัดต่อเทิร์น — จองไว้ตั้งแต่ตอนกด กันยิงซ้ำระหว่างวีดีโอเล่นอยู่
+    lastLog.push(`🔫 ${p.name} ยิง ${GUTS_AMMO[item.ammo].name} ใส่ ${target.name}!`);
+    cutsceneKey = GUTS_AMMO[item.ammo].cut;
+    pendingShot = { item, target };
   } else {
     return;
   }
   p.inventory.splice(idx, 1);
-  broadcastState();
+  if (cutsceneKey) {
+    // เล่นวีดีโอก่อน แล้วค่อยให้ผลของกระสุนเกิดขึ้นตอนวีดีโอจบ (ผู้เล่นจะเห็นความเสียหายโผล่หลังจบวีดีโอ)
+    queueCutscene(p, cutsceneKey);
+    pausePlayingForCutscene(() => applyGutsBullet(p, pendingShot.item, pendingShot.target));
+  } else {
+    broadcastState();
+  }
+}
+// ตรวจว่ายิงได้ไหม + คืนเป้าหมายที่ถูกต้อง (null = ยิงไม่ได้)
+//  ยิงได้เฉพาะช่วงจั่วไพ่และยังไม่เปิดไพ่ / ต้องมีปืน / 1 นัดต่อเทิร์น / เป้าหมายต้องเป็นคนอื่นที่ยังไม่ตกรอบ
+function gutsFireTargetOf(p, item, targetId) {
+  if (gameState !== "PLAYING" || p.locked) return null;
+  if (!hasGutsGun(p)) return null;
+  if (p.gutsShotTurn === roundNumber) return null;
+  if (!GUTS_AMMO[item.ammo]) return null;
+  const target = players[targetId];
+  if (!target || !target.alive || target.id === p.id) return null;
+  return target;
+}
+// ให้ผลของกระสุน — เรียกหลังวีดีโอจบเท่านั้น (ดู pausePlayingForCutscene)
+function applyGutsBullet(p, item, target) {
+  // Nursedessei Cannon: ยิงเสร็จปืนพัง หายจากกระเป๋า ต้องซื้อใหม่ (พังแม้เป้าหมายจะตกรอบไปก่อนแล้ว)
+  if (GUTS_AMMO[item.ammo].breaksGun) {
+    const gunIdx = (p.inventory || []).findIndex((it) => it.type === "gutsGun");
+    if (gunIdx >= 0) p.inventory.splice(gunIdx, 1);
+  }
+  if (!target || !target.alive) { // เป้าหมายตกรอบระหว่างวีดีโอเล่น — กระสุนสูญเปล่า
+    lastLog.push(`💨 ${GUTS_AMMO[item.ammo].name} พลาดเป้า — ${target ? target.name : "เป้าหมาย"} ตกรอบไปก่อนแล้ว`);
+    return;
+  }
+  if (item.ammo === "shockwave") {
+    const before = target.armor;
+    for (let i = 0; i < before; i++) { if (target.armor > 0) loseArmor(target); }
+    lastLog.push(before > 0
+      ? `💥 Shockwave Bullet — เกราะของ ${target.name} ถูกทำลายทั้งหมด (-${before}) แต่พลังชีวิตจริงไม่ได้รับความเสียหาย`
+      : `💨 Shockwave Bullet — ${target.name} ไม่มีเกราะให้ทำลาย กระสุนสูญเปล่า`);
+  } else if (item.ammo === "gargorgon") {
+    target.gutsGargorgonPending = true;
+    lastLog.push(`🌑 Gargorgon Ray — ${target.name} จะติดสถานะสตั้นในเทิร์นถัดไป (ต้านทานได้)`);
+  } else if (item.ammo === "thunder") {
+    if (applyDebuff(target, "chaa", null, GUTS_CHAA_TURNS)) lastLog.push(`⚡ Thunder Bullet — ${target.name} ติดสถานะ [สภาพชา] ${GUTS_CHAA_TURNS} เทิร์น (กดจั่ว 1 ครั้งได้ไพ่ 2 ใบ)`);
+    else lastLog.push(`🛡️ Thunder Bullet — ${target.name} ต้านสถานะผิดปกติไว้ได้ ไม่ติด [สภาพชา]`);
+  } else if (item.ammo === "nurse") {
+    dealMixed(target, GUTS_NURSE_DMG);
+    lastLog.push(`☄️ Nursedessei Cannon — ${target.name} เสียหาย -${GUTS_NURSE_DMG} (ลดเกราะก่อน) และปืนของ ${p.name} พังหายไป!`);
+    maybeBeatSave(target);
+    maybeBeatMode(target);
+    maybeEva3(target);
+    maybeWakeKotone(target);
+    if (target.alive && target.hp <= 0) {
+      instantDeath(target);
+      if (!target.alive) lastLog.push(`💀 ${target.name} เลือดจริงหมด ตกรอบ!`);
+    }
+  }
 }
 
 function dealRound() {
@@ -2325,6 +2437,13 @@ function dealRound() {
     CHAR_HOOKS.princess_shiki.onRoundStartTick(engine, p);
     // ---------- ฟุจิตะ โคโตเนะ (characters/kotone.js): Sleeping time / [เช้าที่สดใส] / ท่านประธานเซนะจัง / [โหมงานหนัก] สุ่มสตั้น ----------
     CHAR_HOOKS.kotone.onRoundStartTick(engine, p);
+    // Gargorgon Ray (ปืนหน่วย GUTS Select): ผลหน่วง 1 เทิร์น — เช็คต้านสถานะตอนนี้ (เป้าหมายซื้อยาต้านมากันไว้ทัน)
+    //  ต้องอยู่ "ก่อน" บล็อกเช็คสตั้นด้านล่าง ไม่งั้นสตั้นจะข้ามไปมีผลอีกเทิร์นหนึ่ง
+    if (p.gutsGargorgonPending) {
+      p.gutsGargorgonPending = false;
+      if (applyDebuff(p, "stun", null, 1)) lastLog.push(`🌑 ${p.name} โดน Gargorgon Ray เมื่อเทิร์นก่อน — ติดสถานะสตั้น 1 เทิร์น!`);
+      else lastLog.push(`🛡️ ${p.name} ต้านผลของ Gargorgon Ray ไว้ได้ — ไม่ติดสตั้น`);
+    }
     // สตั้น (สถานะพื้นฐาน patch 2.0.8): ทำอะไรไม่ได้จนจบเทิร์นหรือจนกว่าดีบัฟจะหมดเวลา
     if ((p.statuses.stun || 0) > 0) {
       p.locked = true;
@@ -2400,6 +2519,16 @@ function hit(id) {
     if (drawn) p.cards.push(drawn);
   }
   if (drawn) onCardDrawn(p, drawn);
+  // สภาพชา (ดีบัฟ Universal — Thunder Bullet): กดจั่ว 1 ครั้ง ได้ไพ่ 2 ใบ
+  //  ใบที่ 2 จั่วแบบสุ่มปกติเสมอ (โชคลาภช่วยแค่ใบแรก) และไม่เช็คเพดานแต้มซ้ำ — แตกได้ตามสภาพ
+  if ((p.statuses.chaa || 0) > 0) {
+    const extra = drawCardFor(p);
+    if (extra) {
+      p.cards.push(extra);
+      onCardDrawn(p, extra);
+      lastLog.push(`🌀 ${p.name} อยู่ในสภาพชา — จั่วติดมาอีกใบ (${cardLabel(extra)})`);
+    }
+  }
   p.busted = bustedOf(p);
   if (p.busted) { voidUltimateOnBust(p); maybeMoonBurst(p); CHAR_HOOKS.mageslayer.onBustOrLoseRoll(engine, p); }
   // ไพ่แตก: ไม่ล็อกอัตโนมัติ — ยังกดสกิล/ใช้ไอเทมได้ต่อไป จนกว่าจะกดเปิดไพ่เอง หรือทุกคนเปิดไพ่ครบ
@@ -4911,7 +5040,7 @@ io.on('connection', (socket) => {
   onPlayerEvent(socket, 'lock', (id) => lock(id), 4);
   onPlayerEvent(socket, 'useSkill', (id, { tier, targets, item } = {}) => useSkill(id, tier, targets, item), 12);
   onPlayerEvent(socket, 'buyShopItem', (id, { itemId } = {}) => buyShopItem(id, itemId), 8);
-  onPlayerEvent(socket, 'useInventoryItem', (id, { uid, cardIndex, color } = {}) => useInventoryItem(id, uid, { cardIndex, color }), 8);
+  onPlayerEvent(socket, 'useInventoryItem', (id, { uid, cardIndex, color, targetId } = {}) => useInventoryItem(id, uid, { cardIndex, color, targetId }), 8);
   onPlayerEvent(socket, 'hakunoCommandSpell', (id, { command } = {}) => hakunoCommandSpell(id, command), 6);
   onPlayerEvent(socket, 'locaAnswer', (id, { accept } = {}) => answerLoca(id, !!accept), 4);
   onPlayerEvent(socket, 'riddheAlly', (id, { targetId } = {}) => riddheChooseAlly(id, targetId), 4);
@@ -5096,6 +5225,7 @@ const engine = {
   get gameState() { return gameState; },
   setGameState(v) { gameState = v; },
   get roundNumber() { return roundNumber; },
+  setRoundNumber(v) { roundNumber = v; },
   get attackerId() { return attackerId; },
   setAttackerId(v) { attackerId = v; },
   get lastAttack() { return lastAttack; },
@@ -5124,6 +5254,24 @@ const engine = {
   isNightRound,
   nightCycleIndex,
   GOLD_MAX,
+  // ---------- ร้านค้ามายา + ร้านขายของลุงเท่ง (เปิดไว้ให้ tests/shop.test.js เรียกตรงๆ) ----------
+  GUTS_AMMO,
+  GUTS_GUN_PRICE,
+  GUTS_CHAA_TURNS,
+  GUTS_NURSE_DMG,
+  rollShopItem,
+  rollUncleShopItem,
+  openShop,
+  buyShopItem,
+  useInventoryItem,
+  gutsFireTargetOf,
+  applyGutsBullet,
+  hasGutsGun,
+  hit,
+  get shopItems() { return shopItems; },
+  setShopItems(v) { shopItems = v; },
+  get uncleShopItems() { return uncleShopItems; },
+  setUncleShopItems(v) { uncleShopItems = v; },
   NETRAMANA_KILL_CHANCE,
   netramanaActive,
   statusAmtOf,

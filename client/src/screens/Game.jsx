@@ -619,8 +619,8 @@ function ModalMounts({
   allyBreakAsk, onAnswerAllyBreak,
   allyFinalAsk, onAnswerAllyFinal,
   statusView, statusViewIsSelf, onCloseStatus,
-  shopOpen, shop, onCloseShop,
-  bagOpen, onCloseBag,
+  shopOpen, shop, uncleShop, onCloseShop,
+  bagOpen, onCloseBag, players, gameState, roundNumber,
   skillConfirm, onConfirmSkill, onCancelSkill,
 }) {
   return (
@@ -639,8 +639,8 @@ function ModalMounts({
       {allyBreakAsk && me?.alive && <AllyBreakModal ask={allyBreakAsk} onAnswer={onAnswerAllyBreak} />}
       {allyFinalAsk && me?.alive && <AllyFinalModal ask={allyFinalAsk} onAnswer={onAnswerAllyFinal} />}
       {statusView && <StatusModal p={statusView} statusOnly={statusViewIsSelf} onClose={onCloseStatus} />}
-      {shopOpen && <ShopModal shop={shop} me={me} onClose={onCloseShop} />}
-      {bagOpen && <InventoryModal me={me} onClose={onCloseBag} />}
+      {shopOpen && <ShopModal shop={shop} uncleShop={uncleShop} me={me} onClose={onCloseShop} />}
+      {bagOpen && <InventoryModal me={me} players={players} gameState={gameState} roundNumber={roundNumber} onClose={onCloseBag} />}
       {skillConfirm && <SkillConfirmModal confirm={skillConfirm} onConfirm={onConfirmSkill} onCancel={onCancelSkill} />}
     </>
   );
@@ -883,6 +883,7 @@ const STATUS_INFO = {
   // ---------- สถานะพื้นฐาน universal (patch 2.0.8) ----------
   freecast:  { icon: "👸", label: "การ์ดราชินี", cls: "bg-echo-gold text-gray-900", desc: "การ์ดราชินี: ใช้สกิลครั้งถัดไปไม่เสียแต้มสกิล (หายเมื่อจบเทิร์นถ้าไม่ได้ใช้)" },
   stun:      { icon: "😵", label: "สตั้น", cls: "bg-echo-hp", desc: "สตั้น: ไม่สามารถทำอะไรได้จนจบเทิร์นหรือจนกว่าดีบัฟจะหมดเวลา" },
+  chaa:     { icon: "🌀", label: "สภาพชา", cls: "bg-echo-hp", desc: "สภาพชา: กดจั่วการ์ด 1 ครั้งจะได้ไพ่ 2 ใบ (ใบที่ 2 สุ่มปกติ โชคลาภไม่ช่วย)" },
   weak:      { icon: "🥀", label: "อ่อนแอ", cls: "bg-echo-hp", desc: "อ่อนแอ: ดาเมจที่ทำได้ลดลงตามจำนวนที่ระบุ ตามจำนวนเทิร์นที่เหลือ" },
   fragile:   { icon: "💔", label: "เปราะบาง", cls: "bg-echo-hp", desc: "เปราะบาง: ดาเมจที่ได้รับเพิ่มขึ้นตามจำนวนที่ระบุ ตามจำนวนเทิร์นที่เหลือ" },
   might:     { icon: "💪", label: "เสริมพลัง", cls: "bg-echo-gold text-gray-900", desc: "เสริมพลัง: ดาเมจที่ทำได้เพิ่มขึ้นตามจำนวนที่ระบุ ตามจำนวนเทิร์นที่เหลือ" },
@@ -1197,37 +1198,81 @@ const SHOP_ITEM_INFO = {
   skillPoint: { icon: "⚡", label: (it) => `ยาฟื้นแต้มสกิล +${it.value}`, desc: "ฟื้นแต้มสกิลทันที (เกินเพดานจะหายทิ้งส่วนที่เกิน)" },
   armor: { icon: "🔧", label: (it) => `ยาฟื้นเกราะ +${it.value}`, desc: "ฟื้นเกราะทันที" },
   tepeuMeal: { icon: "🍲", label: (it) => `มื้อที่สุข (ฟื้นเลือด +${it.value})`, desc: "ฟื้นพลังชีวิตทันที — ผลิตได้จากเทเปาเท่านั้น (วันนี้อากาศดีจัง)" },
+  // ---------- ร้านขายของลุงเท่ง: ปืนหน่วย GUTS Select + กระสุน (ใช้รูปจริงแทน emoji) ----------
+  gutsGun: { icon: "🔫", img: "/item/guts_select_gun/guts_gun.webp", label: () => "ปืนหน่วย GUTS Select", desc: "ไอเทมถาวร มีได้กระบอกเดียว — กดที่ปืนเพื่อเลือกกระสุนแล้วเลือกเป้าหมาย ยิงได้ 1 นัด/เทิร์น (เฉพาะช่วงจั่วไพ่)" },
+  gutsAmmo: {
+    icon: "🔑",
+    imgOf: (it) => GUTS_AMMO_INFO[it.ammo]?.img,
+    label: (it) => GUTS_AMMO_INFO[it.ammo]?.name || "กระสุน",
+    descOf: (it) => GUTS_AMMO_INFO[it.ammo]?.desc || "",
+  },
 };
-function shopInfoOf(it) { return SHOP_ITEM_INFO[it.type] || { icon: "✦", label: () => "สินค้า", desc: "" }; }
+// ข้อมูลกระสุนฝั่ง client (ชื่อ/รูปคีย์/คำอธิบาย) — ต้องตรงกับ GUTS_AMMO ใน server.js
+const GUTS_AMMO_INFO = {
+  shockwave: { name: "Shockwave Bullet",   img: "/item/guts_key/gomora_key.webp",    desc: "ทำลายเกราะของเป้าหมายทั้งหมด แต่ไม่สร้างความเสียหายให้พลังชีวิตจริง" },
+  gargorgon: { name: "Gargorgon Ray",      img: "/item/guts_key/gargorgon_key.webp", desc: "เทิร์นถัดไปเป้าหมายติดสถานะสตั้น 1 เทิร์น (จั่วการ์ด/กดสกิลไม่ได้) — ต้านทานได้" },
+  thunder:   { name: "Thunder Bullet",     img: "/item/guts_key/eleking_key.webp",   desc: "เป้าหมายติดสถานะ [สภาพชา] 2 เทิร์น — กดจั่ว 1 ครั้งได้ไพ่ 2 ใบ — ต้านทานได้" },
+  nurse:     { name: "Nursedessei Cannon", img: "/item/guts_key/nurse_key.webp",     desc: "ความเสียหาย 4 หน่วย (ลดเกราะก่อน) — ยิงเสร็จปืนพังหายจากกระเป๋า ต้องซื้อใหม่" },
+};
+function shopInfoOf(it) {
+  const base = SHOP_ITEM_INFO[it.type] || { icon: "✦", label: () => "สินค้า", desc: "" };
+  // imgOf/descOf: ไอเทมที่หน้าตา/คำอธิบายขึ้นกับข้อมูลในตัวไอเทมเอง (กระสุนแต่ละแบบ)
+  return { ...base, img: base.imgOf ? base.imgOf(it) : base.img, desc: base.descOf ? base.descOf(it) : base.desc };
+}
+// ไอคอนไอเทม: มีรูปจริงใช้รูป ไม่มีก็ใช้ emoji เดิม
+function ItemIcon({ info, className = "" }) {
+  if (info.img) return <img src={info.img} alt="" className={`object-contain shrink-0 ${className}`} onError={(e) => { e.currentTarget.style.display = "none"; }} />;
+  return <span className={`shrink-0 ${className}`}>{info.icon}</span>;
+}
 
-function ShopModal({ shop, me, onClose }) {
+// ร้านค้า 2 ร้าน สลับด้วยแถบด้านบน — รีสต็อกพร้อมกันทุกๆ 5 เทิร์น
+const SHOP_TABS = [
+  { key: "maya",  title: "🏪 ร้านค้ามายา",        short: "🏪 มายา" },
+  { key: "uncle", title: "🛒 ร้านขายของลุงเท่ง", short: "🛒 ลุงเท่ง" },
+];
+function ShopModal({ shop, uncleShop, me, onClose }) {
+  const [tab, setTab] = useState("maya");
+  const list = tab === "uncle" ? uncleShop : shop;
+  const hasGun = (me?.inventory || []).some((i) => i.type === "gutsGun");
   return (
     <div className="fixed inset-0 z-40 bg-black/70 grid place-items-center p-4" onClick={onClose}>
       <div className="bg-echo-navy rounded-2xl p-5 max-w-lg w-full shadow-2xl max-h-[85vh] overflow-y-auto border-2 border-echo-gold" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
-          <div className="text-xl font-black text-echo-gold">🏪 ร้านค้ามายา</div>
+          <div className="text-xl font-black text-echo-gold">{SHOP_TABS.find((t) => t.key === tab).title}</div>
           <div className="text-sm font-bold bg-black/40 rounded-lg px-2 py-1">🪙 {me?.gold ?? 0} เหรียญ</div>
         </div>
-        {(!shop || shop.length === 0) ? (
+        <div className="flex gap-2 mb-3">
+          {SHOP_TABS.map((t) => (
+            <button
+              key={t.key}
+              className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-bold border transition-colors ${tab === t.key ? "border-echo-gold bg-echo-gold/20 text-echo-gold" : "border-white/15 bg-black/30 opacity-70 hover:opacity-100"}`}
+              onClick={() => { clickSound(); setTab(t.key); }}
+            >
+              {t.short}
+            </button>
+          ))}
+        </div>
+        {(!list || list.length === 0) ? (
           <div className="text-sm opacity-70 py-6 text-center">ร้านค้ายังไม่เปิด — จะเปิดทุกๆ 5 เทิร์น</div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {shop.map((it) => {
+            {list.map((it) => {
               const info = shopInfoOf(it);
               const sold = !!it.sold;
               const afford = (me?.gold ?? 0) >= it.price;
+              const owned = it.type === "gutsGun" && hasGun; // ปืนมีได้กระบอกเดียว
               return (
                 <div key={it.id} className={`rounded-xl border p-2 flex flex-col items-center text-center gap-1 ${sold ? "border-white/10 bg-white/5 opacity-50" : "border-echo-gold/50 bg-black/30"}`}>
-                  <div className="text-2xl">{info.icon}</div>
+                  <ItemIcon info={info} className="text-2xl h-10 w-10" />
                   <div className="text-xs font-bold leading-tight">{info.label(it)}</div>
                   <div className="text-[11px] opacity-70 leading-snug">{info.desc}</div>
                   <div className="text-xs font-bold text-echo-gold">🪙 {it.price}</div>
                   <Button
                     className="w-full py-1.5 text-xs"
-                    disabled={sold || !afford}
+                    disabled={sold || owned || !afford}
                     onClick={() => { clickSound(); socket.emit("buyShopItem", { itemId: it.id }); }}
                   >
-                    {sold ? "ขายแล้ว" : afford ? "ซื้อ" : "เหรียญไม่พอ"}
+                    {sold ? "ขายแล้ว" : owned ? "มีแล้ว" : afford ? "ซื้อ" : "เหรียญไม่พอ"}
                   </Button>
                 </div>
               );
@@ -1240,12 +1285,26 @@ function ShopModal({ shop, me, onClose }) {
   );
 }
 
-function InventoryModal({ me, onClose }) {
+function InventoryModal({ me, players, gameState, roundNumber, onClose }) {
   const items = me?.inventory || [];
   // ยาเปลี่ยนสีการ์ด: ต้องเลือกการ์ด 1 ใบในมือก่อน ค่อยเลือกสีเป้าหมาย — เก็บ uid ของไอเทมที่กำลังเลือกอยู่ + index การ์ดที่เลือกแล้ว
   const [colorPickUid, setColorPickUid] = useState(null);
   const [colorPickCardIdx, setColorPickCardIdx] = useState(null);
+  // ปืนหน่วย GUTS Select: กดที่ปืน -> เลือกกระสุน -> เลือกเป้าหมาย แล้วจึงยิง
+  const [gunOpen, setGunOpen] = useState(false);
+  const [gunAmmoUid, setGunAmmoUid] = useState(null);
   const myCards = me?.cards || [];
+
+  const ammoItems = items.filter((it) => it.type === "gutsAmmo");
+  const targets = (players || []).filter((p) => p.alive && p.id !== me?.id);
+  // เหตุผลที่ยิงไม่ได้ (โชว์ให้เห็นเลย ไม่ปล่อยให้กดแล้วเงียบ)
+  const fireBlock =
+    gameState !== "PLAYING" ? "ยิงได้เฉพาะช่วงจั่วไพ่"
+    : me?.locked ? "เปิดไพ่ไปแล้ว — ยิงไม่ได้"
+    : (me?.gutsShotTurn || 0) === roundNumber ? "ยิงไปแล้วในเทิร์นนี้ (1 นัด/เทิร์น)"
+    : ammoItems.length === 0 ? "ไม่มีกระสุน — ซื้อได้ที่ร้านขายของลุงเท่ง"
+    : targets.length === 0 ? "ไม่มีเป้าหมายให้ยิง"
+    : null;
 
   function applyItem(uid) { clickSound(); socket.emit("useInventoryItem", { uid }); }
   function startColorPick(uid) { clickSound(); setColorPickUid(uid); setColorPickCardIdx(null); }
@@ -1254,6 +1313,12 @@ function InventoryModal({ me, onClose }) {
     clickSound();
     socket.emit("useInventoryItem", { uid: colorPickUid, cardIndex: colorPickCardIdx, color });
     setColorPickUid(null); setColorPickCardIdx(null);
+  }
+  function toggleGun() { clickSound(); setGunOpen((v) => !v); setGunAmmoUid(null); }
+  function fireAt(targetId) {
+    clickSound();
+    socket.emit("useInventoryItem", { uid: gunAmmoUid, targetId });
+    setGunOpen(false); setGunAmmoUid(null);
   }
 
   return (
@@ -1267,16 +1332,24 @@ function InventoryModal({ me, onClose }) {
             {items.map((it) => {
               const info = shopInfoOf(it);
               const isColorItem = it.type === "cardColor";
+              const isGun = it.type === "gutsGun";
+              const isAmmo = it.type === "gutsAmmo";
               const picking = isColorItem && colorPickUid === it.uid;
               return (
-                <div key={it.uid} className="flex flex-col gap-2 rounded-xl bg-white/5 border border-white/10 px-3 py-2">
+                <div key={it.uid} className={`flex flex-col gap-2 rounded-xl border px-3 py-2 ${isGun ? "bg-echo-gold/10 border-echo-gold/50" : "bg-white/5 border-white/10"}`}>
                   <div className="flex items-center gap-2">
-                    <span className="text-2xl shrink-0">{info.icon}</span>
+                    <ItemIcon info={info} className="text-2xl h-10 w-10" />
                     <div className="min-w-0 flex-1">
                       <div className="font-bold text-sm">{info.label(it)}</div>
                       <div className="text-xs opacity-70 leading-snug">{info.desc}</div>
                     </div>
-                    {isColorItem ? (
+                    {isGun ? (
+                      <Button className="px-3 py-1.5 text-xs shrink-0" disabled={!gunOpen && !!fireBlock} title={fireBlock || ""} onClick={toggleGun}>
+                        {gunOpen ? "ยกเลิก" : "ยิง"}
+                      </Button>
+                    ) : isAmmo ? (
+                      <span className="text-[10px] opacity-60 shrink-0 text-right leading-tight">ใช้ผ่าน<br />ปืน</span>
+                    ) : isColorItem ? (
                       <Button className="px-3 py-1.5 text-xs shrink-0" onClick={() => (picking ? cancelColorPick() : startColorPick(it.uid))}>
                         {picking ? "ยกเลิก" : "ใช้"}
                       </Button>
@@ -1284,6 +1357,41 @@ function InventoryModal({ me, onClose }) {
                       <Button className="px-3 py-1.5 text-xs shrink-0" onClick={() => applyItem(it.uid)}>ใช้</Button>
                     )}
                   </div>
+                  {isGun && !gunOpen && fireBlock && <div className="text-[11px] text-echo-hp/90">⚠️ {fireBlock}</div>}
+                  {isGun && gunOpen && (
+                    <div className="rounded-lg bg-black/40 p-2">
+                      {gunAmmoUid === null ? (
+                        <>
+                          <div className="text-xs opacity-80 mb-1">เลือกกระสุน:</div>
+                          <div className="flex flex-wrap gap-2">
+                            {ammoItems.map((a) => {
+                              const ai = shopInfoOf(a);
+                              return (
+                                <button key={a.uid} className="flex flex-col items-center gap-1 w-20 rounded-lg border border-white/15 bg-black/30 p-1.5 hover:border-echo-gold transition-colors" onClick={() => { clickSound(); setGunAmmoUid(a.uid); }}>
+                                  <ItemIcon info={ai} className="h-9 w-9" />
+                                  <span className="text-[10px] leading-tight text-center">{ai.label(a)}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="text-xs opacity-80 mb-1">
+                            {shopInfoOf(items.find((a) => a.uid === gunAmmoUid) || {}).label(items.find((a) => a.uid === gunAmmoUid) || {})} — เลือกเป้าหมาย:
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {targets.map((t) => (
+                              <button key={t.id} className="rounded-lg border border-white/15 bg-black/30 px-2 py-1.5 text-xs font-bold hover:border-echo-hp transition-colors" onClick={() => fireAt(t.id)}>
+                                🎯 {t.name}
+                              </button>
+                            ))}
+                          </div>
+                          <button className="mt-2 text-[11px] opacity-70 underline" onClick={() => { clickSound(); setGunAmmoUid(null); }}>← เลือกกระสุนใหม่</button>
+                        </>
+                      )}
+                    </div>
+                  )}
                   {picking && (
                     <div className="rounded-lg bg-black/30 p-2">
                       {colorPickCardIdx === null ? (
@@ -3106,8 +3214,8 @@ export default function Game({ state, lowQ }) {
           allyBreakAsk={state.allyBreakAsk} onAnswerAllyBreak={(c) => socket.emit("allyBreakAnswer", { cancel: c })}
           allyFinalAsk={state.allyFinalAsk} onAnswerAllyFinal={(k) => socket.emit("allyFinalAnswer", { keep: k })}
           statusView={statusView} statusViewIsSelf={statusViewId === state.youId} onCloseStatus={() => setStatusViewId(null)}
-          shopOpen={shopOpen} shop={state.shop} onCloseShop={() => setShopOpen(false)}
-          bagOpen={bagOpen} onCloseBag={() => setBagOpen(false)}
+          shopOpen={shopOpen} shop={state.shop} uncleShop={state.uncleShop} onCloseShop={() => setShopOpen(false)}
+          bagOpen={bagOpen} onCloseBag={() => setBagOpen(false)} players={state.players} gameState={state.gameState} roundNumber={state.roundNumber}
           skillConfirm={skillConfirm} onConfirmSkill={confirmSkillUse} onCancelSkill={cancelSkillConfirm}
         />
       </div>
@@ -3587,8 +3695,8 @@ export default function Game({ state, lowQ }) {
         allyBreakAsk={state.allyBreakAsk} onAnswerAllyBreak={(c) => socket.emit("allyBreakAnswer", { cancel: c })}
         allyFinalAsk={state.allyFinalAsk} onAnswerAllyFinal={(k) => socket.emit("allyFinalAnswer", { keep: k })}
         statusView={statusView} statusViewIsSelf={statusViewId === state.youId} onCloseStatus={() => setStatusViewId(null)}
-        shopOpen={shopOpen} shop={state.shop} onCloseShop={() => setShopOpen(false)}
-        bagOpen={bagOpen} onCloseBag={() => setBagOpen(false)}
+        shopOpen={shopOpen} shop={state.shop} uncleShop={state.uncleShop} onCloseShop={() => setShopOpen(false)}
+        bagOpen={bagOpen} onCloseBag={() => setBagOpen(false)} players={state.players} gameState={state.gameState} roundNumber={state.roundNumber}
         skillConfirm={skillConfirm} onConfirmSkill={confirmSkillUse} onCancelSkill={cancelSkillConfirm}
       />
       </div>
