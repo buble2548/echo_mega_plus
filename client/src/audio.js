@@ -87,6 +87,7 @@ const FILES = {
   bat_ben: "/characters/bat_ben/bat_ben_theme.mp3",
   // เจ้าหญิงราก (เรียวกิ ชิกิ) patch 2.2.7: เพลงระหว่างท่าไม้ตาย "ทุกอย่างจะต้องราบรื่น" ทำงาน
   p_shiki: "/characters/princess_shiki/p_shiki_theme.m4a",
+  trigger: "/characters/ultraman_trigger/trigger_theme.mp3",
   action_button: "/effect_sound/action_button.wav",
   trun_change: "/effect_sound/trun_change.wav",
   attack: "/effect_sound/attack.wav",

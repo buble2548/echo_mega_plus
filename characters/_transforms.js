@@ -195,5 +195,10 @@ module.exports = function buildTransforms(img) {
     gutsGargorgon: { img: "/item/guts_key/gargorgon_key.webp", video: "/item/guts_key/gargorgon_ray.mp4",      title: "GARGORGON RAY",      label: "ยิงปืนหน่วย GUTS Select", seconds: 9,  music: null, afterReveal: false }, // gargorgon_ray.mp4 ~7.67s
     gutsThunder:   { img: "/item/guts_key/eleking_key.webp",   video: "/item/guts_key/thunder_boost.mp4",      title: "THUNDER BULLET",     label: "ยิงปืนหน่วย GUTS Select", seconds: 7,  music: null, afterReveal: false }, // thunder_boost.mp4 ~5.38s
     gutsNurse:     { img: "/item/guts_key/nurse_key.webp",     video: "/item/guts_key/nursedessei_cannon.mp4", title: "NURSEDESSEI CANNON", label: "ยิงปืนหน่วย GUTS Select", seconds: 16, music: null, afterReveal: false }, // nursedessei_cannon.mp4 ~14.40s
+    // ---------- Ultraman Trigger ----------
+    // ระยะวิดีโอจริง: henshin 21.563s / Multi Sword 11.823s / Zeperion 15.865s — บวก buffer กันตัดก่อนจบ
+    triggerHenshin:    { img: "/characters/ultraman_trigger/trigger.webp", video: "/characters/ultraman_trigger/trigger_henshin.mp4", title: "ULTRAMAN TRIGGER", label: "แปลงร่าง", seconds: 23, music: "trigger", afterReveal: false },
+    triggerMultiSword: { img: "/characters/ultraman_trigger/skill2/trigger_skill2.png", video: "/characters/ultraman_trigger/skill2/trigger_skill2.mp4", title: "MULTI SWORD FINISH", label: "โจมตี", seconds: 13, music: null, afterReveal: false },
+    triggerZeperion:   { img: "/characters/ultraman_trigger/skill3/trigger_skill3.jpg", video: "/characters/ultraman_trigger/skill3/trigger_skill3.mp4", title: "ZEPERION RAY", label: "ปล่อยท่าไม้ตาย", seconds: 17, music: null, afterReveal: false },
   };
 };

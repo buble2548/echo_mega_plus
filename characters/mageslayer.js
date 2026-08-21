@@ -3,14 +3,14 @@
 //  Mana Burden (ภาระเวท) / Song's Curse (คำสาปบรรเลงทำนอง — พาสซีฟถาวร)
 //  ดู characters/index.js สำหรับไฟล์มัดรวม, server.js's useSkill()/doAttack()/afterResolve() สำหรับจุดเรียก
 //  หมายเหตุ: Song's Curse ห้ามฟื้นพลังงานปกติทุกทาง — hardcode เช็คตรงใน server.js's addSkill() (ไม่ใช่สถานะ
-//  ต้านไม่ได้) การขโมยพลังงาน (Witch Mark) ใช้ direct assignment ตรงๆ จึงทะลุข้อจำกัดนี้โดยธรรมชาติ
-//  (ไม่เรียกผ่าน engine.addSkill เลย) — Mana Rupture ไม่คืนพลังงานให้ผู้ใช้อีกต่อไป (nerf: ขัดกับพาสซีฟที่ฟื้น
+//  ต้านไม่ได้) การขโมยพลังงานจากการโจมตีเป้าหมายที่ติด Witch Mark ใช้ direct assignment ตรงๆ จึงทะลุข้อจำกัดนี้
+//  (ไม่เรียกผ่าน engine.addSkill เลย) — ผล 35% ตอนเป้าหมายใช้สกิลและ Mana Rupture ไม่คืนพลังงานให้ผู้ใช้
 //  พลังงานเฉพาะจากการโจมตีเป้าหมายติด Witch Mark เท่านั้น)
 // ============================================================
 
 const MS_FURY_MAX = 2;         // Fury: สะสมสูงสุด 2 สต็อก (nerf จาก 3)
 const MS_FURY_CHANCE = 0.35;   // Fury: โอกาสสะสมเมื่อแตก/แต้มต่ำสุด (อิสระต่อกันทั้งสอง trigger)
-const MS_MARK_STEAL_CHANCE = 0.35; // ตราล่าเวท: โอกาสขโมยพลังงานเมื่อเป้าหมายที่มาร์กใช้สกิลใดๆ
+const MS_MARK_STEAL_CHANCE = 0.35; // ตราล่าเวท: โอกาสลดพลังงานเมื่อเป้าหมายที่มาร์กใช้สกิลใดๆ (ไม่คืนให้ผู้ใช้)
 const MS_SEAL_TURNS = 2;       // ผนึกพลังงาน: เป้าหมายพลังงาน 0 (โจมตีปกติ / ใช้สกิลไม่มีให้ขโมย)
 
 module.exports = {
@@ -46,12 +46,13 @@ module.exports = {
     }
     p.mageslayerMarkedId = target.id;
     p.mageslayerHasMarked = true;
+    p.mageslayerWitchMarkReadyRound = engine.roundNumber + 2;
     engine.triggerCutscene(p, "mageslayerWitchMark");
     engine.log(`🎯 ${p.name} Witch Mark — มาร์ก ${target.name} ด้วยตราล่าเวท (เคลื่อนย้ายได้ ถาวรจนกว่าจะย้าย/ถูกล้าง)`);
     return ` — มาร์ก ${target.name}`;
   },
 
-  // ขโมยพลังงาน n หน่วย (ต่ำสุด 0 สูงสุดเท่าที่เป้าหมายมี) — direct assignment ทะลุ Song's Curse เสมอ — คืนจำนวนที่ขโมยได้จริง
+  // ขโมยพลังงาน n หน่วยจากการโจมตีเป้าหมายที่ติดตรา — direct assignment ทะลุ Song's Curse — คืนจำนวนที่ขโมยได้จริง
   stealEnergy(engine, attacker, target, n) {
     const stolen = Math.max(0, Math.min(n, target.skillPoints || 0));
     if (stolen <= 0) return 0;
@@ -64,15 +65,18 @@ module.exports = {
   //  ผนึกพลังงานถ้าเป้าหมายพลังงาน 0 ก่อนขโมย / เคลียร์ Fury stack ที่เพิ่งใช้ไปพร้อมดูดเลือด
   onAttackPostDamage(engine, attacker, target, dmg) {
     if (attacker.characterId !== "mageslayer") return;
-    const targetEnergyBefore = target.skillPoints || 0; // เช็คก่อน Witch Mark ลดมันลง
-    const wantSteal = Math.max(1, Math.min(4, dmg));
-    const stolen = this.stealEnergy(engine, attacker, target, wantSteal);
-    if (stolen > 0) engine.log(`🔮 ${attacker.name} Witch Mark — ขโมยพลังงาน ${target.name} ${stolen} หน่วย (ดาเมจ ${dmg} → min1/max4)`);
-    if (targetEnergyBefore <= 0 && target.alive) {
-      if (engine.applyDebuff(target, "manaSeal", null, MS_SEAL_TURNS)) {
-        engine.log(`⛔ ${attacker.name} — ${target.name} พลังงาน 0 ตอนโดนโจมตีปกติ ติดผนึกพลังงาน ${MS_SEAL_TURNS} เทิร์น`);
-      } else {
-        engine.log(`🛡️ ${target.name} ต้านสถานะผิดปกติ — ไม่ติดผนึกพลังงาน`);
+    const marked = attacker.mageslayerMarkedId === target.id && (target.statuses.mageslayerMark || 0) > 0;
+    if (marked) {
+      const targetEnergyBefore = target.skillPoints || 0; // เช็คก่อน Witch Mark ลดมันลง
+      const wantSteal = Math.max(1, Math.min(4, dmg));
+      const stolen = this.stealEnergy(engine, attacker, target, wantSteal);
+      if (stolen > 0) engine.log(`🔮 ${attacker.name} Witch Mark — ขโมยพลังงาน ${target.name} ${stolen} หน่วย (ดาเมจ ${dmg} → min1/max4)`);
+      if (targetEnergyBefore <= 0 && target.alive) {
+        if (engine.applyDebuff(target, "manaSeal", null, MS_SEAL_TURNS)) {
+          engine.log(`⛔ ${attacker.name} — ${target.name} พลังงาน 0 ตอนโดนโจมตีปกติ ติดผนึกพลังงาน ${MS_SEAL_TURNS} เทิร์น`);
+        } else {
+          engine.log(`🛡️ ${target.name} ต้านสถานะผิดปกติ — ไม่ติดผนึกพลังงาน`);
+        }
       }
     }
     const fury = attacker.statuses.mageslayerFury || 0;
@@ -87,11 +91,12 @@ module.exports = {
   // เรียกจาก doAttack()'s evade branch — เป้าหมายหลบหลีกได้ยังถูกขโมยพลังงาน 1 หน่วยเสมอ
   onAttackDodgeSteal(engine, attacker, target) {
     if (attacker.characterId !== "mageslayer") return;
+    if (attacker.mageslayerMarkedId !== target.id || !((target.statuses.mageslayerMark || 0) > 0)) return;
     const stolen = this.stealEnergy(engine, attacker, target, 1);
     if (stolen > 0) engine.log(`🔮 ${attacker.name} Witch Mark — ${target.name} หลบหลีกได้ แต่ยังถูกขโมยพลังงาน ${stolen} หน่วย`);
   },
 
-  // เรียกจาก useSkill() ท้าย effect (ทุกครั้งที่มีผู้เล่นคนใดใช้สกิลสำเร็จ) — เป้าหมายที่ถูกมาร์กอยู่: 35% ขโมย 1 หน่วย
+  // เรียกจาก useSkill() ท้าย effect (ทุกครั้งที่มีผู้เล่นคนใดใช้สกิลสำเร็จ) — เป้าหมายที่ถูกมาร์กอยู่: 35% ลด 1 หน่วย
   //  หรือถ้าเป้าหมายเหลือ 0 หน่วยพอดี มอบผนึกพลังงานแทน
   onTargetUsedSkill(engine, p) {
     for (const ms of engine.alivePlayers()) {
@@ -104,12 +109,12 @@ module.exports = {
         }
         continue;
       }
-      const stolen = this.stealEnergy(engine, ms, p, 1);
-      if (stolen > 0) engine.log(`🔮 ${ms.name} ตราล่าเวท (35%) — ${p.name} ใช้สกิล โดนขโมยพลังงาน ${stolen} หน่วย`);
+      p.skillPoints -= 1;
+      engine.log(`🔮 ${ms.name} ตราล่าเวท (35%) — ${p.name} ใช้สกิล พลังงานลดลง 1 หน่วย (ผู้ใช้ตราไม่ได้รับพลังงาน)`);
     }
   },
 
-  // เรียกจาก server.js's bust/แต้มต่ำสุด trigger — Fury: 35% สะสมพลังโกรธ (สูงสุด 3) อิสระต่อกันทั้งสอง trigger
+  // เรียกจาก server.js's bust/แต้มต่ำสุด trigger — Fury: 35% สะสมพลังโกรธ (สูงสุด 2) อิสระต่อกันทั้งสอง trigger
   onBustOrLoseRoll(engine, p) {
     if (p.characterId !== "mageslayer") return;
     if (Math.random() >= MS_FURY_CHANCE) return;
@@ -117,7 +122,7 @@ module.exports = {
     engine.log(`😤 ${p.name} Fury — สะสมพลังโกรธ +1 (${p.statuses.mageslayerFury}/${MS_FURY_MAX})`);
   },
 
-  // ---------- Mana Rupture (สกิลรอง — ทำงานหลังเปิดการ์ด) ----------
+  // ---------- Mana Rupture (ท่าไม้ตาย — ใส่ดีบัฟก่อนเปิดการ์ด ระเบิดต้นเทิร์นถัดไป) ----------
   prepareRuptureTarget(engine, p, targets) {
     const tgs = Array.isArray(targets) ? [...new Set(targets)] : [];
     const t = tgs.length === 1 ? engine.players[tgs[0]] : null;
@@ -125,21 +130,28 @@ module.exports = {
     return t;
   },
 
-  // เรียกจาก useSkill() ในส่วน effect — เล็งเป้าหมายไว้ก่อน (ผลทำงานหลังเปิดไพ่)
-  applyRuptureEffect(engine, p, target, skillName) {
-    if (engine.satoruOnTargeted(target, p, `สกิล ${skillName} `).negated) return " — ถูกลบล้าง";
-    p.mageslayerRuptureTargetId = target.id;
-    engine.log(`💥 ${p.name} Mana Rupture — เล็งเป้าหมาย ${target.name} ไว้ (ผลจะทำงานหลังทุกคนเปิดไพ่)`);
-    return ` — เลือกเป้าหมาย ${target.name} (ผลจะทราบหลังเปิดไพ่)`;
+  ruptureDamageForEnergy(energy) {
+    if (energy >= 7) return 1;
+    if (energy >= 2) return 3;
+    return 5;
   },
 
-  // ตัดสินผล Mana Rupture ตามพลังงานเป้าหมาย ณ ตอนเปิดไพ่ (แยกฟังก์ชันเพื่อเทสต์ได้ตรงๆ)
-  resolveManaRupture(engine, caster, target) {
-    const e = target.skillPoints || 0;
-    let dmg = 0, stunTurns = 0;
-    if (e >= 7 && e <= 8) dmg = 1;
-    else if (e >= 2 && e <= 6) dmg = 3;
-    else if (e >= 0 && e <= 1) { dmg = 5; stunTurns = target.characterId === "bard" ? 2 : 1; }
+  applyRuptureEffect(engine, p, target, skillName) {
+    if (engine.satoruOnTargeted(target, p, `สกิล ${skillName} `).negated) return " — ถูกลบล้าง";
+    if (!engine.applyDebuff(target, "manaRupture", null, 2)) {
+      engine.log(`🛡️ ${target.name} ต้านสถานะผิดปกติ — Mana Rupture ไม่ติด`);
+      return " — ถูกต้านสถานะ";
+    }
+    const energy = target.skillPoints || 0;
+    const dmg = this.ruptureDamageForEnergy(energy);
+    target.manaRuptures = target.manaRuptures || [];
+    target.manaRuptures.push({ casterId: p.id, dmg, energy, round: engine.roundNumber + 1 });
+    engine.log(`💥 ${p.name} Mana Rupture — ${target.name} ติด [ระเบิดมานา] (พลังงาน ${energy} → ดาเมจ ${dmg}) จะระเบิดต้นเทิร์นถัดไป`);
+    return ` — ${target.name} ติดระเบิดมานา`;
+  },
+
+  resolveManaRupture(engine, caster, target, pending) {
+    const { energy: e, dmg } = pending;
     engine.dealMixed(target, dmg, true);
     engine.maybeBeatSave(target); engine.maybeBeatMode(target); engine.maybeEva3(target); engine.maybeWakeKotone(target);
     target.wasAttacked = true;
@@ -147,29 +159,23 @@ module.exports = {
       engine.instantDeath(target);
       if (!target.alive) engine.log(`💀 ${target.name} เลือดจริงหมด ตกรอบ!`);
     }
-    if (stunTurns > 0 && target.alive) {
-      if (engine.applyDebuff(target, "stun", null, stunTurns)) {
-        engine.log(`💥😵 ${caster.name} Mana Rupture — ${target.name} พลังงาน 0 รับดาเมจ -${dmg} และสตั้น ${stunTurns} เทิร์น${target.characterId === "bard" ? " (คีตกวี — สตั้นพิเศษ 2 เทิร์น)" : ""}`);
-      } else {
-        engine.log(`💥🛡️ ${caster.name} Mana Rupture — ${target.name} รับดาเมจ -${dmg} แต่ต้านสถานะผิดปกติ ไม่ติดสตั้น`);
-      }
-    } else {
-      engine.log(`💥 ${caster.name} Mana Rupture — ${target.name} (พลังงาน ${e}) รับดาเมจ -${dmg}`);
-    }
+    engine.log(`💥 ${caster ? caster.name : "Mana Rupture"} — ระเบิดมานาของ ${target.name} ทำงานต้นเทิร์น (พลังงานตอนติดดีบัฟ ${e}) รับดาเมจ -${dmg}`);
   },
 
-  // เรียกจาก afterResolve() — ทำงานทุกคนที่เล็งเป้าหมายไว้ (ไพ่แตก = ใช้งานไม่ได้)
-  resolveAllRuptures(engine) {
-    for (const p of engine.alivePlayers()) {
-      if (!p.mageslayerRuptureTargetId) continue;
-      const t = engine.players[p.mageslayerRuptureTargetId];
-      p.mageslayerRuptureTargetId = null;
-      if (engine.bustedOf(p)) {
-        engine.log(`💥 ${p.name} ไพ่แตก! Mana Rupture ใช้งานไม่ได้ — แต้มสกิลเสียฟรี`);
-        continue;
+  resolveDueRuptures(engine) {
+    for (const target of Object.values(engine.players)) {
+      if (!target.alive || !Array.isArray(target.manaRuptures)) continue;
+      const due = target.manaRuptures.filter((x) => x.round <= engine.roundNumber);
+      target.manaRuptures = target.manaRuptures.filter((x) => x.round > engine.roundNumber);
+      for (const pending of due) {
+        if (!target.alive) break;
+        this.resolveManaRupture(engine, engine.players[pending.casterId], target, pending);
       }
-      if (!t || !t.alive) continue;
-      this.resolveManaRupture(engine, p, t);
+      if (!target.manaRuptures.length) {
+        delete target.manaRuptures;
+        delete target.statuses.manaRupture;
+        if (target.statusAmt) delete target.statusAmt.manaRupture;
+      }
     }
   },
 

@@ -138,8 +138,9 @@ const GUTS_AMMO = {
   gargorgon: { id: "gargorgon", name: "Gargorgon Ray",      price: 5,  img: `${ITEM_BASE}/guts_key/gargorgon_key.webp`, cut: "gutsGargorgon" },
   thunder:   { id: "thunder",   name: "Thunder Bullet",     price: 5,  img: `${ITEM_BASE}/guts_key/eleking_key.webp`,   cut: "gutsThunder" },
   nurse:     { id: "nurse",     name: "Nursedessei Cannon", price: 10, img: `${ITEM_BASE}/guts_key/nurse_key.webp`,     cut: "gutsNurse", breaksGun: true },
+  hyper_trigger: { id: "hyper_trigger", name: "Hyper Key Trigger", price: 15, img: `${ITEM_BASE}/guts_hyper_key/hyper_key_trigger.jpg`, cut: "triggerHenshin", transform: true },
 };
-const GUTS_AMMO_IDS = Object.keys(GUTS_AMMO);
+const GUTS_AMMO_IDS = Object.keys(GUTS_AMMO).filter((id) => id !== "hyper_trigger");
 const UNCLE_SHOP_MAX_GUNS = 2;    // ปืนขึ้นได้สูงสุด 2 กระบอกต่อรอบที่ร้านรีสต็อก (ที่เกินสุ่มเป็นกระสุนแทน)
 // ---------- DoomGuy (patch 2.2 full) ----------
 const DOOM_BASE = "/characters/doomguy";
@@ -947,7 +948,7 @@ const TEMARI_ANATA_DRAWS = 3;    // ANATA WAAAAAAAA: บังคับจั่
 //  และแยก ยามฟ้าสาง/เส้นชีวิต ออกไปลดทีละ 1 แทน — ดูใน st === "song")
 const DEBUFF_KEYS = ["discord", "sleep", "stun", "nodraw", "noskill", "sena",
   "energy", "nohealing", "moonmark", "overwork", "unplug", "weak", "fragile", "spellburden",
-  "oblada", "calamity", "hburn", "phenexBanUlt", "nanayaSeal", "miyakoSeal", "invert", "manaSeal"];
+  "oblada", "calamity", "hburn", "phenexBanUlt", "nanayaSeal", "miyakoSeal", "invert", "manaSeal", "manaRupture"];
 // เกราะสูงสุดของผู้เล่น: ปกติ 2 — ระหว่างสวมเกราะราชัน (ท่าไม้ตายคุวากาตะ) เพิ่ม +3 เป็น 5
 // ระหว่างสกิลติดตัว 3 เอวา 13 (เลือด <= 3) เพิ่ม +1
 // ระหว่าง Lie Like Vortigern (โอเบรอน) เป้าหมายได้เพดานเกราะ +1
@@ -996,6 +997,8 @@ function maybeBeatSave(p) {
 // ริต้า เบอร์นัล (characters/phenex.js) — wrapper รอบ CHAR_HOOKS.phenex.resolveRelease
 // ตายกลางเทิร์น (เลือดหมดจากสกิล/ผลสถานะ): ตกรอบทันที
 function instantDeath(p) {
+  // Ultraman Trigger: ตายในร่างพิเศษจะคืนร่างเดิมแทน และเหลือพลังชีวิต 1 หน่วย
+  if (p.characterId === "ultraman_trigger" && CHAR_HOOKS.ultraman_trigger.restore(engine, p, true)) return;
   // ริต้า เบอร์นัล (สกิลติดตัว 1 patch 2.1.6, characters/phenex.js): ตายครั้งแรก -> เกิดใหม่แทนที่จะตกรอบ (ครั้งเดียวต่อเกม)
   if (p.characterId === "phenex" && CHAR_HOOKS.phenex.tryRebirth(engine, p)) return;
   // ริต้า เบอร์นัล (สกิลติดตัว 2 patch 2.1.7, characters/phenex.js): ตกรอบจริงขณะท่าไม้ตาย 2 ยังทำงานอยู่ -> ปลดปล่อยความเจ็บปวดที่สะสมทั้งหมดก่อนตาย
@@ -1068,6 +1071,7 @@ function positionUsedByOther(pos, sid) {
 // รูปที่แสดง: Beat Mode (ถาวรจนตาย) > ร่างสุดท้ายฟุจิมารุ (จนตาย) > Paradise (เหนือกว่าสกิลติดตัว NT-D)
 //  > NT-D คงอยู่จนแก้แค้น > ไคจู Black King > Ginga > สวมเกราะราชัน
 function displayImg(p) {
+  if (p.characterId === "ultraman_trigger") return "/characters/ultraman_trigger/trigger.webp";
   // โอเบรอน: ร่างสลับตามช่วงเวลากลางวัน/กลางคืนเสมอ
   if (p.characterId === "oberon") return isNightRound(roundNumber) ? OBERON_NIGHT_IMG : OBERON_MORNING_IMG;
   // ชเรด เอลัน: รวมร่างทำนองเพลงแล้ว = ร่างอควาเรียน สปาด้า ถาวร
@@ -1128,10 +1132,17 @@ function displayImg(p) {
   if (p.characterId === "banagher" && gameState !== "LOBBY") return BANAGHER_BASE_IMG;
   return p.img;
 }
-// เพลงสกิล: Beat Mode (ex_guts) ทับทุกเพลงจนผู้ใช้ตาย > คนที่เปิดร่างล่าสุด
+// เพลงสกิล: Ultraman Trigger ทับทุกเพลงระหว่างอยู่ในร่าง > Beat Mode > คนที่เปิดร่างล่าสุด
 //  คืน { music, at } — at = ลำดับการเปิดร่าง ให้ client รู้ว่าเป็น "การเปิดครั้งใหม่"
 //  (เปิดท่าซ้ำ / คนอื่นเปิดท่าเพลงเดียวกันทับ) -> เพลงต้องเริ่มใหม่จากต้น
 function activeSkillMusic() {
+  // Ultraman Trigger: เพลงประจำร่างเล่นค้างตลอด 6 เทิร์นและมีลำดับสูงสุด
+  let bestTrigger = null;
+  for (const p of alivePlayers()) {
+    if (p.characterId !== "ultraman_trigger") continue;
+    if (!bestTrigger || (p.transformAt || 0) > bestTrigger.at) bestTrigger = { music: "trigger", at: p.transformAt || 0 };
+  }
+  if (bestTrigger) return bestTrigger;
   let bestBeat = null;
   for (const p of alivePlayers()) {
     if (p.seen && p.seen.beat) {
@@ -1362,7 +1373,7 @@ function addSkill(p, n) {
   // ชะงัก (โอกูริ Rework): ฟื้นฟูแต้มสกิลไม่ได้ทุกช่องทาง ระหว่างติดสถานะนี้
   if (((p.statuses && p.statuses.stagger) || 0) > 0) return;
   if (((p.statuses && p.statuses.manaSeal) || 0) > 0) return; // ผนึกพลังงาน (Universal): ฟื้นฟูแต้มสกิลไม่ได้ทุกช่องทาง
-  if (p.characterId === "mageslayer") return; // Song's Curse: ถาวร ไม่ใช่สถานะ ไม่ต้านได้ — การขโมย/Mana Rupture ทะลุผ่านเพราะไม่เรียก addSkill
+  if (p.characterId === "mageslayer") return; // Song's Curse: ฟื้นพลังงานได้เฉพาะการโจมตีเป้าหมายที่ติด Witch Mark ซึ่งไม่เรียก addSkill
   const before = p.skillPoints;
   p.skillPoints = Math.min(maxSkillOf(p), p.skillPoints + n); // Bard: เพดานพลังงาน 9
   p.gainedSkill += p.skillPoints - before;
@@ -1537,7 +1548,7 @@ function resetCombat(p) {
   // ---------- ผู้สังหารจอมมหาเวทย์ (mageslayer) ----------
   p.mageslayerMarkedId = null;      // ตราล่าเวท: id เป้าหมายที่มาร์กอยู่ (เคลื่อนย้ายได้)
   p.mageslayerHasMarked = false;    // เคยใช้ Witch Mark หรือยัง (ถาวร — ขับเคลื่อนภาพโปรไฟล์ MS01→MS02)
-  p.mageslayerRuptureTargetId = null; // Mana Rupture: เป้าหมายที่เล็งไว้ (ผลทำงานหลังเปิดไพ่)
+  p.mageslayerWitchMarkReadyRound = 0; // Witch Mark: รอบที่กลับมาใช้ได้หลังคูลดาวน์ 2 เทิร์น
   p.mageslayerLockedBurden = false; // Mana Burden: Bard ที่ติดตราล่าเวทตอนโดน — ล้าง spellburden ไม่ได้แม้ต้านสถานะ
   // ---------- ทาคุมิ ฟุจิวาระ (takumi) ----------
   p.takumiGear = 1;             // เกียร์ธรรมดา: 1-6 เริ่มเกม 1
@@ -1884,6 +1895,7 @@ function buildStateFor(viewerId) {
         // ไค ชิซากิ: สรุป Overhaul tracker (ชื่อผู้ถือ+ประเภทสถานะ) — เฉพาะผู้เล่นไคเท่านั้น (ตัวอื่นเห็น undefined)
         kaiOverhaulSlots: p.characterId === "kai" ? kaiOverhaulSlots.map((s) => ({ playerId: s.playerId, name: (players[s.playerId] && players[s.playerId].name) || "", status: s.status, img: players[s.playerId] ? displayImg(players[s.playerId]) : null })) : undefined,
         mageslayerHasMarked: p.characterId === "mageslayer" ? !!p.mageslayerHasMarked : undefined, // ผู้สังหารจอมมหาเวทย์: เคยใช้ Witch Mark หรือยัง
+        mageslayerWitchMarkCooldown: p.characterId === "mageslayer" ? Math.max(0, (p.mageslayerWitchMarkReadyRound || 0) - roundNumber) : undefined,
         kaiRivalId: mine ? (p.kaiRivalId || null) : undefined, // ไค ชิซากิ: คู่ปรับที่ถูกบังคับโจมตี (เห็นแค่ตัวเอง — ฝั่งอื่นเช็คจาก statuses.kaiRival1/2 ได้)
         kaiSkillUsesRound: p.characterId === "kai" ? (p.kaiSkillUsesRound || 0) : undefined, // ไค: งบสกิล 2 ครั้งต่อเทิร์น ใช้ไปแล้วกี่ครั้ง
         takumiGear: p.characterId === "takumi" ? (p.takumiGear || 1) : undefined, // ทาคุมิ: เกียร์ธรรมดาปัจจุบัน (1-6)
@@ -2082,9 +2094,10 @@ function openShop() {
   for (let i = 0; i < SHOP_MAX_ITEMS; i++) {
     shopItems.push({ id: `shop_${shopRoundSeq}_${i}`, ...rollShopItem(), sold: false, soldTo: null });
   }
-  uncleShopItems = [];
+  // Hyper Key Trigger โผล่แน่นอน 1 ชิ้นต่อรอบร้านค้า และไม่ถูกสุ่มซ้ำในช่องอื่น
+  uncleShopItems = [{ id: `ushop_${shopRoundSeq}_hyper`, type: "gutsAmmo", ammo: "hyper_trigger", price: GUTS_AMMO.hyper_trigger.price, sold: false, soldTo: null }];
   let guns = 0;
-  for (let i = 0; i < UNCLE_SHOP_MAX_ITEMS; i++) {
+  for (let i = 1; i < UNCLE_SHOP_MAX_ITEMS; i++) {
     const rolled = rollUncleShopItem(guns < UNCLE_SHOP_MAX_GUNS);
     if (rolled.type === "gutsGun") guns++;
     uncleShopItems.push({ id: `ushop_${shopRoundSeq}_${i}`, ...rolled, sold: false, soldTo: null });
@@ -2164,6 +2177,14 @@ function useInventoryItem(id, uid, opts = {}) {
   } else if (item.type === "gutsGun") {
     return; // ปืนเป็นไอเทมถาวร ไม่ใช่ของกดใช้ — ต้อง return ก่อนถึง splice ท้ายฟังก์ชัน ไม่งั้นปืนหายทันทีที่กด
   } else if (item.type === "gutsAmmo") {
+    if (item.ammo === "hyper_trigger") {
+      if (gameState !== "PLAYING" || p.locked || !hasGutsGun(p) || p.gutsShotTurn === roundNumber || p.characterId === "ultraman_trigger") return;
+      p.gutsShotTurn = roundNumber;
+      p.inventory.splice(idx, 1);
+      if (!CHAR_HOOKS.ultraman_trigger.activate(engine, p)) return;
+      pausePlayingForCutscene();
+      return;
+    }
     const target = gutsFireTargetOf(p, item, opts.targetId);
     if (!target) return; // ยิงไม่ได้ = ไม่เสียกระสุน
     p.gutsShotTurn = roundNumber; // 1 นัดต่อเทิร์น — จองไว้ตั้งแต่ตอนกด กันยิงซ้ำระหว่างวีดีโอเล่นอยู่
@@ -2249,6 +2270,8 @@ function dealRound() {
   lastAttack = null;
   roundSkills = [];
   anataMusicSeq = 0;
+  // Mana Rupture ทำงานต้นเทิร์นถัดไป ก่อนแจกไพ่/เริ่มการกระทำ
+  CHAR_HOOKS.mageslayer.resolveDueRuptures(engine);
   // ร้านค้ามายา (patch 2.2 full): เปิดทุกๆ 5 เทิร์น ตอนเริ่มเทิร์นใหม่
   if (roundNumber % SHOP_INTERVAL_TURNS === 0) openShop();
   // ยูนะ ไอดอลประจำสนาม: ม้วนลูกเต๋าทุกๆ 5 เทิร์น เริ่มจากเทิร์นที่ 16 (16, 21, 26, ...)
@@ -2669,11 +2692,14 @@ function useSkill(id, tier, targets, item) {
   // patch 2.2.5: กันตาย (สกิลติดตัว 1) เคยทำงานไปแล้ว — ท่าไม้ตายเปลี่ยนเป็นร่วมเดินทางไปกับฉันเถอะถาวร (แทนพิชิตแสงดาว)
   if (ch && ch.id === "takuto" && tier === "ultimate" && p.beatSaved) skill = ch.ultimate2;
   if (!skill) return;
+  const isTriggerSkill = p.characterId === "ultraman_trigger";
   // โอเบรอน/โคโตเนะ: สกิลสลับตามช่วงเวลา — กลางคืนใช้เวอร์ชันกลางคืนแทน
   if (tier === "ultimate" && ch.ultimateNight && isNightRound(roundNumber)) skill = ch.ultimateNight;
   if (tier === "secondary" && ch.secondaryNight && isNightRound(roundNumber)) skill = ch.secondaryNight;
   if (tier === "basic" && ch.basicNight && isNightRound(roundNumber)) skill = ch.basicNight;
   if ((p.statuses.noskill || 0) > 0) return; // โดนหอกลองกินัสปัก: เทิร์นนี้ใช้สกิลไม่ได้
+  if (isTriggerSkill && tier === "secondary" && (!(p.statuses.triggerCircle > 0) || p.statuses.triggerMulti > 0)) return;
+  if (isTriggerSkill && tier === "ultimate" && (!(p.statuses.triggerCircle > 0) || p.statuses.triggerMulti > 0)) return;
 
   // เวลาทอง (แกมเบลอร์): แต้มที่ใช้ของสกิลพื้นฐาน/สกิลรองลดครึ่งหนึ่ง
   const isGambler = p.characterId === "gambler";
@@ -2933,6 +2959,7 @@ function useSkill(id, tier, targets, item) {
   const isMsWitchMark = p.characterId === "mageslayer" && tier === "basic";
   let msWitchMarkTarget = null;
   if (isMsWitchMark) {
+    if (roundNumber < (p.mageslayerWitchMarkReadyRound || 0)) return;
     msWitchMarkTarget = CHAR_HOOKS.mageslayer.prepareWitchMarkTarget(engine, p, targets);
     if (!msWitchMarkTarget) return;
   }
@@ -3052,6 +3079,7 @@ function useSkill(id, tier, targets, item) {
   if (isKaiCreation && kaiMarkTarget) flashSuffix = CHAR_HOOKS.kai.applyMark(engine, p, kaiMarkTarget, "kaiCreation", "รังสรรค์");
   if (isKaiPunishment && kaiMarkTarget) flashSuffix = CHAR_HOOKS.kai.applyMark(engine, p, kaiMarkTarget, "kaiPunishment", "ลงทัณฑ์");
   // ---------- ผู้สังหารจอมมหาเวทย์ (characters/mageslayer.js) ----------
+  if (isTriggerSkill) CHAR_HOOKS.ultraman_trigger.applySkill(engine, p, tier);
   if (isMsWitchMark && msWitchMarkTarget) flashSuffix = CHAR_HOOKS.mageslayer.applyWitchMark(engine, p, msWitchMarkTarget);
   if (isMsRupture && msRuptureTarget) flashSuffix = CHAR_HOOKS.mageslayer.applyRuptureEffect(engine, p, msRuptureTarget, skill.name);
   if (isMsBurden) {
@@ -3733,8 +3761,6 @@ function afterResolve() {
   CHAR_HOOKS.tepeu.resolveAllKills(engine);
   // ---------- Ashen Trail: Cinderella Gray (โอกูริ, characters/oguri.js): หลังเปิดไพ่ — โจมตีทุกคนที่ไพ่แตก ----------
   CHAR_HOOKS.oguri.onAfterResolveAshenTrail(engine);
-  // ---------- ผู้สังหารจอมมหาเวทย์ (characters/mageslayer.js): Mana Rupture — ผลทำงานหลังเปิดไพ่ทุกคน ----------
-  CHAR_HOOKS.mageslayer.resolveAllRuptures(engine);
   // ---------- ทาคุมิ ฟุจิวาระ (characters/takumi.js): ถึงจะมองไม่เห็น แต่ฉันยังอยู่ — คนแรกที่ไพ่แตกระหว่างบัฟยังทำงาน ----------
   CHAR_HOOKS.takumi.tryBustTrigger(engine);
 
@@ -3884,21 +3910,22 @@ function computeAttackBase(engine, attacker, target) {
   const baseHook = (hook && hook.attackBaseOverride) ? hook.attackBaseOverride(engine, attacker, target, hookCtx) : 1;
   const hookBonus = (hook && hook.damageBonus) ? (hook.damageBonus(engine, attacker, target, hookCtx) || 0) : 0;
 
+  const triggerForm = attacker.characterId === "ultraman_trigger";
   const storiumAtk = attacker.characterId === "hikaru" && (attacker.statuses.storium || 0) > 0;
   const paradiseAtk = (attacker.statuses.paradise || 0) > 0;
   // veilAtk/partnerAtk: ungated ตั้งใจ (แจกให้ผู้เล่นอื่นได้ ไม่ผูกกับตัวละครเจ้าของสกิล) — อยู่ที่นี่ ไม่ใช่ hook
-  const veilAtk = (attacker.statuses.veil || 0) > 0;
-  const partnerAtk = CHAR_HOOKS.broadband_man.contractBuffActive(engine, attacker);
+  const veilAtk = !triggerForm && (attacker.statuses.veil || 0) > 0;
+  const partnerAtk = !triggerForm && CHAR_HOOKS.broadband_man.contractBuffActive(engine, attacker);
   const isRevenge = attacker.characterId === "banagher" && attacker.ntdTarget && attacker.ntdTarget === target.id;
   const isRival = attacker.characterId === "banagher" && attacker.ntdRivalId && attacker.ntdRivalId === target.id;
   const ntdBonus = (isRevenge || isRival || paradiseAtk) ? 1 : 0;
-  const empowerAtk = (attacker.statuses.empower || 0) > 0;
+  const empowerAtk = !triggerForm && (attacker.statuses.empower || 0) > 0;
   const oberonDayAtk = attacker.characterId === "oberon" && !engine.isNightRound(engine.roundNumber);
   const shradeDayOff = attacker.characterId === "shrade_elan" && attacker.shradeForm && !engine.isNightRound(engine.roundNumber);
   const phenexPurgeAtk = attacker.characterId === "phenex" && (attacker.statuses.phenexPurge || 0) > 0;
   const hakunoInvertAtk = attacker.characterId === "hakuno" && (attacker.statuses.hakunoInvertReady || 0) > 0;
   const hakunoNoRegenAtk = attacker.characterId === "hakuno" && (attacker.statuses.hakunoNoRegenReady || 0) > 0;
-  const cardAtkBonus = attacker.statusAmt.cardAtkBonus || 0; // การ์ดแดงครบ 3 ใบตอนเปิดไพ่ (ดู applyLockColorTriggers)
+  const cardAtkBonus = triggerForm ? 0 : (attacker.statusAmt.cardAtkBonus || 0); // Trigger เสริมพลังตัวเองไม่ได้
 
   const base = baseHook + hookBonus + (veilAtk ? 1 : 0) + (empowerAtk ? 1 : 0) + (partnerAtk ? 1 : 0) + cardAtkBonus;
   return {
@@ -3914,6 +3941,8 @@ function doAttack(byId, targetId) {
   const attacker = players[byId];
   let target = players[targetId];
   if (!attacker || !target || !target.alive || target.id === attacker.id) return;
+  if (attacker.characterId === "ultraman_trigger" && (attacker.statuses.triggerMulti || 0) > 0
+    && !CHAR_HOOKS.ultraman_trigger.isHighestHpTarget(engine, attacker, target)) return;
   if (sealActive(target)) return; // เรจูอาคมบัญชา (อมตะ): เลือกโจมตีไม่ได้
   if (attacker.characterId === "satoru" && !moonCellActive()) return; // ซาโตรุ (patch 2.0.8.2): โจมตีธรรมดาไม่ได้เลย (ยกเว้นระหว่าง MOON*CELL)
   if (CHAR_HOOKS.bat_ben.cannotAttack(attacker)) return;              // แบทแมน (patch 2.2.7): ระหว่างเร้นเงา โจมตีไม่ได้
@@ -4109,18 +4138,19 @@ function doAttack(byId, targetId) {
     shradeDayOff, oguriGoldAtk, victoryAtk, beamPlusAtk, riddheNtdOn, riddheUltBonus, riddheP1Atk,
     riddheAvAtk, phenexPurgeAtk, miyakoUltAtk, hakunoInvertAtk, hakunoNoRegenAtk,
     rachanAtk, fourthAtk, doomLockonAtk, cardAtkBonus,
+    triggerCircleAtk, triggerMultiAtk, triggerZeperionAtk, triggerLightBonus,
   } = computeAttackBase(engine, attacker, target);
   // ผกผัน (สถานะ Universal patch 2.2.1): โบนัสพลังโจมตีที่ควรได้ กลับกลายเป็นลดพลังโจมตีแทน (คำนวณรอบเพดานฐาน 1 หน่วย)
   if (invertActive(attacker)) base = Math.max(0, 1 - (base - 1));
   if (kotoneExhausted) base = 0;
   let dmg = base + (kotoneExhausted ? 0 : ntdBonus);
   // เสริมพลัง / อ่อนแอ (สถานะพื้นฐาน patch 2.0.8): เพิ่ม/ลดดาเมจที่ทำได้ตามจำนวนที่ระบุ
-  const mightAtk = statusAmtOf(attacker, "might");
+  const mightAtk = attacker.characterId === "ultraman_trigger" ? 0 : statusAmtOf(attacker, "might");
   if (mightAtk > 0) dmg += mightAtk;
   // ยูนะ: Longing (บัฟผู้ถูกฟื้นคืนชีพ +1 ถาวร 5 เทิร์น) / Break Beat Bark! (ทุกคน +1 เฉพาะโจมตีปกติ ไม่ใช่สกิล)
-  const yunaLongingAtk = statusAmtOf(attacker, "yunaLonging");
+  const yunaLongingAtk = attacker.characterId === "ultraman_trigger" ? 0 : statusAmtOf(attacker, "yunaLonging");
   if (yunaLongingAtk > 0) dmg += yunaLongingAtk;
-  const yunaBeatBark = yunaBeatBarkActive();
+  const yunaBeatBark = attacker.characterId !== "ultraman_trigger" && yunaBeatBarkActive();
   if (yunaBeatBark) dmg += 1;
   const weakAtk = statusAmtOf(attacker, "weak");
   if (weakAtk > 0) dmg = Math.max(0, dmg - weakAtk);
@@ -4218,6 +4248,9 @@ function doAttack(byId, targetId) {
   else dealMixed(target, dmg, true);               // กฎปกติ: ลดเกราะก่อน ถ้าไม่มีเกราะจึงเข้าเลือดจริง
   // ผู้สังหารจอมมหาเวทย์ (characters/mageslayer.js): ขโมยพลังงาน (min1/max4) / ผนึกพลังงานถ้าเป้าหมายพลังงาน 0 / เคลียร์ Fury stack
   CHAR_HOOKS.mageslayer.onAttackPostDamage(engine, attacker, target, dmg);
+  CHAR_HOOKS.ultraman_trigger.onAttackLanded(engine, attacker, target, {
+    triggerCircleAtk, triggerMultiAtk, triggerZeperionAtk, triggerLightBonus,
+  });
   // สกิลรอง (ฟุจิตะ โคโตเนะ, characters/kotone.js): บัฟพลังโจมตีพื้นฐาน +2 ใช้แล้วหมดไปทันทีเมื่อได้โจมตี
   CHAR_HOOKS.kotone.onAttackConsumeDanceBuff(engine, attacker);
   // Ginga Strium (ฮิคารุ, characters/hikaru.js): โจมตีโดนเป้าหมาย -> ติดลุกไหม้ให้เป้าหมาย / ถูกโจมตีขณะอยู่ในร่างนี้ -> ผู้โจมตีติดลุกไหม้สวนกลับ
@@ -4478,6 +4511,9 @@ function doAttack(byId, targetId) {
   if (riddheP1Atk) addFx({ name: "จะทำให้ฉันหน้าสมเพชอีกนานแค่ไหน +1", img: displayImg(attacker), by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
   if (riddheAvAtk) addFx({ name: "อย่าทิ้งฉันไป +1 (ถาวร)", img: RIDDHE_NTD2_IMG, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
   if (riddheTaunted) addFx({ name: "Absorb Shield (ล่อเป้ามาที่ตัวเอง)", img: "/characters/riddhe/skill1/banshee_skill1.webp", by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
+  if (triggerCircleAtk) addFx({ name: "Circle Arms — แสงสว่าง +2 / ฟื้นชีวิต +2", img: "/characters/ultraman_trigger/skill1/trigger_skill1.webp", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
+  if (triggerMultiAtk) addFx({ name: "Multi Sword Finish +1 / แสงสว่างเพิ่ม +2", img: "/characters/ultraman_trigger/skill2/trigger_skill2.png", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
+  if (triggerZeperionAtk) addFx({ name: `ลำแสง Zeperion +${triggerLightBonus} จากแสงสว่าง`, img: "/characters/ultraman_trigger/skill3/trigger_skill3.jpg", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
   if (phenexTaunted) addFx({ name: "ไม่อยากให้ใครต้องเจ็บปวด (ล่อเป้ามาที่ตัวเอง)", img: PHENEX_NTD_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
   if (batTaunted) addFx({ name: "เข้ามาเลย (ล่อเป้ามาที่ตัวเอง)", img: BAT_SKILL3_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
   if (batReflectDmg > 0) addFx({ name: `เข้ามาเลย — ความเสียหายเกิดกับผู้โจมตีด้วย -${batReflectDmg}`, img: BAT_SKILL3_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
@@ -4504,7 +4540,7 @@ function doAttack(byId, targetId) {
   //  / อย่าอยู่เลย แกน่ะ! (ริต้า เบอร์นัล patch 2.1.6) / ฉันยัง...มองเห็นอยู่!!! กันตาย + อย่างนายน่ะ จะไปเข้าใจอะไร (สึงาชิ ทาคุโตะ patch 2.2.4):
   //  เล่นวีดีโอที่ค้างคิวก่อน แล้วค่อยขึ้นสรุปความเสียหาย
   //  (ปกติทุกท่าอื่นจะขึ้นสรุปความเสียหายก่อนแล้วค่อยเล่นวีดีโอค้างคิวตอนจบ — ท่าเหล่านี้กลับลำดับเฉพาะตัว)
-  if ((beamPlusAtk || (beam && attacker.characterId === "banagher") || unibeam2Atk || storiumAtk || phenexPurgeAtk || miyakoUltAtk || (beatSaveFired && target.characterId === "takuto") || takutoUlt2VideoQueued) && cutsceneQueue.length) runCutsceneQueue(showAttackFx);
+  if ((beamPlusAtk || (beam && attacker.characterId === "banagher") || unibeam2Atk || storiumAtk || phenexPurgeAtk || miyakoUltAtk || triggerMultiAtk || triggerZeperionAtk || (beatSaveFired && target.characterId === "takuto") || takutoUlt2VideoQueued) && cutsceneQueue.length) runCutsceneQueue(showAttackFx);
   else showAttackFx();
 }
 
@@ -4575,6 +4611,10 @@ function endTurn() {
       // ---------- ผู้สังหารจอมมหาเวทย์ (mageslayer) ----------
       if (k === "mageslayerMark") continue; // ตราล่าเวท: ถาวรจนกว่าจะย้าย/ถูกล้าง
       if (k === "mageslayerFury") continue; // Fury: สแตคพลังโกรธ ไม่ใช่ตัวนับเทิร์น — ใช้หมดพร้อมกันตอนโจมตี
+      // ---------- Ultraman Trigger ----------
+      if (k === "triggerForm") continue; // นับครบ 6 เทิร์นและคืน snapshot แยกที่ท้าย endTurn()
+      if (k === "triggerMulti") continue; // จักรแห่งแสงคงอยู่จนกว่าจะโจมตีสำเร็จ 1 ครั้ง
+      if (k === "triggerLight") continue; // แสงสว่างคงอยู่จนเจ้าของ Trigger คืนร่าง
       // ---------- โอกูริ แคป (patch 2.0.8.1) ----------
       if (k === "graybeast") continue;  // ร่าง Zone: ถาวรจนกว่าจะเข้าร่างหมดแรง
       // burnout (ร่างหมดแรง): เดิมถูกยกเว้นไม่ลดเทิร์นตรงนี้ แต่ไม่มีจุดไหนในโค้ดเคลียร์ทิ้งเองเลย (ไม่มี delete p.statuses.burnout ที่ไหนทั้งไฟล์)
@@ -4673,6 +4713,8 @@ function endTurn() {
     if (p.characterId === "satoru" && !passiveSealed(p)) gain += 1;
     // คิชินามิ ฮาคุโนะ (patch 2.2.1): ร่างหญิง — แต้มสกิลฟื้นเพิ่ม +1 ทุกเทิร์น
     if (p.characterId === "hakuno" && p.hakunoGender === "female") gain += 1;
+    // Ultraman Trigger: สกิลติดตัวฟื้นแต้มสกิลเพิ่มอีก 1 หน่วยทุกเทิร์น
+    if (p.characterId === "ultraman_trigger") gain += 1;
     // ค่าปรับปฏิเสธข้อเสนอ (เจ้าแห่งเน็ตบ้าน): แต้มสกิลหลังจบเทิร์นลด 1
     if ((p.skillDrain || 0) > 0) {
       gain = Math.max(0, gain - 1);
@@ -4800,6 +4842,13 @@ function endTurn() {
     const revived = players[yunaLongingPendingId];
     yunaLongingPendingId = null;
     if (revived) YunaMod.reviveWithLonging(engine, revived);
+  }
+  // Ultraman Trigger: นับเทิร์นหลังผลท้ายเทิร์นทั้งหมดจบแล้ว เพื่อให้ครบ 6 เทิร์นเต็ม
+  // เมื่อหมดเวลา คืน snapshot ก่อนแปลงร่าง (ค่าที่เกิดในร่าง Trigger จึงไม่ติดกลับไป)
+  for (const p of Object.values(players)) {
+    if (p.characterId !== "ultraman_trigger" || !p.alive) continue;
+    p.statuses.triggerForm = Math.max(0, (p.statuses.triggerForm || 0) - 1);
+    if (p.statuses.triggerForm <= 0) CHAR_HOOKS.ultraman_trigger.restore(engine, p, false);
   }
   // เล่นฉากระเบิด/ยูนะ (ถ้ามี) ให้จบก่อน แล้วค่อยสรุปจบเกม/ขึ้นรอบถัดไป
   runCutsceneQueue(() => {
@@ -5013,7 +5062,7 @@ io.on('connection', (socket) => {
       bardNotes: [], bardNotesUsed: 0, bardPending: null,
       bloodSection: 0, soulSection: 0, linkedWith: null,
       kaiLinkWith: null, kaiRivalId: null,
-      mageslayerMarkedId: null, mageslayerHasMarked: false, mageslayerRuptureTargetId: null, mageslayerLockedBurden: false,
+      mageslayerMarkedId: null, mageslayerHasMarked: false, mageslayerWitchMarkReadyRound: 0, mageslayerLockedBurden: false,
       shikiUlt: shikiUlt === "wither" ? "wither" : "deatheye", witherAdded: 0,
       oguriEnergy: OGURI_ENERGY_START, stamina: 0, oguriChargeCapBonus: 0, oguriZoneTurns: 0, staggerNext: 0,
       maxHpPenalty: 0, wouGuardCd: 0, calamityDraw: 0, locaOffer: null,

@@ -36,6 +36,7 @@ const mageslayer = require("./mageslayer");
 const takumi = require("./takumi");
 const bat_ben = require("./bat_ben");
 const princess_shiki = require("./princess_shiki");
+const ultraman_trigger = require("./ultraman_trigger");
 
 const CHARACTER_MODULES = [
   tohno,
@@ -67,6 +68,7 @@ const CHARACTER_MODULES = [
   takumi,
   bat_ben,
   princess_shiki,
+  ultraman_trigger,
 ];
 
 const CHAR_HOOKS = {};
