@@ -140,6 +140,7 @@ const GUTS_AMMO = {
   nurse:     { id: "nurse",     name: "Nursedessei Cannon", price: 10, img: `${ITEM_BASE}/guts_key/nurse_key.webp`,     cut: "gutsNurse", breaksGun: true },
 };
 const GUTS_AMMO_IDS = Object.keys(GUTS_AMMO);
+const UNCLE_SHOP_MAX_GUNS = 2;    // ปืนขึ้นได้สูงสุด 2 กระบอกต่อรอบที่ร้านรีสต็อก (ที่เกินสุ่มเป็นกระสุนแทน)
 // ---------- DoomGuy (patch 2.2 full) ----------
 const DOOM_BASE = "/characters/doomguy";
 const DOOM_WEAPONS = {
@@ -763,6 +764,7 @@ let allyWinFlag = false;  // ริดดี้ (patch 2.0.9): จบเกม�
 let shopItems = [];       // ร้านค้ามายา (patch 2.2 full): สินค้าส่วนกลางของรอบปัจจุบัน (สูงสุด 9 ชิ้น เปิดทุก 5 เทิร์น)
 let shopRoundSeq = 0;     // ลำดับรอบร้านค้า (ใช้สร้าง id สินค้าไม่ให้ซ้ำกันข้ามรอบ — ใช้ร่วมกันทั้ง 2 ร้าน)
 let uncleShopItems = [];  // ร้านขายของลุงเท่ง: สินค้าส่วนกลางของรอบปัจจุบัน (รีพร้อมร้านค้ามายา)
+let gutsCutsceneShown = {}; // กระสุน GUTS Select: วีดีโอเต็มจอของกระสุนแต่ละแบบเล่นครั้งเดียวต่อเกม (ทั้งโต๊ะ ไม่ใช่ต่อคน)
 
 // ---------- ยูนะ ไอดอลประจำสนาม (characters/yuna.js — ไม่ใช่ตัวละครที่เล่นได้ ไม่มี p เป็นของตัวเอง) ----------
 const YUNA_IMG = "/characters/yuna/yuna.png";
@@ -2031,6 +2033,7 @@ function startMatch() {
   yunaLongingUsed = false; yunaWindowEnd = 0; yunaEffect = null; yunaTargetId = null; yunaMusicSeq = 0; yunaLongingPendingId = null; yunaPity = 0;
   allyWinFlag = false;
   shopItems = []; uncleShopItems = []; // ล้างสต็อกร้านค้าเก่าค้างจากแมตช์ก่อน (รอเปิดใหม่ตอนเทิร์นที่ 5)
+  gutsCutsceneShown = {}; // วีดีโอกระสุนเล่นได้ใหม่ครั้งละ 1 รอบต่อแมตช์
   kaiOverhaulSlots = []; // ไค ชิซากิ: ล้าง tracker Overhaul ทุกครั้งที่เริ่มแมตช์ใหม่
   // อาริมะ มิยาโกะ (characters/miyako.js): เจอ โทโนะ ชิกิ หรือ นานายะ ชิกิ ในเกมเดียวกัน -> เล่นวีดีโอ arima_shiki.mp4 ก่อนเริ่มเทิร์นแรก
   cutsceneQueue = [];
@@ -2068,8 +2071,9 @@ function shopItemName(item) {
 }
 // ---------- ร้านขายของลุงเท่ง ----------
 // สุ่มสินค้า 1 ชิ้น: ปืน 30% / กระสุน 70% (เฉลี่ยเท่ากันทุกแบบ)
-function rollUncleShopItem() {
-  if (Math.random() < GUTS_GUN_CHANCE) return { type: "gutsGun", price: GUTS_GUN_PRICE };
+//  allowGun = false เมื่อรอบนี้มีปืนครบเพดานแล้ว -> สุ่มเป็นกระสุนแทนเสมอ
+function rollUncleShopItem(allowGun = true) {
+  if (allowGun && Math.random() < GUTS_GUN_CHANCE) return { type: "gutsGun", price: GUTS_GUN_PRICE };
   const ammo = GUTS_AMMO[GUTS_AMMO_IDS[Math.floor(Math.random() * GUTS_AMMO_IDS.length)]];
   return { type: "gutsAmmo", ammo: ammo.id, price: ammo.price };
 }
@@ -2081,8 +2085,11 @@ function openShop() {
     shopItems.push({ id: `shop_${shopRoundSeq}_${i}`, ...rollShopItem(), sold: false, soldTo: null });
   }
   uncleShopItems = [];
+  let guns = 0;
   for (let i = 0; i < UNCLE_SHOP_MAX_ITEMS; i++) {
-    uncleShopItems.push({ id: `ushop_${shopRoundSeq}_${i}`, ...rollUncleShopItem(), sold: false, soldTo: null });
+    const rolled = rollUncleShopItem(guns < UNCLE_SHOP_MAX_GUNS);
+    if (rolled.type === "gutsGun") guns++;
+    uncleShopItems.push({ id: `ushop_${shopRoundSeq}_${i}`, ...rolled, sold: false, soldTo: null });
   }
   lastLog.push(`🏪 ร้านค้ามายาเปิดแล้ว! มีสินค้า ${shopItems.length} ชิ้น: ${shopItems.map(shopItemName).join(", ")}`);
   lastLog.push(`🛒 ร้านขายของลุงเท่งเปิดแล้ว! มีสินค้า ${uncleShopItems.length} ชิ้น: ${uncleShopItems.map(shopItemName).join(", ")}`);
@@ -2163,7 +2170,10 @@ function useInventoryItem(id, uid, opts = {}) {
     if (!target) return; // ยิงไม่ได้ = ไม่เสียกระสุน
     p.gutsShotTurn = roundNumber; // 1 นัดต่อเทิร์น — จองไว้ตั้งแต่ตอนกด กันยิงซ้ำระหว่างวีดีโอเล่นอยู่
     lastLog.push(`🔫 ${p.name} ยิง ${GUTS_AMMO[item.ammo].name} ใส่ ${target.name}!`);
-    cutsceneKey = GUTS_AMMO[item.ammo].cut;
+    // วีดีโอเต็มจอของกระสุนแต่ละแบบเล่นครั้งเดียวต่อเกม — ครั้งต่อไปเป็นการ์ดแจ้งเตือนเล็ก ไม่หยุดกระดาน
+    const key = GUTS_AMMO[item.ammo].cut;
+    if (gutsCutsceneShown[key]) notifyTransform(p, key);
+    else { gutsCutsceneShown[key] = true; cutsceneKey = key; }
     pendingShot = { item, target };
   } else {
     return;
@@ -2174,6 +2184,7 @@ function useInventoryItem(id, uid, opts = {}) {
     queueCutscene(p, cutsceneKey);
     pausePlayingForCutscene(() => applyGutsBullet(p, pendingShot.item, pendingShot.target));
   } else {
+    if (pendingShot) applyGutsBullet(p, pendingShot.item, pendingShot.target); // ไม่มีวีดีโอ = ให้ผลทันที
     broadcastState();
   }
 }
@@ -5272,6 +5283,7 @@ const engine = {
   setShopItems(v) { shopItems = v; },
   get uncleShopItems() { return uncleShopItems; },
   setUncleShopItems(v) { uncleShopItems = v; },
+  resetGutsCutscenes() { gutsCutsceneShown = {}; },
   NETRAMANA_KILL_CHANCE,
   netramanaActive,
   statusAmtOf,

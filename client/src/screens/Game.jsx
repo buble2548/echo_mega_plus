@@ -33,7 +33,7 @@ function useViewport() {
 
 // เช็คว่าการ์ดคู่ต่อสู้คนนี้กดโจมตี/เลือกเป็นเป้าหมายได้ไหม — ใช้ร่วมกันทั้ง layout มือถือและจอใหญ่
 function isTargetable(p, iAmAttacker, c) {
-  return ((iAmAttacker && !p.statuses?.seal && (!c.kaiRivalId || p.id === c.kaiRivalId)) || !!c.anataSel || c.dawnSel || c.appleSel || c.bbSel || c.shSel || c.skSel || c.doomSel || c.saObSel || c.saLocaSel || c.bgSel || c.kawaiiSel || !!c.bardPending || c.nanayaSel || c.tpSel || c.kaiCreateSel || c.kaiPunishSel || c.msMarkSel || c.msRuptureSel || c.psSealSel) && p.alive;
+  return ((iAmAttacker && !p.statuses?.seal && (!c.kaiRivalId || p.id === c.kaiRivalId)) || !!c.anataSel || c.dawnSel || c.appleSel || c.bbSel || c.shSel || c.skSel || c.doomSel || c.saObSel || c.saLocaSel || c.bgSel || c.kawaiiSel || !!c.bardPending || c.nanayaSel || c.tpSel || c.kaiCreateSel || c.kaiPunishSel || c.msMarkSel || c.msRuptureSel || c.psSealSel || !!c.gunSel) && p.alive;
 }
 // แตะ/คลิกการ์ดคู่ต่อสู้แล้วต้องทำอะไร — ไล่ตามโหมดเลือกเป้าหมายที่เปิดอยู่ ไม่มีเลยก็โจมตีปกติ
 function resolveAttackPick(id, c) {
@@ -56,6 +56,7 @@ function resolveAttackPick(id, c) {
   if (c.msMarkSel) return c.pickMsMark(id);
   if (c.msRuptureSel) return c.pickMsRupture(id);
   if (c.psSealSel) return c.pickPsSeal(id);
+  if (c.gunSel) return c.pickGunTarget(id);
   return socket.emit("attack", { targetId: id });
 }
 
@@ -620,7 +621,7 @@ function ModalMounts({
   allyFinalAsk, onAnswerAllyFinal,
   statusView, statusViewIsSelf, onCloseStatus,
   shopOpen, shop, uncleShop, onCloseShop,
-  bagOpen, onCloseBag, players, gameState, roundNumber,
+  bagOpen, onCloseBag, players, gameState, roundNumber, onPickGunAmmo,
   skillConfirm, onConfirmSkill, onCancelSkill,
 }) {
   return (
@@ -640,8 +641,9 @@ function ModalMounts({
       {allyFinalAsk && me?.alive && <AllyFinalModal ask={allyFinalAsk} onAnswer={onAnswerAllyFinal} />}
       {statusView && <StatusModal p={statusView} statusOnly={statusViewIsSelf} onClose={onCloseStatus} />}
       {shopOpen && <ShopModal shop={shop} uncleShop={uncleShop} me={me} onClose={onCloseShop} />}
-      {bagOpen && <InventoryModal me={me} players={players} gameState={gameState} roundNumber={roundNumber} onClose={onCloseBag} />}
+      {bagOpen && <InventoryModal me={me} players={players} gameState={gameState} roundNumber={roundNumber} onPickGunAmmo={onPickGunAmmo} onClose={onCloseBag} />}
       {skillConfirm && <SkillConfirmModal confirm={skillConfirm} onConfirm={onConfirmSkill} onCancel={onCancelSkill} />}
+      <GutsVideoPreloader me={me} />
     </>
   );
 }
@@ -1209,11 +1211,26 @@ const SHOP_ITEM_INFO = {
 };
 // ข้อมูลกระสุนฝั่ง client (ชื่อ/รูปคีย์/คำอธิบาย) — ต้องตรงกับ GUTS_AMMO ใน server.js
 const GUTS_AMMO_INFO = {
-  shockwave: { name: "Shockwave Bullet",   img: "/item/guts_key/gomora_key.webp",    desc: "ทำลายเกราะของเป้าหมายทั้งหมด แต่ไม่สร้างความเสียหายให้พลังชีวิตจริง" },
-  gargorgon: { name: "Gargorgon Ray",      img: "/item/guts_key/gargorgon_key.webp", desc: "เทิร์นถัดไปเป้าหมายติดสถานะสตั้น 1 เทิร์น (จั่วการ์ด/กดสกิลไม่ได้) — ต้านทานได้" },
-  thunder:   { name: "Thunder Bullet",     img: "/item/guts_key/eleking_key.webp",   desc: "เป้าหมายติดสถานะ [สภาพชา] 2 เทิร์น — กดจั่ว 1 ครั้งได้ไพ่ 2 ใบ — ต้านทานได้" },
-  nurse:     { name: "Nursedessei Cannon", img: "/item/guts_key/nurse_key.webp",     desc: "ความเสียหาย 4 หน่วย (ลดเกราะก่อน) — ยิงเสร็จปืนพังหายจากกระเป๋า ต้องซื้อใหม่" },
+  shockwave: { name: "Shockwave Bullet",   img: "/item/guts_key/gomora_key.webp",    video: "/item/guts_key/shockwave_boost.mp4",    desc: "ทำลายเกราะของเป้าหมายทั้งหมด แต่ไม่สร้างความเสียหายให้พลังชีวิตจริง" },
+  gargorgon: { name: "Gargorgon Ray",      img: "/item/guts_key/gargorgon_key.webp", video: "/item/guts_key/gargorgon_ray.mp4",      desc: "เทิร์นถัดไปเป้าหมายติดสถานะสตั้น 1 เทิร์น (จั่วการ์ด/กดสกิลไม่ได้) — ต้านทานได้" },
+  thunder:   { name: "Thunder Bullet",     img: "/item/guts_key/eleking_key.webp",   video: "/item/guts_key/thunder_boost.mp4",      desc: "เป้าหมายติดสถานะ [สภาพชา] 2 เทิร์น — กดจั่ว 1 ครั้งได้ไพ่ 2 ใบ — ต้านทานได้" },
+  nurse:     { name: "Nursedessei Cannon", img: "/item/guts_key/nurse_key.webp",     video: "/item/guts_key/nursedessei_cannon.mp4", desc: "ความเสียหาย 4 หน่วย (ลดเกราะก่อน) — ยิงเสร็จปืนพังหายจากกระเป๋า ต้องซื้อใหม่" },
 };
+// รูปไอคอนไอเทมทั้งหมด: ดึงมาแคชไว้ตั้งแต่เข้าเกม (ไฟล์เล็ก) กันไอคอนโหลดช้าตอนเปิดร้าน/กระเป๋าครั้งแรก
+const ITEM_PRELOAD_IMGS = ["/item/guts_select_gun/guts_gun.webp", ...Object.values(GUTS_AMMO_INFO).map((a) => a.img)];
+// วีดีโอกระสุนที่ผู้เล่นถืออยู่: โหลดล่วงหน้าไว้ในเบื้องหลัง (ไฟล์ 5-16MB) — ไม่งั้นตอนยิงจริงวีดีโอจะขึ้นช้า
+//  แล้วโดนเวลาคัตซีนฝั่ง server ตัดจบก่อนวีดีโอเล่นจบ
+function GutsVideoPreloader({ me }) {
+  const ammoTypes = [...new Set((me?.inventory || []).filter((it) => it.type === "gutsAmmo").map((it) => it.ammo))];
+  if (!ammoTypes.length) return null;
+  return (
+    <div aria-hidden className="hidden">
+      {ammoTypes.map((a) => GUTS_AMMO_INFO[a] && (
+        <video key={a} src={GUTS_AMMO_INFO[a].video} preload="auto" muted playsInline />
+      ))}
+    </div>
+  );
+}
 function shopInfoOf(it) {
   const base = SHOP_ITEM_INFO[it.type] || { icon: "✦", label: () => "สินค้า", desc: "" };
   // imgOf/descOf: ไอเทมที่หน้าตา/คำอธิบายขึ้นกับข้อมูลในตัวไอเทมเอง (กระสุนแต่ละแบบ)
@@ -1285,14 +1302,13 @@ function ShopModal({ shop, uncleShop, me, onClose }) {
   );
 }
 
-function InventoryModal({ me, players, gameState, roundNumber, onClose }) {
+function InventoryModal({ me, players, gameState, roundNumber, onPickGunAmmo, onClose }) {
   const items = me?.inventory || [];
   // ยาเปลี่ยนสีการ์ด: ต้องเลือกการ์ด 1 ใบในมือก่อน ค่อยเลือกสีเป้าหมาย — เก็บ uid ของไอเทมที่กำลังเลือกอยู่ + index การ์ดที่เลือกแล้ว
   const [colorPickUid, setColorPickUid] = useState(null);
   const [colorPickCardIdx, setColorPickCardIdx] = useState(null);
-  // ปืนหน่วย GUTS Select: กดที่ปืน -> เลือกกระสุน -> เลือกเป้าหมาย แล้วจึงยิง
+  // ปืนหน่วย GUTS Select: กดที่ปืน -> เลือกกระสุนในกระเป๋า -> ปิดกระเป๋าแล้วไปเลือกเป้าหมายบนกระดานต่อ
   const [gunOpen, setGunOpen] = useState(false);
-  const [gunAmmoUid, setGunAmmoUid] = useState(null);
   const myCards = me?.cards || [];
 
   const ammoItems = items.filter((it) => it.type === "gutsAmmo");
@@ -1314,12 +1330,9 @@ function InventoryModal({ me, players, gameState, roundNumber, onClose }) {
     socket.emit("useInventoryItem", { uid: colorPickUid, cardIndex: colorPickCardIdx, color });
     setColorPickUid(null); setColorPickCardIdx(null);
   }
-  function toggleGun() { clickSound(); setGunOpen((v) => !v); setGunAmmoUid(null); }
-  function fireAt(targetId) {
-    clickSound();
-    socket.emit("useInventoryItem", { uid: gunAmmoUid, targetId });
-    setGunOpen(false); setGunAmmoUid(null);
-  }
+  function toggleGun() { clickSound(); setGunOpen((v) => !v); }
+  // เลือกกระสุนแล้วเด้งไปโหมดเลือกเป้าหมายบนกระดานทันที (กดที่การ์ดผู้เล่นจริง ไม่ใช่กดชื่อในกระเป๋า)
+  function pickAmmo(a) { clickSound(); setGunOpen(false); onPickGunAmmo(a); }
 
   return (
     <div className="fixed inset-0 z-40 bg-black/70 grid place-items-center p-4" onClick={onClose}>
@@ -1360,36 +1373,18 @@ function InventoryModal({ me, players, gameState, roundNumber, onClose }) {
                   {isGun && !gunOpen && fireBlock && <div className="text-[11px] text-echo-hp/90">⚠️ {fireBlock}</div>}
                   {isGun && gunOpen && (
                     <div className="rounded-lg bg-black/40 p-2">
-                      {gunAmmoUid === null ? (
-                        <>
-                          <div className="text-xs opacity-80 mb-1">เลือกกระสุน:</div>
-                          <div className="flex flex-wrap gap-2">
-                            {ammoItems.map((a) => {
-                              const ai = shopInfoOf(a);
-                              return (
-                                <button key={a.uid} className="flex flex-col items-center gap-1 w-20 rounded-lg border border-white/15 bg-black/30 p-1.5 hover:border-echo-gold transition-colors" onClick={() => { clickSound(); setGunAmmoUid(a.uid); }}>
-                                  <ItemIcon info={ai} className="h-9 w-9" />
-                                  <span className="text-[10px] leading-tight text-center">{ai.label(a)}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="text-xs opacity-80 mb-1">
-                            {shopInfoOf(items.find((a) => a.uid === gunAmmoUid) || {}).label(items.find((a) => a.uid === gunAmmoUid) || {})} — เลือกเป้าหมาย:
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {targets.map((t) => (
-                              <button key={t.id} className="rounded-lg border border-white/15 bg-black/30 px-2 py-1.5 text-xs font-bold hover:border-echo-hp transition-colors" onClick={() => fireAt(t.id)}>
-                                🎯 {t.name}
-                              </button>
-                            ))}
-                          </div>
-                          <button className="mt-2 text-[11px] opacity-70 underline" onClick={() => { clickSound(); setGunAmmoUid(null); }}>← เลือกกระสุนใหม่</button>
-                        </>
-                      )}
+                      <div className="text-xs opacity-80 mb-1">เลือกกระสุน (เลือกแล้วไปจิ้มเป้าหมายบนกระดาน):</div>
+                      <div className="flex flex-wrap gap-2">
+                        {ammoItems.map((a) => {
+                          const ai = shopInfoOf(a);
+                          return (
+                            <button key={a.uid} className="flex flex-col items-center gap-1 w-20 rounded-lg border border-white/15 bg-black/30 p-1.5 hover:border-echo-gold transition-colors" onClick={() => pickAmmo(a)}>
+                              <ItemIcon info={ai} className="h-9 w-9" />
+                              <span className="text-[10px] leading-tight text-center">{ai.label(a)}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                   {picking && (
@@ -2254,6 +2249,7 @@ export default function Game({ state, lowQ }) {
   const [kaiPunishSel, setKaiPunishSel] = useState(false);   // ไค: โหมดเลือกเป้าหมายมือขวาแห่งการลงทัณฑ์ (เลือกตัวเองได้)
   const [msMarkSel, setMsMarkSel] = useState(false);         // ผู้สังหารจอมมหาเวทย์: โหมดเลือกเป้าหมาย Witch Mark (เลือกตัวเองไม่ได้)
   const [msRuptureSel, setMsRuptureSel] = useState(false);   // ผู้สังหารจอมมหาเวทย์: โหมดเลือกเป้าหมาย Mana Rupture (เลือกตัวเองไม่ได้)
+  const [gunSel, setGunSel] = useState(null);                // ปืนหน่วย GUTS Select: กระสุนที่เลือกไว้ รอจิ้มเป้าหมายบนกระดาน (เลือกตัวเองไม่ได้)
   const [cycleFx, setCycleFx] = useState(null); // แบนเนอร์สลับกลางวัน/กลางคืน
   const prevCycle = useRef(null);
   const [hakunoCmdOpen, setHakunoCmdOpen] = useState(false); // คิชินามิ ฮาคุโนะ: เมนูเลือกคำสั่งอาคมบัญชาระดับ EX+
@@ -2578,6 +2574,12 @@ export default function Game({ state, lowQ }) {
     socket.emit("useSkill", { tier: "ultimate", targets: [id] });
     setTpSel(false);
   };
+  // ปืนหน่วย GUTS Select: เลือกกระสุนจากกระเป๋าแล้วปิดกระเป๋า เข้าโหมดจิ้มเป้าหมายบนกระดาน -> จิ้มแล้วยิงทันที
+  const startGunPick = (ammoItem) => { setBagOpen(false); setGunSel(ammoItem); };
+  const pickGunTarget = (id) => {
+    socket.emit("useInventoryItem", { uid: gunSel.uid, targetId: id });
+    setGunSel(null);
+  };
   // เลือกเป้าหมายมือซ้ายแห่งการรังสรรค์/มือขวาแห่งการลงทัณฑ์ (ไค ชิซากิ) -> ส่งไป server ทันที
   const pickKaiCreate = (id) => {
     socket.emit("useSkill", { tier: "basic", targets: [id] });
@@ -2730,6 +2732,12 @@ export default function Game({ state, lowQ }) {
   useEffect(() => {
     if (msMarkSel && (phase !== "PLAYING" || me?.skillUsed || done)) setMsMarkSel(false);
   }, [msMarkSel, phase, me?.skillUsed, done]);
+  // ไอคอนไอเทม: ดึงมาแคชไว้ตั้งแต่เข้าเกม กันโหลดช้าตอนเปิดร้าน/กระเป๋าครั้งแรก
+  useEffect(() => { for (const src of ITEM_PRELOAD_IMGS) { const im = new Image(); im.src = src; } }, []);
+  // ปืน GUTS Select: หลุดโหมดเลือกเป้าหมายเมื่อออกจากช่วงจั่วไพ่/เปิดไพ่แล้ว หรือกระสุนนัดนั้นถูกใช้ไปแล้ว
+  useEffect(() => {
+    if (gunSel && (phase !== "PLAYING" || done || !(me?.inventory || []).some((it) => it.uid === gunSel.uid))) setGunSel(null);
+  }, [gunSel, phase, done, me?.inventory]);
   useEffect(() => {
     if (msRuptureSel && (phase !== "PLAYING" || me?.skillUsed || done)) setMsRuptureSel(false);
   }, [msRuptureSel, phase, me?.skillUsed, done]);
@@ -2775,7 +2783,7 @@ export default function Game({ state, lowQ }) {
   // สถานะ+handler ของทุกโหมดเลือกเป้าหมาย มัดรวมไว้ที่เดียว ใช้ร่วมกันทั้ง layout มือถือและจอใหญ่ (ดู isTargetable/resolveAttackPick)
   const targetChain = {
     anataSel, dawnSel, appleSel, bbSel, shSel, skSel, doomSel, saObSel, saLocaSel, bgSel, kawaiiSel, bardPending, nanayaSel, tpSel,
-    kaiCreateSel, kaiPunishSel, msMarkSel, msRuptureSel, psSealSel, pickPsSeal,
+    kaiCreateSel, kaiPunishSel, msMarkSel, msRuptureSel, psSealSel, pickPsSeal, gunSel, pickGunTarget,
     pickAnata, pickDawn, pickGive, pickBb, pickSh, pickSk, pickDoom, pickSaOb, pickSaLoca, pickBg, pickKawaii, pickBard, pickNanaya, pickTp,
     pickKaiCreate, pickKaiPunish, pickMsMark, pickMsRupture,
     kaiRivalId,
@@ -2876,6 +2884,12 @@ export default function Game({ state, lowQ }) {
           <div className="shrink-0 text-center mt-1.5 text-hard">
             <span className="text-lg font-black text-echo-hp animate-pulse">🗡️ แตะเลือกเป้าหมาย อย่าทำอะไรไม่เข้าท่าเลย</span>
             <button onClick={() => { clickSound(); setPsSealSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
+          </div>
+        )}
+        {gunSel && (
+          <div className="shrink-0 text-center mt-1.5 text-hard">
+            <span className="text-lg font-black text-echo-hp animate-pulse">🔫 แตะเลือกเป้าหมาย {shopInfoOf(gunSel).label(gunSel)}</span>
+            <button onClick={() => { clickSound(); setGunSel(null); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
           </div>
         )}
         {tpSel && (
@@ -3215,7 +3229,7 @@ export default function Game({ state, lowQ }) {
           allyFinalAsk={state.allyFinalAsk} onAnswerAllyFinal={(k) => socket.emit("allyFinalAnswer", { keep: k })}
           statusView={statusView} statusViewIsSelf={statusViewId === state.youId} onCloseStatus={() => setStatusViewId(null)}
           shopOpen={shopOpen} shop={state.shop} uncleShop={state.uncleShop} onCloseShop={() => setShopOpen(false)}
-          bagOpen={bagOpen} onCloseBag={() => setBagOpen(false)} players={state.players} gameState={state.gameState} roundNumber={state.roundNumber}
+          bagOpen={bagOpen} onCloseBag={() => setBagOpen(false)} players={state.players} gameState={state.gameState} roundNumber={state.roundNumber} onPickGunAmmo={startGunPick}
           skillConfirm={skillConfirm} onConfirmSkill={confirmSkillUse} onCancelSkill={cancelSkillConfirm}
         />
       </div>
@@ -3344,6 +3358,14 @@ export default function Game({ state, lowQ }) {
         <div className="absolute top-[22%] left-1/2 -translate-x-1/2 z-40 text-center text-hard whitespace-nowrap">
           <span className="text-xl font-black text-echo-hp animate-pulse bg-black/60 rounded-full px-5 py-1.5">🗡️ คลิกเลือกเป้าหมาย อย่าทำอะไรไม่เข้าท่าเลย</span>
           <button onClick={() => { clickSound(); setPsSealSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
+        </div>
+      )}
+
+      {/* โหมดเลือกเป้าหมายกระสุนปืนหน่วย GUTS Select — เลือกได้เฉพาะคนอื่น */}
+      {gunSel && (
+        <div className="absolute top-[22%] left-1/2 -translate-x-1/2 z-40 text-center text-hard whitespace-nowrap">
+          <span className="text-xl font-black text-echo-hp animate-pulse bg-black/60 rounded-full px-5 py-1.5">🔫 คลิกเลือกเป้าหมาย {shopInfoOf(gunSel).label(gunSel)}</span>
+          <button onClick={() => { clickSound(); setGunSel(null); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
         </div>
       )}
 
@@ -3696,7 +3718,7 @@ export default function Game({ state, lowQ }) {
         allyFinalAsk={state.allyFinalAsk} onAnswerAllyFinal={(k) => socket.emit("allyFinalAnswer", { keep: k })}
         statusView={statusView} statusViewIsSelf={statusViewId === state.youId} onCloseStatus={() => setStatusViewId(null)}
         shopOpen={shopOpen} shop={state.shop} uncleShop={state.uncleShop} onCloseShop={() => setShopOpen(false)}
-        bagOpen={bagOpen} onCloseBag={() => setBagOpen(false)} players={state.players} gameState={state.gameState} roundNumber={state.roundNumber}
+        bagOpen={bagOpen} onCloseBag={() => setBagOpen(false)} players={state.players} gameState={state.gameState} roundNumber={state.roundNumber} onPickGunAmmo={startGunPick}
         skillConfirm={skillConfirm} onConfirmSkill={confirmSkillUse} onCancelSkill={cancelSkillConfirm}
       />
       </div>

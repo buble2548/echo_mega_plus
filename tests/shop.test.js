@@ -11,6 +11,7 @@ test.beforeEach(() => {
   engine.setUncleShopItems([]);
   engine.setGameState('PLAYING');
   engine.setRoundNumber(1);
+  engine.resetGutsCutscenes(); // วีดีโอกระสุนเล่นครั้งเดียวต่อเกม — ต้องรีเซ็ตไม่ให้เทสต์ก่อนหน้ากินโควตา
 });
 test.afterEach(() => engine.clearPhaseTimer()); // คัตซีนที่เกิดจากการยิงจริงจะตั้ง interval ค้างไว้
 
@@ -52,12 +53,24 @@ test('rollUncleShopItem: ออกได้แค่ปืนกับกระ�
   }
 });
 
+test('rollUncleShopItem: allowGun=false บังคับให้ออกกระสุนเสมอ', () => {
+  for (let i = 0; i < 200; i++) assert.equal(engine.rollUncleShopItem(false).type, 'gutsAmmo');
+});
+
 test('openShop: เติมของทั้ง 2 ร้าน ร้านละ 9 ชิ้น id คนละ prefix', () => {
   engine.openShop();
   assert.equal(engine.shopItems.length, 9);
   assert.equal(engine.uncleShopItems.length, 9);
   assert.ok(engine.shopItems.every((it) => it.id.startsWith('shop_')));
   assert.ok(engine.uncleShopItems.every((it) => it.id.startsWith('ushop_')));
+});
+
+test('openShop: ปืนขึ้นได้สูงสุด 2 กระบอกต่อรอบที่รี', () => {
+  for (let i = 0; i < 200; i++) {
+    engine.openShop();
+    const guns = engine.uncleShopItems.filter((it) => it.type === 'gutsGun').length;
+    assert.ok(guns <= 2, `รอบนี้มีปืน ${guns} กระบอก`);
+  }
 });
 
 // ---------- การซื้อ ----------
@@ -151,6 +164,25 @@ test('useInventoryItem: ยิงไม่ผ่านเงื่อนไข =
   engine.useInventoryItem(p.id, ammo.uid, { targetId: t.id }); // ยิงสำเร็จ = กระสุนหาย
   assert.equal(p.inventory.length, 1);
   assert.equal(p.gutsShotTurn, engine.roundNumber);
+});
+
+test('วีดีโอกระสุนแบบเดิมเล่นครั้งเดียวต่อเกม — ครั้งที่ 2 ไม่ตัดเข้าคัตซีน และผลเกิดทันที', () => {
+  const p = mkPlayer();
+  const t = mkPlayer({ armor: 3 });
+  giveGun(p);
+  const a1 = giveAmmo(p, 'shockwave');
+  const a2 = giveAmmo(p, 'shockwave');
+
+  engine.useInventoryItem(p.id, a1.uid, { targetId: t.id }); // นัดแรก = เล่นวีดีโอ (เข้าเฟส CUTSCENE)
+  assert.equal(engine.gameState, 'CUTSCENE');
+  assert.equal(t.armor, 3); // ผลยังไม่เกิด — รอวีดีโอจบก่อน
+  engine.clearPhaseTimer();
+
+  engine.setGameState('PLAYING');
+  engine.setRoundNumber(engine.roundNumber + 1);
+  engine.useInventoryItem(p.id, a2.uid, { targetId: t.id }); // นัดที่ 2 ของแบบเดิม = ไม่มีวีดีโอ
+  assert.equal(engine.gameState, 'PLAYING');
+  assert.equal(t.armor, 0); // ผลเกิดทันที
 });
 
 // ---------- ผลของกระสุน ----------
