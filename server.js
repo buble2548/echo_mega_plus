@@ -1136,7 +1136,7 @@ function displayImg(p) {
 //  คืน { music, at } — at = ลำดับการเปิดร่าง ให้ client รู้ว่าเป็น "การเปิดครั้งใหม่"
 //  (เปิดท่าซ้ำ / คนอื่นเปิดท่าเพลงเดียวกันทับ) -> เพลงต้องเริ่มใหม่จากต้น
 function activeSkillMusic() {
-  // Ultraman Trigger: เพลงประจำร่างเล่นค้างตลอด 6 เทิร์นและมีลำดับสูงสุด
+  // Ultraman Trigger: เพลงประจำร่างเล่นค้างตลอด 10 เทิร์นและมีลำดับสูงสุด
   let bestTrigger = null;
   for (const p of alivePlayers()) {
     if (p.characterId !== "ultraman_trigger") continue;
@@ -4612,7 +4612,7 @@ function endTurn() {
       if (k === "mageslayerMark") continue; // ตราล่าเวท: ถาวรจนกว่าจะย้าย/ถูกล้าง
       if (k === "mageslayerFury") continue; // Fury: สแตคพลังโกรธ ไม่ใช่ตัวนับเทิร์น — ใช้หมดพร้อมกันตอนโจมตี
       // ---------- Ultraman Trigger ----------
-      if (k === "triggerForm") continue; // นับครบ 6 เทิร์นและคืน snapshot แยกที่ท้าย endTurn()
+      if (k === "triggerForm") continue; // นับครบ 10 เทิร์นและคืน snapshot แยกที่ท้าย endTurn()
       if (k === "triggerMulti") continue; // จักรแห่งแสงคงอยู่จนกว่าจะโจมตีสำเร็จ 1 ครั้ง
       if (k === "triggerLight") continue; // แสงสว่างคงอยู่จนเจ้าของ Trigger คืนร่าง
       // ---------- โอกูริ แคป (patch 2.0.8.1) ----------
@@ -4843,7 +4843,7 @@ function endTurn() {
     yunaLongingPendingId = null;
     if (revived) YunaMod.reviveWithLonging(engine, revived);
   }
-  // Ultraman Trigger: นับเทิร์นหลังผลท้ายเทิร์นทั้งหมดจบแล้ว เพื่อให้ครบ 6 เทิร์นเต็ม
+  // Ultraman Trigger: นับเทิร์นหลังผลท้ายเทิร์นทั้งหมดจบแล้ว เพื่อให้ครบ 10 เทิร์นเต็ม
   // เมื่อหมดเวลา คืน snapshot ก่อนแปลงร่าง (ค่าที่เกิดในร่าง Trigger จึงไม่ติดกลับไป)
   for (const p of Object.values(players)) {
     if (p.characterId !== "ultraman_trigger" || !p.alive) continue;

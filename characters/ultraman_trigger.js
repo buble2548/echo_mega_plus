@@ -1,4 +1,4 @@
-const TRIGGER_FORM_TURNS = 6;
+const TRIGGER_FORM_TURNS = 10;
 const TRIGGER_LIGHT_MAX = 6;
 
 function clone(value) {

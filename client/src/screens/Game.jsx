@@ -903,7 +903,7 @@ const STATUS_INFO = {
   mageslayerFury: { icon: "😤", label: "Fury", cls: "bg-echo-gold text-gray-900", desc: "Fury: สะสมพลังโกรธ (สูงสุด 2) — ใช้หมดพร้อมกันในการโจมตีปกติครั้งถัดไป (+ดาเมจ และดูดเลือดเท่าจำนวนสต็อก)" },
   manaRupture: { icon: "💥", label: "ระเบิดมานา", cls: "bg-echo-hp", desc: "ระเบิดมานา: คำนวณดาเมจจากพลังงานตอนติดดีบัฟ และระเบิดตอนเริ่มเทิร์นถัดไป (7-8 = 1 / 2-6 = 3 / 0-1 = 5)" },
   // ---------- Ultraman Trigger ----------
-  triggerForm: { icon: "🔴", label: "Ultraman Trigger", cls: "bg-echo-magenta", desc: "ร่าง Ultraman Trigger คงอยู่ 6 เทิร์น เมื่อหมดเวลาจะคืนสถานะทุกอย่างก่อนแปลงร่าง" },
+  triggerForm: { icon: "🔴", label: "Ultraman Trigger", cls: "bg-echo-magenta", desc: "ร่าง Ultraman Trigger คงอยู่ 10 เทิร์น เมื่อหมดเวลาจะคืนสถานะทุกอย่างก่อนแปลงร่าง" },
   triggerCircle: { icon: "⚔️", label: "ดาบวงจักร", cls: "bg-echo-cyan text-gray-900", desc: "Circle Arms: การโจมตีมอบแสงสว่าง 2 และฟื้นพลังชีวิต 2 หน่วย" },
   triggerMulti: { icon: "⭕", label: "จักรแห่งแสง", cls: "bg-echo-gold text-gray-900", desc: "Multi Sword Finish: บังคับโจมตีเป้าหมาย HP สูงสุด ดาเมจ +1 และมอบแสงสว่างเพิ่มอีก 2 หน่วย ใช้แล้วหาย" },
   triggerZeperion: { icon: "🌟", label: "ลำแสง Zeperion", cls: "bg-echo-magenta", desc: "การโจมตีครั้งนี้ได้ดาเมจเพิ่ม +1 ต่อแสงสว่างทุก 2 หน่วยบนเป้าหมาย" },
@@ -1222,7 +1222,7 @@ const GUTS_AMMO_INFO = {
   gargorgon: { name: "Gargorgon Ray",      img: "/item/guts_key/gargorgon_key.webp", video: "/item/guts_key/gargorgon_ray.mp4",      desc: "เทิร์นถัดไปเป้าหมายติดสถานะสตั้น 1 เทิร์น (จั่วการ์ด/กดสกิลไม่ได้) — ต้านทานได้" },
   thunder:   { name: "Thunder Bullet",     img: "/item/guts_key/eleking_key.webp",   video: "/item/guts_key/thunder_boost.mp4",      desc: "เป้าหมายติดสถานะ [สภาพชา] 2 เทิร์น — กดจั่ว 1 ครั้งได้ไพ่ 2 ใบ — ต้านทานได้" },
   nurse:     { name: "Nursedessei Cannon", img: "/item/guts_key/nurse_key.webp",     video: "/item/guts_key/nursedessei_cannon.mp4", desc: "ความเสียหาย 4 หน่วย (ลดเกราะก่อน) — ยิงเสร็จปืนพังหายจากกระเป๋า ต้องซื้อใหม่" },
-  hyper_trigger: { name: "Hyper Key Trigger", img: "/item/guts_hyper_key/hyper_key_trigger.jpg", video: "/characters/ultraman_trigger/trigger_henshin.mp4", desc: "ใช้ร่วมกับปืน GUTS Select เพื่อแปลงร่างเป็น Ultraman Trigger 6 เทิร์น — ไม่ต้องเลือกเป้าหมาย" },
+  hyper_trigger: { name: "Hyper Key Trigger", img: "/item/guts_hyper_key/hyper_key_trigger.jpg", video: "/characters/ultraman_trigger/trigger_henshin.mp4", desc: "ใช้ร่วมกับปืน GUTS Select เพื่อแปลงร่างเป็น Ultraman Trigger 10 เทิร์น — ไม่ต้องเลือกเป้าหมาย" },
 };
 // รูปไอคอนไอเทมทั้งหมด: ดึงมาแคชไว้ตั้งแต่เข้าเกม (ไฟล์เล็ก) กันไอคอนโหลดช้าตอนเปิดร้าน/กระเป๋าครั้งแรก
 const ITEM_PRELOAD_IMGS = ["/item/guts_select_gun/guts_gun.webp", ...Object.values(GUTS_AMMO_INFO).map((a) => a.img)];
