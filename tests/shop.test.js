@@ -308,3 +308,17 @@ test('Ignis: Black Sparklence uses ammo without a GUTS gun and Trigger Dark Key 
   assert.equal(engine.gameState, 'CUTSCENE');
   engine.clearPhaseTimer();
 });
+
+
+test('Ignis: useInventoryItem fires Uncle Shop ammo through Black Sparklence', () => {
+  const p = mkPlayer({ characterId: 'ignis', inventory: [{ uid: 'black_sparklence_p', type: 'blackSparklence' }], cutsceneShown: { gutsThunder: true } });
+  const t = mkPlayer();
+  const ammo = giveAmmo(p, 'thunder');
+
+  engine.useInventoryItem(p.id, ammo.uid, { targetId: t.id });
+
+  assert.equal(p.gutsShotTurn, 1);
+  assert.equal(p.inventory.some((it) => it.uid === ammo.uid), false);
+  assert.equal(t.statuses.chaa, engine.GUTS_CHAA_TURNS);
+  assert.equal(engine.gameState, 'PLAYING');
+});

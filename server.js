@@ -1145,9 +1145,11 @@ const DEBUFF_KEYS = ["discord", "sleep", "stun", "nodraw", "noskill", "sena",
 function maxArmorOf(p) {
   // คิชินามิ ฮาคุโนะ (patch 2.2.1): เพดานเกราะคงที่ตามเพศ (แทน MAX_ARMOR ปกติ) — ชาย 2 / หญิง 3
   // เอวานเกเลี่ยน หมายเลข 13 (patch 2.2 alpha): ไม่มีเกราะเลยตามปกติ (เพดาน 0) — ได้เพดาน +1 เฉพาะช่วงสกิลติดตัว 3 ทำงาน (ด้านล่าง)
+  const escanorArmor = (p && p.characterId === "escanor" && CHAR_HOOKS.escanor.maxArmor) ? CHAR_HOOKS.escanor.maxArmor(p) : null;
   const armorBase = (p && p.characterId === "hakuno")
     ? (p.hakunoGender === "female" ? HAKUNO_FEMALE_ARMOR_CAP : HAKUNO_MALE_ARMOR_CAP)
     : (p && p.characterId === "hisakawa_sister") ? CHAR_HOOKS.hisakawa_sister.maxArmor(p)
+    : (escanorArmor != null) ? escanorArmor
     : (p && p.characterId === "eva13") ? 0
     : MAX_ARMOR;
   return armorBase

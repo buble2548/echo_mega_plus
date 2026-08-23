@@ -103,3 +103,38 @@ test('first twin death swaps control, second twin death eliminates the player', 
   p.hp = 0;
   assert.equal(hisakawa.tryTwinDeath(engine, p), false);
 });
+
+test('first twin death still swaps after syncOut has marked active twin dead', () => {
+  const engine = mkEngine();
+  const p = mkPlayer({ hp: 1, armor: 0 });
+  p.hp = 0;
+  hisakawa.syncOut(p);
+
+  assert.equal(hisakawa.tryTwinDeath(engine, p), true);
+  const state = hisakawa.publicState(p);
+  const nagi = state.twins.find((t) => t.key === 'nagi');
+  const hayate = state.twins.find((t) => t.key === 'hayate');
+  assert.equal(state.active, 'hayate');
+  assert.equal(nagi.alive, false);
+  assert.equal(hayate.alive, true);
+  assert.equal(p.alive, true);
+  assert.equal(p.hp, 3);
+  assert.equal(p.armor, 2);
+});
+
+test('ultimate buffs continue after one twin falls', () => {
+  const engine = mkEngine();
+  const p = mkPlayer({ hp: 1, armor: 0 });
+  hisakawa.applySkill(engine, p, 'ultimate', ch.ultimate);
+  hisakawa.applySkill(engine, p, 'ultimate', ch.ultimate2);
+  p.hp = 0;
+  hisakawa.syncOut(p);
+  assert.equal(hisakawa.tryTwinDeath(engine, p), true);
+
+  const active = hisakawa.activeTwin(p);
+  assert.equal(active.key, 'hayate');
+  assert.equal(active.statuses.hisakawaStage, 5);
+  assert.equal(active.statuses.hisakawaTalent, 5);
+  assert.equal(hisakawa.dynamicSkillFor(p, ch, 'ultimate').name, 'dream');
+  assert.equal(hisakawa.canUseSkill(engine, p, 'ultimate', ch.ultimate3), true);
+});

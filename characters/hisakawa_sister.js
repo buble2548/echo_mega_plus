@@ -36,7 +36,7 @@ function clone(obj) {
 function makeTwin(key) {
   return {
     key,
-    name: key === "nagi" ? "à¸™à¸²à¸à¸´ à¸®à¸´à¸‹à¸²à¸à¸²à¸§à¹ˆà¸²" : "à¸®à¸²à¸¢à¸²à¹€à¸•à¸° à¸®à¸´à¸‹à¸²à¸à¸²à¸§à¹ˆà¸²",
+    name: key === "nagi" ? "นากิ ฮิซากาว่า" : "ฮายาเตะ ฮิซากาว่า",
     img: key === "nagi" ? PATHS.nagi : PATHS.hayate,
     hp: TWIN_MAX_HP,
     armor: TWIN_MAX_ARMOR,
@@ -46,7 +46,7 @@ function makeTwin(key) {
   };
 }
 
-function ensure(p) {
+function ensure(p, opts = {}) {
   if (!p || p.characterId !== "hisakawa_sister") return null;
   if (!p.hisakawa) {
     p.hisakawa = {
@@ -56,7 +56,7 @@ function ensure(p) {
     };
   }
   for (const key of TWIN_KEYS) if (!p.hisakawa.twins[key]) p.hisakawa.twins[key] = makeTwin(key);
-  if (!p.hisakawa.active || !p.hisakawa.twins[p.hisakawa.active]?.alive) {
+  if (!opts.keepActive && (!p.hisakawa.active || !p.hisakawa.twins[p.hisakawa.active]?.alive)) {
     const live = TWIN_KEYS.find((key) => p.hisakawa.twins[key]?.alive);
     if (live) p.hisakawa.active = live;
   }
@@ -230,7 +230,7 @@ module.exports = {
     if (tier === "secondary") return h.active === "nagi" ? ch.secondary : ch.secondary2;
     if (tier === "ultimate") {
       const t = activeTwin(p);
-      if (statusOn(t, "hisakawaStage") && statusOn(t, "hisakawaTalent") && bothAlive(p)) return ch.ultimate3;
+      if (statusOn(t, "hisakawaStage") && statusOn(t, "hisakawaTalent")) return ch.ultimate3;
       return h.active === "nagi" ? ch.ultimate : ch.ultimate2;
     }
     return ch[tier];
@@ -245,7 +245,7 @@ module.exports = {
     if (tier === "basic" && skillStatus(skill) === "hisakawaRevive") return anyTwinDead(p);
     if (tier === "secondary" && skillStatus(skill) === "hisakawaLimit") return h.active === "nagi" && !statusOn(t, "hisakawaLimit");
     if (tier === "secondary" && skillStatus(skill) === "hisakawaTempo") return h.active === "hayate" && !statusOn(t, "hisakawaTempo");
-    if (tier === "ultimate" && skillStatus(skill) === "hisakawaDream") return bothAlive(p) && statusOn(t, "hisakawaStage") && statusOn(t, "hisakawaTalent");
+    if (tier === "ultimate" && skillStatus(skill) === "hisakawaDream") return statusOn(t, "hisakawaStage") && statusOn(t, "hisakawaTalent");
     return true;
   },
 
@@ -263,10 +263,10 @@ module.exports = {
       h.controlTurns = 0;
       if (statusOn(outgoing, "hisakawaLimit") && other.key === "hayate") {
         addFortune(other, 1);
-        suffix = " â€” à¸®à¸²à¸¢à¸²à¹€à¸•à¸°à¹„à¸”à¹‰à¸£à¸±à¸šà¹‚à¸Šà¸„à¸¥à¸²à¸  +1";
+        suffix = " — ฮายาเตะได้รับโชคลาภ +1";
       }
       syncIn(p);
-      engine.log(`ðŸ” ${p.name} à¸ªà¸¥à¸±à¸šà¸•à¸±à¸§à¹€à¸›à¹‡à¸™ ${other.name} â€” ${outgoing.name} à¸Ÿà¸·à¹‰à¸™à¸žà¸¥à¸±à¸‡à¸Šà¸µà¸§à¸´à¸• 2 à¸«à¸™à¹ˆà¸§à¸¢${suffix}`);
+      engine.log(`🔁 ${p.name} สลับตัวเป็น ${other.name} — ${outgoing.name} ฟื้นพลังชีวิต 2 หน่วย${suffix}`);
     } else if (skillStatus(skill) === "hisakawaRevive") {
       const dead = TWIN_KEYS.map((key) => h.twins[key]).find((t) => !t.alive);
       if (!dead) return "";
@@ -275,23 +275,23 @@ module.exports = {
       dead.armor = 0;
       dead.statuses = {};
       dead.statusAmt = {};
-      engine.log(`ðŸ’« ${p.name} à¸›à¸¥à¸¸à¸ ${dead.name} à¸à¸¥à¸±à¸šà¸¡à¸²à¸ªà¸¹à¹‰à¸•à¹ˆà¸­ (${dead.hp}/${TWIN_MAX_HP}, à¹€à¸à¸£à¸²à¸° 0)`);
+      engine.log(`💫 ${p.name} ปลุก ${dead.name} กลับมาสู้ต่อ (${dead.hp}/${TWIN_MAX_HP}, เกราะ 0)`);
     } else if (skillStatus(skill) === "hisakawaLimit") {
       applyStatus(active, "hisakawaLimit", LIMIT_TURNS);
       syncIn(p);
-      engine.log(`ðŸ§¡ ${active.name} à¸­à¸¢à¹ˆà¸²à¸—à¸³à¸­à¸°à¹„à¸£à¹€à¸à¸´à¸™à¸•à¸±à¸§à¸ªà¸´ â€” à¸”à¸²à¹€à¸¡à¸ˆà¸—à¸µà¹ˆà¹„à¸”à¹‰à¸£à¸±à¸šà¹€à¸šà¸²à¸¥à¸‡ 1 à¹à¸¥à¸°à¹‚à¸ˆà¸¡à¸•à¸µà¸•à¸´à¸”à¸œà¸à¸œà¸±à¸™`);
+      engine.log(`🧡 ${active.name} อย่าทำอะไรเกินตัวสิ — ดาเมจที่ได้รับเบาลง 1 และโจมตีติดผกผัน`);
     } else if (skillStatus(skill) === "hisakawaTempo") {
       applyStatus(active, "hisakawaTempo", 999);
       syncIn(p);
-      engine.log(`ðŸ’¨ ${active.name} à¸ˆà¸±à¸‡à¸«à¸§à¸°à¸™à¸µà¹‰à¹à¸«à¸¥à¸° â€” à¸«à¸²à¸à¹à¸•à¹‰à¸¡à¸•à¹ˆà¸³à¸ªà¸¸à¸”à¹à¸šà¸šà¹„à¸¡à¹ˆà¹€à¸ªà¸¡à¸­ à¸ˆà¸°à¹„à¸”à¹‰à¹‚à¸ˆà¸¡à¸•à¸µà¸«à¸¥à¸±à¸‡à¸œà¸¹à¹‰à¸Šà¸™à¸°`);
+      engine.log(`💨 ${active.name} จังหวะนี้แหละ — หากแต้มต่ำสุดแบบไม่เสมอ จะได้โจมตีหลังผู้ชนะ`);
     } else if (skillStatus(skill) === "hisakawaStage") {
       for (const t of Object.values(h.twins)) applyStatus(t, "hisakawaStage", STAGE_TURNS);
       syncIn(p);
-      engine.log(`ðŸŽ¤ ${p.name} Miracle Live â€” à¹€à¸›à¸´à¸”à¹€à¸§à¸—à¸µà¸‚à¸­à¸‡à¸žà¸§à¸à¹€à¸£à¸² ${STAGE_TURNS} à¹€à¸—à¸´à¸£à¹Œà¸™`);
+      engine.log(`🎤 ${p.name} Miracle Live — เปิดเวทีของพวกเรา ${STAGE_TURNS} เทิร์น`);
     } else if (skillStatus(skill) === "hisakawaTalent") {
       for (const t of Object.values(h.twins)) applyStatus(t, "hisakawaTalent", TALENT_TURNS);
       syncIn(p);
-      engine.log(`ðŸ’ƒ ${p.name} Miracle Dance â€” à¸žà¸£à¸ªà¸§à¸£à¸£à¸„à¹Œà¸‚à¸­à¸‡à¸žà¸§à¸à¹€à¸£à¸²à¹€à¸žà¸´à¹ˆà¸¡à¸žà¸¥à¸±à¸‡à¹‚à¸ˆà¸¡à¸•à¸µ +2`);
+      engine.log(`💃 ${p.name} Miracle Dance — พรสวรรค์ของพวกเราเพิ่มพลังโจมตี +2`);
     } else if (skillStatus(skill) === "hisakawaDream") {
       for (const t of Object.values(h.twins)) {
         delete t.statuses.hisakawaStage;
@@ -301,7 +301,7 @@ module.exports = {
       p.transformAt = engine.nextTransformCounter();
       syncIn(p);
       engine.queueCutscene(p, "hisakawaSunday");
-      engine.log(`ðŸŽ ${p.name} O-KU-RI-MO-NO-Sunday â€” à¸£à¸§à¸¡à¹€à¸§à¸—à¸µà¹à¸¥à¸°à¸žà¸£à¸ªà¸§à¸£à¸£à¸„à¹Œà¹€à¸›à¹‡à¸™à¸à¸±à¸™à¸‚à¸­à¸‡à¹€à¸«à¸¥à¹ˆà¸²à¸à¸²à¹à¸à¸”`);
+      engine.log(`🎁 ${p.name} O-KU-RI-MO-NO-Sunday — รวมเวทีและพรสวรรค์เป็นฝันของเหล่าฝาแฝด`);
     }
     return suffix;
   },
@@ -328,9 +328,9 @@ module.exports = {
     if (!t) return [];
     const skills = [];
     if (t.key === "nagi" && statusOn(t, "hisakawaLimit") && target.alive) {
-      if (engine.applyDebuff(target, "invert", null, 3)) engine.log(`ðŸ”„ ${t.name} à¸¡à¸­à¸šà¸ªà¸–à¸²à¸™à¸°à¸œà¸à¸œà¸±à¸™à¹ƒà¸«à¹‰ ${target.name} 3 à¹€à¸—à¸´à¸£à¹Œà¸™`);
-      else engine.log(`ðŸ›¡ï¸ ${target.name} à¸•à¹‰à¸²à¸™à¸œà¸à¸œà¸±à¸™à¸ˆà¸²à¸ ${t.name}`);
-      skills.push({ name: "à¹€à¸—à¹ˆà¸²à¸—à¸µà¹ˆà¹„à¸«à¸§ â€” à¸œà¸à¸œà¸±à¸™", img: PATHS.nagiSkill2, by: t.name, side: "atk" });
+      if (engine.applyDebuff(target, "invert", null, 3)) engine.log(`🔄 ${t.name} มอบสถานะผกผันให้ ${target.name} 3 เทิร์น`);
+      else engine.log(`🛡️ ${target.name} ต้านผกผันจาก ${t.name}`);
+      skills.push({ name: "เท่าที่ไหว — ผกผัน", img: PATHS.nagiSkill2, by: t.name, side: "atk" });
     }
     return skills;
   },
@@ -342,13 +342,13 @@ module.exports = {
     const other = h.twins[otherKey(h.active)];
     if (!statusOn(active, "hisakawaDream")) return null;
     if (Math.random() >= 0.7) {
-      engine.log(`ðŸŽ à¸à¸±à¸™à¸‚à¸­à¸‡à¹€à¸«à¸¥à¹ˆà¸²à¸à¸²à¹à¸à¸” â€” ${other.name} à¹„à¸¡à¹ˆà¹„à¸”à¹‰à¸­à¸­à¸à¸¡à¸²à¹‚à¸ˆà¸¡à¸•à¸µà¸•à¹ˆà¸­ (30%)`);
+      engine.log(`🎁 ฝันของเหล่าฝาแฝด — ${other.name} ไม่ได้ออกมาโจมตีต่อ (30%)`);
       return null;
     }
     engine.dealMixed(target, 2, true);
     target.wasAttacked = true;
-    engine.log(`ðŸŽ à¸à¸±à¸™à¸‚à¸­à¸‡à¹€à¸«à¸¥à¹ˆà¸²à¸à¸²à¹à¸à¸” â€” ${other.name} à¸­à¸­à¸à¸¡à¸²à¹‚à¸ˆà¸¡à¸•à¸µà¸Šà¹ˆà¸§à¸¢ ${target.name} -2`);
-    return { name: `à¸à¸±à¸™à¸‚à¸­à¸‡à¹€à¸«à¸¥à¹ˆà¸²à¸à¸²à¹à¸à¸” â€” ${other.name}`, img: other.img, by: attacker.name, side: "atk" };
+    engine.log(`🎁 ฝันของเหล่าฝาแฝด — ${other.name} ออกมาโจมตีช่วย ${target.name} -2`);
+    return { name: `ฝันของเหล่าฝาแฝด — ${other.name}`, img: other.img, by: attacker.name, side: "atk" };
   },
 
   onAfterRoundScores(engine, combatants, winnerId, valFn) {
@@ -365,7 +365,7 @@ module.exports = {
         p.hisakawaHayateAssist = true;
         delete t.statuses.hisakawaTempo;
         syncIn(p);
-        engine.log(`ðŸ’¨ ${t.name} à¹„à¸”à¹‰à¸ˆà¸±à¸‡à¸«à¸§à¸°à¸•à¹ˆà¸³à¸ªà¸¸à¸” â€” à¹€à¸•à¸£à¸µà¸¢à¸¡à¹‚à¸ˆà¸¡à¸•à¸µà¸«à¸¥à¸±à¸‡à¸œà¸¹à¹‰à¸Šà¸™à¸°`);
+        engine.log(`💨 ${t.name} ได้จังหวะต่ำสุด — เตรียมโจมตีหลังผู้ชนะ`);
       }
     }
   },
@@ -377,7 +377,7 @@ module.exports = {
     const targets = engine.attackableTargets(p.id);
     if (!targets.length) return false;
     engine.setAttackerId(p.id);
-    engine.log(`ðŸ’¨ à¸®à¸²à¸¢à¸²à¹€à¸•à¸° à¸®à¸´à¸‹à¸²à¸à¸²à¸§à¹ˆà¸² à¹„à¸”à¹‰à¹‚à¸ˆà¸¡à¸•à¸µà¸•à¹ˆà¸­à¸ˆà¸²à¸ ${attacker ? attacker.name : "à¸œà¸¹à¹‰à¸Šà¸™à¸°"}`);
+    engine.log(`💨 ฮายาเตะ ฮิซากาว่า ได้โจมตีต่อจาก ${attacker ? attacker.name : "ผู้ชนะ"}`);
     return true;
   },
 
@@ -397,17 +397,16 @@ module.exports = {
       }
       if (dmg > 0) {
         damageTwin(t, dmg);
-        engine.log(`ðŸ‘­ ${t.name} à¸—à¸µà¹ˆà¸žà¸±à¸à¸­à¸¢à¸¹à¹ˆà¸¢à¸±à¸‡à¹‚à¸”à¸™à¸œà¸¥à¸„à¹‰à¸²à¸‡à¸­à¸¢à¸¹à¹ˆ â€” à¸£à¸±à¸šà¸„à¸§à¸²à¸¡à¹€à¸ªà¸µà¸¢à¸«à¸²à¸¢ -${dmg}`);
+        engine.log(`👭 ${t.name} ที่พักอยู่ยังโดนผลค้างอยู่ — รับความเสียหาย -${dmg}`);
       }
     }
     if (active.alive) {
       h.controlTurns = (h.controlTurns || 0) + 1;
       if (h.controlTurns >= 2 && h.controlTurns % 3 === 2) {
         applyStatus(active, "resist", 1, 1);
-        engine.log(`ðŸ‘­ ${active.name} à¸„à¸§à¸šà¸„à¸¸à¸¡à¸•à¹ˆà¸­à¹€à¸™à¸·à¹ˆà¸­à¸‡ â€” à¹„à¸”à¹‰à¸•à¹‰à¸²à¸™à¸ªà¸–à¸²à¸™à¸°à¸œà¸´à¸”à¸›à¸à¸•à¸´ 1 à¹€à¸—à¸´à¸£à¹Œà¸™`);
+        engine.log(`👭 ${active.name} ควบคุมต่อเนื่อง — ได้ต้านสถานะผิดปกติ 1 เทิร์น`);
       }
     }
-    if (!bothAlive(p)) clearCoupleBuffs(p);
     syncIn(p);
   },
 
@@ -427,7 +426,6 @@ module.exports = {
         }
       }
     }
-    if (!bothAlive(p)) clearCoupleBuffs(p);
     syncIn(p);
   },
 
@@ -447,20 +445,20 @@ module.exports = {
   },
 
   tryTwinDeath(engine, p) {
-    const h = ensure(p);
+    const h = ensure(p, { keepActive: true });
     if (!h) return false;
-    const dead = h.twins[h.active];
+    const deadKey = h.active;
+    const dead = h.twins[deadKey];
     dead.hp = 0;
     dead.alive = false;
     dead.armor = 0;
-    clearCoupleBuffs(p);
-    const next = TWIN_KEYS.find((key) => h.twins[key].alive);
+    const next = TWIN_KEYS.find((key) => key !== deadKey && h.twins[key].alive);
     if (!next) return false;
     h.active = next;
     h.controlTurns = 0;
     syncIn(p);
     p.alive = true;
-    engine.log(`ðŸ‘­ ${dead.name} à¸«à¸¡à¸”à¸ªà¸ à¸²à¸žà¸•à¹ˆà¸­à¸ªà¸¹à¹‰ â€” ${h.twins[next].name} à¸­à¸­à¸à¸¡à¸²à¸„à¸§à¸šà¸„à¸¸à¸¡à¹à¸—à¸™`);
+    engine.log(`👭 ${dead.name} หมดสภาพต่อสู้ — ${h.twins[next].name} ออกมาควบคุมแทน`);
     return true;
   },
 };

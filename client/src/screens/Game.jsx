@@ -49,8 +49,10 @@ function useViewport() {
 // เช็คว่าการ์ดคู่ต่อสู้คนนี้กดโจมตี/เลือกเป็นเป้าหมายได้ไหม — ใช้ร่วมกันทั้ง layout มือถือและจอใหญ่
 function isTargetable(p, iAmAttacker, c) {
   const friendly = c.teamModeActive && c.myTeamId && p.teamId === c.myTeamId;
+  const self = p.id === c.myId;
   const normalAttackTarget = iAmAttacker && !friendly && !p.statuses?.seal && (!c.kaiRivalId || p.id === c.kaiRivalId);
-  return (normalAttackTarget || !!c.anataSel || c.dawnSel || c.appleSel || c.bbSel || c.shSel || c.skSel || c.doomSel || c.saObSel || c.ignisSel || c.bgSel || c.kawaiiSel || !!c.bardPending || c.nanayaSel || c.tpSel || c.kaiCreateSel || c.kaiPunishSel || c.msMarkSel || c.msRuptureSel || c.psSealSel || !!c.gunSel) && p.alive;
+  const gunTarget = !!c.gunSel && !self && !friendly;
+  return (normalAttackTarget || !!c.anataSel || c.dawnSel || c.appleSel || c.bbSel || c.shSel || c.skSel || c.doomSel || c.saObSel || c.ignisSel || c.bgSel || c.kawaiiSel || !!c.bardPending || c.nanayaSel || c.tpSel || c.kaiCreateSel || c.kaiPunishSel || c.msMarkSel || c.msRuptureSel || c.psSealSel || gunTarget) && p.alive;
 }
 // แตะ/คลิกการ์ดคู่ต่อสู้แล้วต้องทำอะไร — ไล่ตามโหมดเลือกเป้าหมายที่เปิดอยู่ ไม่มีเลยก็โจมตีปกติ
 function resolveAttackPick(id, c) {
@@ -1359,6 +1361,7 @@ const SHOP_ITEM_INFO = {
   wineBarrel: { icon: "🍷", img: "/characters/escanor/สกิลพื้นฐาน/Barrel.png", label: (it) => `WineBarrel Lv.${it.level || 1}`, desc: "ใช้แล้วฟื้น HP ตามระดับ ระดับสูงจะมอบเย็นชื่นใจและมึนเมา; อยู่ในกระเป๋าครบ 4 เทิร์นจะอัปเกรด 1 ระดับ สูงสุด IV" },
   // ---------- ร้านขายของลุงเท่ง: ปืนหน่วย GUTS Select + กระสุน (ใช้รูปจริงแทน emoji) ----------
   gutsGun: { icon: "🔫", img: "/item/guts_select_gun/guts_gun.webp", label: () => "ปืนหน่วย GUTS Select", desc: "ไอเทมถาวร มีได้กระบอกเดียว — กดที่ปืนเพื่อเลือกกระสุนแล้วเลือกเป้าหมาย ยิงได้ 1 นัด/เทิร์น (เฉพาะช่วงจั่วไพ่)" },
+  blackSparklence: { icon: "BS", img: "/characters/ignis/Black Sparklence.webp", label: () => "Black Sparklence", desc: "Ignis permanent weapon - choose Uncle Shop ammo, then pick an enemy target. One shot per turn during draw phase." },
   gutsAmmo: {
     icon: "🔑",
     imgOf: (it) => GUTS_AMMO_INFO[it.ammo]?.img,
@@ -1472,7 +1475,7 @@ function InventoryModal({ me, players, gameState, roundNumber, onPickGunAmmo, on
   const myCards = me?.cards || [];
 
   const ammoItems = items.filter((it) => it.type === "gutsAmmo");
-  const targets = (players || []).filter((p) => p.alive && p.id !== me?.id);
+  const targets = (players || []).filter((p) => p.alive && p.id !== me?.id && !(me?.teamId && p.teamId === me.teamId));
   const hyperCooldown = Math.max(0, me?.hyperTriggerCooldown || 0);
   const hasTargetedAmmo = ammoItems.some((it) => it.ammo !== "hyper_trigger" && it.ammo !== "trigger_dark_key");
   const hasReadyHyper = ammoItems.some((it) => it.ammo === "hyper_trigger") && hyperCooldown <= 0 && me?.characterId !== "ultraman_trigger" && me?.characterId !== "ignis";
@@ -2985,6 +2988,7 @@ export default function Game({ state, lowQ }) {
     pickAnata, pickDawn, pickGive, pickBb, pickSh, pickSk, pickDoom, pickSaOb, pickIgnis, pickBg, pickKawaii, pickBard, pickNanaya, pickTp,
     pickKaiCreate, pickKaiPunish, pickMsMark, pickMsRupture,
     kaiRivalId,
+    myId: me?.id,
     myTeamId: me?.teamId,
     teamModeActive: state.gameMode === "duo" || state.gameMode === "trio",
   };
