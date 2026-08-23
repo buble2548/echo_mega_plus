@@ -1,7 +1,4 @@
-// Direct unit tests for characters/satoru.js — satoru.onTargeted is the highest-blast-radius
-// hook in the game (nearly every other character calls engine.satoruOnTargeted before applying
-// a skill effect/damage), yet had zero test coverage before this file.
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert/strict');
 const { engine } = require('../../server.js');
 const satoru = require('../../characters/satoru.js');
@@ -14,8 +11,8 @@ let uid = 0;
 function mkPlayer(over = {}) {
   const id = `p${++uid}`;
   const p = Object.assign({
-    id, name: id, alive: true, characterId: 'satoru', hp: 5, armor: 2,
-    skillPoints: 4, statuses: {}, statusAmt: {}, cutsceneShown: {},
+    id, name: id, alive: true, characterId: 'satoru', hp: 5, armor: 2, shield: 0, tempHp: 0,
+    skillPoints: 4, statuses: {}, statusAmt: {}, seen: {}, cutsceneShown: {}, dmgHp: 0, dmgArmor: 0,
   }, over);
   engine.players[id] = p;
   return p;
@@ -29,77 +26,92 @@ test('onTargeted: negates the incoming skill and starts a 2-turn cooldown', () =
   assert.equal(satoruP.wouGuardCd, 2);
 });
 
-test('onTargeted: on cooldown, does not negate (but still checks Wonder of U)', () => {
+test('onTargeted: on cooldown, does not negate', () => {
   const satoruP = mkPlayer({ wouGuardCd: 1, skillPoints: 3 });
   const attacker = mkPlayer({ characterId: 'tohno' });
   const result = satoru.onTargeted(engine, satoruP, attacker, 'สกิลทดสอบ ');
   assert.equal(result.negated, false);
-  assert.equal(satoruP.wouGuardCd, 1, 'cooldown untouched while already on cooldown');
+  assert.equal(satoruP.wouGuardCd, 1);
 });
 
-test('onTargeted: self-targeting never negates (satoru targeting satoru)', () => {
+test('onTargeted: self-targeting never negates', () => {
   const satoruP = mkPlayer({ wouGuardCd: 0 });
   const result = satoru.onTargeted(engine, satoruP, satoruP, 'สกิลทดสอบ ');
   assert.equal(result.negated, false);
 });
 
-test('onTargeted: passiveSealed (e.g. MOON*CELL) suppresses the negate entirely', () => {
-  const satoruP = mkPlayer({ wouGuardCd: 0 });
+test('onTargeted: passiveSealed suppresses the negate and Wonder of U', () => {
+  const satoruP = mkPlayer({ wouGuardCd: 0, skillPoints: 10 });
   const attacker = mkPlayer({ characterId: 'tohno' });
   const sealedEngine = Object.assign(Object.create(engine), { passiveSealed: () => true });
-  const result = satoru.onTargeted(sealedEngine, satoruP, attacker, 'สกิลทดสอบ ');
+  const result = satoru.onTargeted(sealedEngine, satoruP, attacker, 'การโจมตี');
   assert.equal(result.negated, false);
-  assert.equal(satoruP.wouGuardCd, 0, 'no cooldown consumed while sealed');
+  assert.equal(satoruP.wouGuardCd, 0);
+  assert.equal(satoruP.skillPoints, 10);
+  assert.equal(attacker.statuses.calamity || 0, 0);
 });
 
-test('maybeWonderOfU: fires automatically when skillPoints >= WOU_COST(8), deducts cost, applies Calamity to attacker', () => {
+test('maybeWonderOfU: spends 8, applies unresistable Calamity, and deals 1 on attacks', () => {
   const satoruP = mkPlayer({ skillPoints: 10 });
-  const attacker = mkPlayer({ characterId: 'tohno' });
-  satoru.maybeWonderOfU(engine, satoruP, attacker);
-  assert.equal(satoruP.skillPoints, 2, '10 - WOU_COST(8) = 2');
-  assert.equal((attacker.statuses.calamity || 0) > 0, true, 'attacker gets hit with Calamity');
+  const attacker = mkPlayer({ characterId: 'tohno', statuses: { resist: 1 }, armor: 2 });
+  satoru.maybeWonderOfU(engine, satoruP, attacker, { attack: true });
+  assert.equal(satoruP.skillPoints, 2);
+  assert.equal(attacker.statusAmt.calamity, 1);
+  assert.equal(attacker.statuses.calamity > 0, true);
+  assert.equal(attacker.armor, 1);
 });
 
 test('maybeWonderOfU: does not fire below the skill-point cost', () => {
   const satoruP = mkPlayer({ skillPoints: 7 });
   const attacker = mkPlayer({ characterId: 'tohno' });
-  satoru.maybeWonderOfU(engine, satoruP, attacker);
-  assert.equal(satoruP.skillPoints, 7, 'untouched — cost not met');
+  satoru.maybeWonderOfU(engine, satoruP, attacker, { attack: true });
+  assert.equal(satoruP.skillPoints, 7);
   assert.equal(attacker.statuses.calamity || 0, 0);
+  assert.equal(attacker.armor, 2);
 });
 
-test('applyCalamity: stacks up to CALAMITY_MAX(3), blocked entirely by resist', () => {
-  const v = mkPlayer({ characterId: 'tohno' });
+test('applyCalamity: stacks up to CALAMITY_MAX(3) and ignores resist', () => {
+  const v = mkPlayer({ characterId: 'tohno', statuses: { resist: 1 } });
   assert.equal(satoru.applyCalamity(engine, v), true);
   assert.equal(v.statusAmt.calamity, 1);
   satoru.applyCalamity(engine, v);
   satoru.applyCalamity(engine, v);
-  satoru.applyCalamity(engine, v); // 4th call, should cap at 3
+  satoru.applyCalamity(engine, v);
   assert.equal(v.statusAmt.calamity, 3);
-
-  const resisted = mkPlayer({ characterId: 'tohno', statuses: { resist: 1 } });
-  assert.equal(satoru.applyCalamity(engine, resisted), false);
-  assert.equal(resisted.statusAmt.calamity || 0, 0);
 });
 
 test('prepareObladaTarget: rejects self-target and dead targets, accepts a valid other player', () => {
   const p = mkPlayer();
-  const self = satoru.prepareObladaTarget(engine, p, [p.id]);
-  assert.equal(self, null, 'cannot target self');
   const other = mkPlayer({ characterId: 'nanaya' });
   const dead = mkPlayer({ characterId: 'tohno', alive: false });
-  assert.equal(satoru.prepareObladaTarget(engine, p, [dead.id]), null, 'cannot target a dead player');
+  assert.equal(satoru.prepareObladaTarget(engine, p, [p.id]), null);
+  assert.equal(satoru.prepareObladaTarget(engine, p, [dead.id]), null);
   assert.equal(satoru.prepareObladaTarget(engine, p, [other.id]), other);
 });
 
-test('applyObladaEffect: applies the oblada dot unless the target resists or negates via satoru-on-satoru', () => {
+test('applyObladaEffect: Do Do Do applies 4-turn ObLa and 4-turn spellburden', () => {
   const p = mkPlayer();
   const target = mkPlayer({ characterId: 'nanaya' });
-  applyObladaFresh(target);
-  function applyObladaFresh(t) {
-    satoru.applyObladaEffect(engine, p, t, 'ทดสอบ');
-  }
-  assert.equal((target.statuses.oblada || 0) > 0, true);
+  satoru.applyObladaEffect(engine, p, target, 'Do Do Do, De Da Da Da');
+  assert.equal(target.statuses.oblada, 4);
+  assert.equal(target.statuses.spellburden, 4);
+  assert.equal(target.statusAmt.spellburden, 1);
+});
+
+test('applyPassiveAttack: normal attack applies only ObLa', () => {
+  const p = mkPlayer();
+  const target = mkPlayer({ characterId: 'nanaya' });
+  assert.equal(satoru.applyPassiveAttack(engine, p, target), true);
+  assert.equal(target.statuses.oblada, 4);
+  assert.equal(target.statuses.spellburden || 0, 0);
+});
+
+test('prepareLocaTarget: Locacaca is self-only', () => {
+  const p = mkPlayer();
+  const target = mkPlayer({ characterId: 'nanaya' });
+  assert.equal(satoru.prepareLocaTarget(engine, p, []), p);
+  assert.equal(satoru.prepareLocaTarget(engine, p, [p.id]), p);
+  assert.equal(satoru.prepareLocaTarget(engine, p, [target.id]), null);
 });
 
 test('applyLocaEffect: using it on self heals to full, -1 max HP, +LOCA_SELF_POINTS skill', () => {
@@ -109,16 +121,6 @@ test('applyLocaEffect: using it on self heals to full, -1 max HP, +LOCA_SELF_POI
   assert.equal(p.maxHpPenalty, 1);
   assert.equal(engine.maxHpOf(p), before - 1);
   assert.equal(p.hp, engine.maxHpOf(p));
-  assert.equal(p.skillPoints, 7, '4 default + LOCA_SELF_POINTS(3)');
+  assert.equal(p.skillPoints, 7);
   assert.match(suffix, /กินเอง/);
-});
-
-test('applyLocaEffect: giving it to another player just records a pending offer, no immediate effect on them', () => {
-  const p = mkPlayer();
-  const target = mkPlayer({ characterId: 'nanaya', hp: 3 });
-  const targetMaxHpBefore = engine.maxHpOf(target);
-  satoru.applyLocaEffect(engine, p, target);
-  assert.equal(p.locaOffer, target.id);
-  assert.equal(target.hp, 3, 'no immediate change to the target — they must still accept');
-  assert.equal(engine.maxHpOf(target), targetMaxHpBefore);
 });

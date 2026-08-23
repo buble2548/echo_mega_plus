@@ -75,16 +75,17 @@ module.exports = {
   // เรียกจาก resolveRound() ตอนตัดสินผู้ชนะ — รีเซ็ตเคาน์เตอร์แพ้ติดกัน + สมองอันชาญฉลาด (ผู้ชนะการจั่วไพ่ติดเส้นชีวิต +1 ถ้ามีเทเปากำลังครุ่นคิดอยู่)
   onRoundWin(engine, w, combatants) {
     w.tepeuLoseStreak = 0; // ชนะ -> เคาน์เตอร์แพ้ติดกัน (เทเปา) รีเซ็ต
-    const tepeuPondering = combatants.find((q) => q.characterId === "tepeu" && (q.tepeuPonderTurns || 0) > 0 && q.id !== w.id);
-    if (!tepeuPondering) return;
+    const tepeuPondering = combatants.filter((q) => q.characterId === "tepeu" && (q.tepeuPonderTurns || 0) > 0);
+    if (!tepeuPondering.length) return;
     if (engine.resistActive(w)) {
       engine.log(`🛡️ ${w.name} ต้านสถานะผิดปกติ — สมองอันชาญฉลาดไม่มีผล`);
       return;
     }
     const dlCur = w.statuses.deathline || 0;
-    if (dlCur >= TEPEU_DEATHLINE_CAP) return;
-    w.statuses.deathline = dlCur + 1;
-    engine.log(`🧠 ${tepeuPondering.name} สมองอันชาญฉลาด — ${w.name} ชนะการจั่วไพ่ ติดเส้นชีวิต +1 (สะสม ${w.statuses.deathline}/${TEPEU_DEATHLINE_CAP})`);
+    const added = Math.min(tepeuPondering.length, Math.max(0, TEPEU_DEATHLINE_CAP - dlCur));
+    if (added <= 0) return;
+    w.statuses.deathline = dlCur + added;
+    engine.log(`🧠 ${tepeuPondering.map((p) => p.name).join(", ")} สมองอันชาญฉลาด — ${w.name} ชนะการจั่วไพ่ ได้เส้นชีวิต +${added} จากเทเปาที่ครุ่นคิด ${tepeuPondering.length} คน (สะสม ${w.statuses.deathline}/${TEPEU_DEATHLINE_CAP})`);
   },
 
   // เรียกจาก resolveRound() — มีเทเปายังอยู่ในสนาม -> ใครแพ้ติดกันเกิน 3 เทิร์น เส้นชีวิตลดลง 1 หน่วย (แพ้ชนะสลับกันไปมาไม่ลด)

@@ -9,12 +9,13 @@ const P_DISPLAY = "var(--font-p-display)";
 // ---------- กลุ่มความยากในการเล่น (แบ่งหน้าเลือกตัวละคร) ----------
 //  order = ลำดับการแสดงในกลุ่ม — ตัวที่ไม่อยู่ในลิสต์จะต่อท้ายตามลำดับ roster
 const DIFFICULTY_GROUPS = [
-  { key: "easy", label: "ง่าย", color: "#2E9E4B", order: ["banagher", "hikaru", "kuwagata", "mageslayer"] },
-  { key: "medium", label: "กลาง", color: "#E5B33B", order: ["eva13", "temari", "shrade_elan", "riddhe", "miyako", "bat_ben"] },
+  { key: "easy", label: "ง่าย", color: "#2E9E4B", order: ["banagher", "hikaru", "kuwagata", "mageslayer", "ignis"] },
+  { key: "medium", label: "กลาง", color: "#E5B33B", order: ["eva13", "temari", "shrade_elan", "riddhe", "miyako", "bat_ben", "escanor", "hisakawa_sister"] },
   { key: "hard", label: "ยาก", color: "#C0392B", order: ["oberon", "kotone", "bard", "shiki", "hakuno", "kai", "takumi"] },
   { key: "fun", label: "เอาฮา", color: "#9B4F96", order: ["gambler", "appleguy", "broadband_man"] },
   { key: "extreme", label: "ยากสุดขีด", color: "#111827", order: ["satoru"] },
   { key: "impossible", label: "ทักษิณ จะโปรหาบิดาท่านหรือ?", color: "#450a0a", order: ["tohno", "nanaya", "princess_shiki"] },
+  { key: "special", label: "พิเศษ", color: "#0e7490", order: ["ultraman_trigger"] },
 ];
 // ตัวละครในกลุ่มความยากนั้น เรียงตาม order ที่กำหนด
 function charsInGroup(roster, g) {
@@ -101,7 +102,7 @@ export default function CharacterSelect({ roster, position, name, onConfirm, onB
   const selGroup = sel ? DIFFICULTY_GROUPS.find((g) => g.key === (sel.difficulty || "easy")) : null;
 
   const pick = (id) => { clickSound(); setPicked(id); };
-  const confirm = () => { clickSound(); if (picked) onConfirm(picked, picked === "shiki" ? { shikiUlt } : undefined); };
+  const confirm = () => { clickSound(); if (picked && !sel?.locked) onConfirm(picked, picked === "shiki" ? { shikiUlt } : undefined); };
   const back = () => { clickSound(); onBack(); };
 
   return (
@@ -171,9 +172,8 @@ export default function CharacterSelect({ roster, position, name, onConfirm, onB
                 return (
                   <button
                     key={c.id}
-                    onClick={() => !c.locked && pick(c.id)}
-                    disabled={c.locked}
-                    className={`p-rise p-scan-hover relative transition ${c.locked ? "cursor-not-allowed" : "hover:-translate-y-1"}`}
+                    onClick={() => pick(c.id)}
+                    className="p-rise p-scan-hover relative transition hover:-translate-y-1"
                     style={{ animationDelay: `${Math.min(i, 14) * 0.03}s` }}
                     title={c.locked ? "ยังไม่ปลดล็อก" : c.name}
                   >
@@ -181,11 +181,10 @@ export default function CharacterSelect({ roster, position, name, onConfirm, onB
                       className="relative aspect-square border-2 rounded-md overflow-hidden"
                       style={{ borderColor: active ? "var(--color-p-accent-bright)" : "rgba(255,255,255,.12)", boxShadow: active ? "0 0 0 2px rgba(199,116,194,.35), 0 10px 24px -8px rgba(199,116,194,.6)" : undefined }}
                     >
-                      <CharImage c={c} className={`w-full h-full ${c.locked ? "grayscale opacity-50" : ""}`} rounded="" emojiSize="2.6rem" />
-                      {!c.locked && <div className="absolute inset-x-0 bottom-0 h-1.5" style={{ background: g?.color || "#9B4F96" }} />}
-                      {c.locked && <span className="absolute inset-0 grid place-items-center text-2xl bg-black/30">🔒</span>}
+                      <CharImage c={c} className="w-full h-full" rounded="" emojiSize="2.6rem" />
+                      <div className="absolute inset-x-0 bottom-0 h-1.5" style={{ background: g?.color || "#9B4F96" }} />
                     </div>
-                    <div className={`mt-1 font-bold text-xs sm:text-sm truncate ${c.locked ? "text-white/40" : ""}`}>{c.name}</div>
+                    <div className="mt-1 font-bold text-xs sm:text-sm truncate">{c.name}</div>
                   </button>
                 );
               })}
@@ -236,17 +235,20 @@ export default function CharacterSelect({ roster, position, name, onConfirm, onB
                     <SkillTile label="สกิลติดตัว" skill={sel.passive} />
                     {/* บานาจ ลิงก์ (patch 2.1.2): สกิลติดตัว 2 ฉันไม่อยากให้เราต้องมาสู้กัน */}
                     {sel.id === "banagher" && sel.passive2 && <SkillTile label="สกิลติดตัว 2" skill={sel.passive2} />}
+                    {sel.id === "hisakawa_sister" && sel.passive2 && <SkillTile label="สกิลติดตัว 2" skill={sel.passive2} />}
                     {/* นานายะ ชิกิ (patch 2.1.9): สกิลติดตัว 2 หัวใจฆาตกร / สกิลติดตัว 3 พักผ่อนสักครู่ */}
                     {sel.id === "nanaya" && sel.passive2 && <SkillTile label="สกิลติดตัว 2" skill={sel.passive2} />}
                     {sel.id === "nanaya" && sel.passive3 && <SkillTile label="สกิลติดตัว 3" skill={sel.passive3} />}
                     <SkillTile label={sel.basicNight ? "สกิลพื้นฐาน (กลางวัน)" : "สกิลพื้นฐาน"} skill={sel.basic} />
                     {sel.basicNight && <SkillTile label="สกิลพื้นฐาน (กลางคืน)" skill={sel.basicNight} />}
+                    {sel.id === "hisakawa_sister" && sel.basic2 && <SkillTile label="สกิลพื้นฐาน 2 (เมื่อแฝดล้ม)" skill={sel.basic2} />}
                     {/* โอเบรอน/โคโตเนะ: สกิลสลับตามช่วงเวลากลางวัน/กลางคืน — โชว์ครบทุกท่า */}
                     <SkillTile label={sel.secondaryNight ? "สกิลรอง (กลางวัน)" : sel.id === "hakuno" ? "สกิลรอง (ร่างชาย)" : "สกิลรอง"} skill={sel.secondary} />
                     {sel.secondaryNight && <SkillTile label="สกิลรอง (กลางคืน)" skill={sel.secondaryNight} />}
                     {/* บานาจ ลิงก์ (patch 2.1.2): สกิลรอง 2 Beam Magnum — แทนที่สกิลรอง 1 ระหว่างร่าง NewType Paradise */}
                     {sel.id === "banagher" && sel.secondary2 && <SkillTile label="สกิลรอง 2 (ระหว่างร่าง Paradise)" skill={sel.secondary2} />}
                     {sel.id === "hakuno" && sel.secondary2 && <SkillTile label="สกิลรอง (ร่างหญิง)" skill={sel.secondary2} />}
+                    {sel.id === "hisakawa_sister" && sel.secondary2 && <SkillTile label="สกิลรอง (ฮายาเตะ)" skill={sel.secondary2} />}
                     {/* อควาเรียน: ไม่มีท่าไม้ตายกลาง — ใช้ 4 ท่าตามร่างด้านล่างแทน */}
                     {!sel.ultimateSolar && (
                       <SkillTile
@@ -258,6 +260,8 @@ export default function CharacterSelect({ roster, position, name, onConfirm, onB
                     {sel.id === "riddhe" && sel.ultimate2 && <SkillTile label="ท่าไม้ตาย 2 (เส้นทางพันธมิตร)" skill={sel.ultimate2} />}
                     {/* บานาจ ลิงก์ (patch 2.1.2): ท่าไม้ตาย 2 — ใช้แทนท่า 1 ระหว่างร่าง Paradise ที่มีริดดี้เป็นพันธมิตร */}
                     {sel.id === "banagher" && sel.ultimate2 && <SkillTile label="ท่าไม้ตาย 2 (ระหว่างร่าง Paradise + พันธมิตรริดดี้)" skill={sel.ultimate2} />}
+                    {sel.id === "hisakawa_sister" && sel.ultimate2 && <SkillTile label="ท่าไม้ตาย 2 (ฮายาเตะ)" skill={sel.ultimate2} />}
+                    {sel.id === "hisakawa_sister" && sel.ultimate3 && <SkillTile label="ท่าไม้ตาย 3 (รวมพลัง)" skill={sel.ultimate3} />}
                     {/* ชิกิ (patch 2.0.6): ท่าไม้ตาย 2 ความตายที่โรยรา — เลือกใช้ได้ 1 ท่าต่อเกม */}
                     {sel.id === "shiki" && sel.ultimate2 && <SkillTile label="ท่าไม้ตาย 2" skill={sel.ultimate2} />}
                     {sel.id === "shiki" && sel.ultimate2 && (
@@ -315,7 +319,7 @@ export default function CharacterSelect({ roster, position, name, onConfirm, onB
       {/* ---------- ปุ่มยืนยัน มุมขวาล่าง (โผล่เมื่อเลือกตัวละครแล้ว) ---------- */}
       <button
         onClick={confirm}
-        disabled={!sel}
+        disabled={!sel || sel.locked}
         className={`fixed bottom-0 right-0 w-56 h-24 sm:h-28 group z-20 transition-all duration-300 ${
           sel ? "translate-x-0 opacity-100" : "translate-x-full opacity-0 pointer-events-none"
         }`}

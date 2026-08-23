@@ -150,9 +150,12 @@ module.exports = {
 
   // เรียกจาก doAttack() ตอนเลือกเป้าหมาย — Absorb Shield: หาผู้ล่อเป้า (คงสถานะ absorbplus อยู่ ไม่ถูกปิดสกิลติดตัว) คืน player หรือ null
   findTaunter(engine, attacker) {
-    return engine.alivePlayers().find(
+    return this.findTaunters(engine, attacker)[0] || null;
+  },
+  findTaunters(engine, attacker) {
+    return engine.alivePlayers().filter(
       (r) => r.id !== attacker.id && r.characterId === "riddhe" && (r.statuses.absorbplus || 0) > 0 && !engine.sealActive(r)
-    ) || null;
+    );
   },
 
   // เรียกจาก doAttack() หลังคำนวณดาเมจ — สกิลติดตัว 1: บานาจโจมตีใส่เรา -> ท่าไม้ตาย 1 ทำงานทันทีฟรี (1 ครั้งต่อเกม)
@@ -251,7 +254,7 @@ module.exports = {
       if (foes.length) allyChoices = foes;
     }
     const inviter = Object.values(engine.players).find((o) => o.alive && o.characterId === "riddhe" && o.allyOffer === viewer.id);
-    if (inviter) allyOfferAsk = { from: inviter.name, color: engine.POSITION_COLORS[inviter.position] || "#9B4F96", img: bansheeImg };
+    if (inviter) allyOfferAsk = { fromId: inviter.id, from: inviter.name, color: engine.POSITION_COLORS[inviter.position] || "#9B4F96", img: bansheeImg };
     if (viewer.allyBreakAsk) {
       const by = engine.players[viewer.allyBreakAsk.by];
       allyBreakAsk = {

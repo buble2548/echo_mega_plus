@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 //  บัฟ & ดีบัฟพื้นฐาน (universal) — ระบบสถานะที่ตัวละครไหนก็ใช้ร่วมกันได้
 //  ไฟล์นี้ไม่ใช่ "ตัวละคร" (จึงไม่มี id/ไม่ถูกลงทะเบียนใน CHAR_HOOKS) — เป็น pure function
 //  ล้วนๆ รับ player object เป็นพารามิเตอร์ตรงๆ ไม่ผูกกับ server.js/engine เลย
@@ -51,7 +51,7 @@ function applyDebuff(p, key, amount, turns) {
 }
 
 // ดีบัฟพื้นฐานที่ "ต้านสถานะผิดปกติ" ล้างออกได้ทั้งหมด
-const BASIC_DEBUFF_CLEAR = ["discord", "sleep", "stun", "nodraw", "noskill", "weak", "fragile", "spellburden", "oblada", "calamity", "hburn", "phenexBanUlt", "nanayaSeal", "miyakoSeal", "invert", "nohealing", "manaSeal", "chaa"];
+const BASIC_DEBUFF_CLEAR = ["discord", "sleep", "stun", "nodraw", "noskill", "weak", "fragile", "spellburden", "oblada", "hburn", "phenexBanUlt", "nanayaSeal", "miyakoSeal", "invert", "nohealing", "manaSeal", "chaa"];
 // ดีบัฟที่ยังไม่เกิดผลทันที (ยามฟ้าสาง / เส้นชีวิต): โดนล้าง = ลดลงทีละ 1 หน่วย ไม่หายทั้งหมด
 const SOFT_DEBUFF_STEP = ["dawn", "deathline"];
 
@@ -94,9 +94,12 @@ function invertActive(p) {
 function tickBurn(engine, p) {
   if (!p || !p.alive || !(((p.statuses && p.statuses.hburn) || 0) > 0)) return;
   const hooks = engine.CHAR_HOOKS && engine.CHAR_HOOKS[p.characterId];
+  const immune = !!(hooks && hooks.hburnImmune && hooks.hburnImmune(p));
   const heals = !!(hooks && hooks.hburnHeals && hooks.hburnHeals(p));
   const label = (hooks && hooks.hburnLabel && hooks.hburnLabel(p)) || "ลุกไหม้";
-  if (heals) {
+  if (immune) {
+    engine.log(`🔥 ${p.name} ${label} — ไม่รับความเสียหาย (เหลืออีก ${p.statuses.hburn - 1} หน่วย)`);
+  } else if (heals) {
     const heal = engine.healHp(p, 1);
     engine.log(`❤️‍🔥 ${p.name} ${label} — ลุกไหม้กลายเป็นการรักษา ฟื้นพลังชีวิต +${heal} (เหลืออีก ${p.statuses.hburn - 1} หน่วย)`);
   } else {

@@ -27,7 +27,7 @@ test('applyMark: grants kaiCreation/kaiPunishment and pushes onto the Overhaul t
   kai.applyMark(engine, kaiP, t, 'kaiCreation', 'รังสรรค์');
   assert.equal(t.statuses.kaiCreation, 999);
   assert.equal(engine.kaiOverhaulSlots.length, 1);
-  assert.deepEqual(engine.kaiOverhaulSlots[0], { playerId: t.id, status: 'kaiCreation' });
+  assert.deepEqual(engine.kaiOverhaulSlots[0], { ownerId: kaiP.id, playerId: t.id, status: 'kaiCreation' });
 });
 
 test('applyMark: cannot re-grant to a target that already holds the same mark (no-op, not pushed again)', () => {

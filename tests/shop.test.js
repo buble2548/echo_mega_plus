@@ -269,3 +269,42 @@ test('สภาพชา: กดจั่ว 1 ครั้ง ได้ไพ�
   engine.hit(chaa.id);
   assert.equal(chaa.cards.length, 2);
 });
+
+test('openShop: Hyper Key and Trigger Dark Key are locked shop items', () => {
+  engine.openShop();
+  assert.equal(engine.uncleShopItems[0].ammo, 'hyper_trigger');
+  assert.equal(engine.uncleShopItems[1].ammo, 'trigger_dark_key');
+});
+
+test('Ignis: Black Sparklence uses ammo without a GUTS gun and Trigger Dark Key is consumed on transform', () => {
+  const p = mkPlayer({ characterId: 'ignis', hp: 2, maxHp: 5, gold: 40 });
+  const t = mkPlayer();
+  engine.CHAR_HOOKS.ignis.ensureBlackSparklence(p);
+  const [gun, hyper, dark, ammo] = stockUncle(
+    { type: 'gutsGun', price: 15 },
+    { type: 'gutsAmmo', ammo: 'hyper_trigger', price: 20 },
+    { type: 'gutsAmmo', ammo: 'trigger_dark_key', price: 10 },
+    { type: 'gutsAmmo', ammo: 'shockwave', price: 5 },
+  );
+
+  engine.buyShopItem(p.id, gun.id);
+  engine.buyShopItem(p.id, hyper.id);
+  assert.equal(gun.sold, false);
+  assert.equal(hyper.sold, false);
+  assert.equal(p.inventory.some((it) => it.type === 'gutsGun'), false);
+
+  engine.buyShopItem(p.id, ammo.id);
+  const shot = p.inventory.find((it) => it.ammo === 'shockwave');
+  assert.equal(engine.gutsFireTargetOf(p, shot, t.id), t);
+
+  engine.buyShopItem(p.id, dark.id);
+  const darkKey = p.inventory.find((it) => it.ammo === 'trigger_dark_key');
+  assert.ok(darkKey);
+  engine.useInventoryItem(p.id, darkKey.uid);
+
+  assert.equal(p.statuses.triggerDarkForm, 5);
+  assert.equal(p.hp, 4);
+  assert.equal(p.inventory.some((it) => it.ammo === 'trigger_dark_key'), false);
+  assert.equal(engine.gameState, 'CUTSCENE');
+  engine.clearPhaseTimer();
+});

@@ -27,8 +27,8 @@ const CHAR_HOOKS = require("./characters/index");
 const {
   SPELLBURDEN_MAX,
   statusAmtOf,
-  applyBuff,
-  applyDebuff,
+  applyBuff: rawApplyBuff,
+  applyDebuff: rawApplyDebuff,
   resistActive,
   BASIC_DEBUFF_CLEAR,
   SOFT_DEBUFF_STEP,
@@ -138,9 +138,10 @@ const GUTS_AMMO = {
   gargorgon: { id: "gargorgon", name: "Gargorgon Ray",      price: 5,  img: `${ITEM_BASE}/guts_key/gargorgon_key.webp`, cut: "gutsGargorgon" },
   thunder:   { id: "thunder",   name: "Thunder Bullet",     price: 5,  img: `${ITEM_BASE}/guts_key/eleking_key.webp`,   cut: "gutsThunder" },
   nurse:     { id: "nurse",     name: "Nursedessei Cannon", price: 10, img: `${ITEM_BASE}/guts_key/nurse_key.webp`,     cut: "gutsNurse", breaksGun: true },
-  hyper_trigger: { id: "hyper_trigger", name: "Hyper Key Trigger", price: 15, img: `${ITEM_BASE}/guts_hyper_key/hyper_key_trigger.jpg`, cut: "triggerHenshin", transform: true },
+  hyper_trigger: { id: "hyper_trigger", name: "Hyper Key Trigger", price: 20, img: `${ITEM_BASE}/guts_hyper_key/hyper_key_trigger.jpg`, cut: "triggerHenshin", transform: true },
+  trigger_dark_key: { id: "trigger_dark_key", name: "Trigger Dark Key", price: 10, img: `${ITEM_BASE}/guts_hyper_key/hyper_key_trigger_dark.jpg`, cut: "triggerDarkHenshin", transformDark: true },
 };
-const GUTS_AMMO_IDS = Object.keys(GUTS_AMMO).filter((id) => id !== "hyper_trigger");
+const GUTS_AMMO_IDS = Object.keys(GUTS_AMMO).filter((id) => id !== "hyper_trigger" && id !== "trigger_dark_key");
 const UNCLE_SHOP_MAX_GUNS = 2;    // ปืนขึ้นได้สูงสุด 2 กระบอกต่อรอบที่ร้านรีสต็อก (ที่เกินสุ่มเป็นกระสุนแทน)
 // ---------- DoomGuy (patch 2.2 full) ----------
 const DOOM_BASE = "/characters/doomguy";
@@ -169,7 +170,7 @@ const DOOM_CRUCIBLE_CHARGE_NEED = 5;
 const DOOM_HEAL_ON_ATK = 1;
 const DOOM_SHIELD_ON_ATK = 1; // patch: พาสซีฟเพิ่มโล่ +1 ทุกครั้งที่โจมตีโดน (นอกเหนือจากฮีล)
 const DOOM_CHARGE_CHANCE = 0.35; // patch 2.2 new: 10% -> 25% -> 35%
-const DOOM_TIE_ATTACK_CHANCE = 0.75; // patch: 50% -> 60% -> 75% (ชนะมากขึ้น)
+const DOOM_TIE_ATTACK_CHANCE = 0.5; // เสมอแต้ม: มีโอกาสได้โจมตี 50%
 const DOOM_FORTUNE_CHANCE = 0.2; // patch: ทุกต้นเทิร์นมีโอกาส 20% ได้ [โชคลาภ] +1 สแตค
 const DOOM_CRUCIBLE_BUST_DMG = 2; // Crucible: บังคับทุกคนแตก -> รับความเสียหายเหมือนแพ้จั่ว/ไพ่แตก
 const DOOM_CRUCIBLE_BUST_DRAWS = 2; // Crucible (patch 2.2.4): บังคับจั่วเพิ่ม 2 ใบ (แบบเดียวกับ Ashen Trail โอกูริ)
@@ -316,10 +317,15 @@ const UNPLUG_BUFFS = ["upg", "monster", "ginga", "gingastrium", "storium", "abso
 // เลือดจริงสูงสุดของผู้เล่น — Locacaca fruit (ซาโตรุ patch 2.0.8.2) ลด Max HP ได้ (ต่ำสุด 1)
 //  คิชินามิ ฮาคุโนะ (patch 2.2.1): เพดานเลือดจริงคงที่ตามเพศ (ไม่ใช้ MAX_HP ปกติ) — ชาย 6 / หญิง 5
 function maxHpOf(p) {
+  if (p && p.characterId === "escanor") {
+    const escanorHp = CHAR_HOOKS.escanor.maxHp(p);
+    if (escanorHp != null) return Math.max(1, escanorHp - ((p.maxHpPenalty) || 0));
+  }
   if (p && p.characterId === "hakuno") {
     const base = p.hakunoGender === "female" ? HAKUNO_FEMALE_MAX_HP : HAKUNO_MALE_MAX_HP;
     return Math.max(1, base - ((p.maxHpPenalty) || 0));
   }
+  if (p && p.characterId === "hisakawa_sister") return CHAR_HOOKS.hisakawa_sister.maxHp(p);
   return Math.max(1, MAX_HP - ((p && p.maxHpPenalty) || 0));
 }
 // ฟื้นเลือดจริงแบบเคารพสถานะ "ไม่ใช้งานต่อ" / "ไร้ทางเยียวยา" — คืนจำนวนที่ฟื้นได้จริง
@@ -334,15 +340,15 @@ function healHp(p, amount) {
   }
   if (noHealActive(p)) return 0;
   const heal = Math.min(maxHpOf(p) - p.hp, amount);
-  if (heal > 0) p.hp += heal;
+  if (heal > 0) { p.hp += heal; hisakawaSyncOut(p); }
   if (heal > 0 && !linkMirror) {
-    const b = linkedBuddyOf(p) || CHAR_HOOKS.kai.kaiLinkedBuddyOf(engine, p);
-    if (b) {
-      linkMirror = true;
+    const buddies = linkedBuddiesOf(p);
+    linkMirror = true;
+    for (const b of buddies) {
       const bh = healHp(b, heal);
-      linkMirror = false;
       if (bh > 0) lastLog.push(`🔗 เชื่อมผล — ${b.name} ฟื้นพลังชีวิตตาม ${p.name} +${bh}`);
     }
+    linkMirror = false;
   }
   return heal;
 }
@@ -351,23 +357,25 @@ function healHp(p, amount) {
 // ผกผัน (patch 2.2.1): การฟื้นเกราะกลับกลายเป็นเสียเกราะแทน
 function healArmor(p, amount) {
   if (invertActive(p)) {
+    if (friendlyEffectBlocked(p)) return 0;
     const lost = Math.max(0, Math.min(p.armor, amount));
     if (lost > 0) {
       p.armor -= lost;
+      hisakawaSyncOut(p);
       lastLog.push(`🔄 ${p.name} ผกผัน — เกราะที่ควรฟื้น +${amount} กลับกลายเป็นเสียเกราะ -${lost} แทน`);
     }
     return 0;
   }
   const heal = Math.max(0, Math.min(maxArmorOf(p) - p.armor, amount));
-  if (heal > 0) p.armor += heal;
+  if (heal > 0) { p.armor += heal; hisakawaSyncOut(p); }
   if (heal > 0 && !linkMirror) {
-    const b = linkedBuddyOf(p) || CHAR_HOOKS.kai.kaiLinkedBuddyOf(engine, p);
-    if (b) {
-      linkMirror = true;
+    const buddies = linkedBuddiesOf(p);
+    linkMirror = true;
+    for (const b of buddies) {
       const bh = healArmor(b, heal);
-      linkMirror = false;
       if (bh > 0) lastLog.push(`🔗 เชื่อมผล — ${b.name} ฟื้นเกราะตาม ${p.name} +${bh}`);
     }
+    linkMirror = false;
   }
   return heal;
 }
@@ -466,15 +474,19 @@ function maxSkillOf(p) {
 // ============================================================
 // เชื่อมผล (linked): คู่เชื่อมที่ยังมีผลอยู่ทั้งสองฝั่ง (การเพิ่ม-ลด HP แชร์เท่ากัน)
 let linkMirror = false; // กันสะท้อนวนไม่รู้จบระหว่างคู่เชื่อม
+function linkedBuddiesOf(p) {
+  const bardBuddies = CHAR_HOOKS.bard.linkedBuddiesOf(engine, p);
+  const kaiBuddy = CHAR_HOOKS.kai.kaiLinkedBuddyOf(engine, p);
+  const all = kaiBuddy ? [...bardBuddies, kaiBuddy] : bardBuddies;
+  return all.filter((buddy, index) => all.findIndex((x) => x.id === buddy.id) === index);
+}
 function linkedBuddyOf(p) {
-  if (!p || ((p.statuses && p.statuses.linked) || 0) <= 0 || !p.linkedWith) return null;
-  const b = players[p.linkedWith];
-  return (b && b.alive && b.id !== p.id && (b.statuses.linked || 0) > 0) ? b : null;
+  return linkedBuddiesOf(p)[0] || null;
 }
 // ---------- ไค ชิซากิ (kai) ----------
 //  "เชื่อมต่อ" (kaiLink) — โค้ดแยกอิสระจาก linkedBuddyOf ของ Bard ข้างบนโดยสิ้นเชิง (ดู characters/kai.js)
 //  kaiOverhaulSlots: เกมมีห้องเดียว ไม่มีระบบ multi-room (grep แล้วไม่พบ rooms[) — module-level array
-//  [{ playerId, status: "kaiCreation"|"kaiPunishment" }] สูงสุด 2 — ครบ 2 = ปลดล็อกปุ่ม Overhaul
+//  [{ ownerId, playerId, status: "kaiCreation"|"kaiPunishment" }] แยกชุดละ 2 ช่องต่อ Kai เจ้าของมาร์ก
 let kaiOverhaulSlots = [];
 // ---------- เรียวกิ ชิกิ (patch 2.0.5 / rework 2.0.6) ----------
 // ค่าคงที่ของชิกิเองส่วนใหญ่ย้ายไปอยู่ characters/shiki.js แล้ว — เหลือแค่ที่ shared infra ในไฟล์นี้ยังใช้อยู่
@@ -594,16 +606,19 @@ function shikiUltNameOf(p, key) {
   return s ? s.name : key;
 }
 // จบความตายที่โรยรา (สังหารสำเร็จ/หมดเวลา/ถูกยกเลิก): ลบเส้นชีวิตส่วนที่ท่าไม้ตายแจกไปออกจากทุกคน
-function clearWitherLines() {
+function clearWitherLines(shikiId = null) {
   for (const o of Object.values(players)) {
-    const added = o.witherAdded || 0;
+    const byOwner = o.witherAddedBy || {};
+    const added = shikiId ? (byOwner[shikiId] || 0) : Object.values(byOwner).reduce((sum, n) => sum + n, 0);
     if (added > 0) {
       const cur = o.statuses.deathline || 0;
       const next = Math.max(0, cur - added);
       if (next > 0) o.statuses.deathline = next;
       else delete o.statuses.deathline;
     }
-    o.witherAdded = 0;
+    if (shikiId) delete byOwner[shikiId];
+    else o.witherAddedBy = {};
+    if (shikiId && !Object.keys(byOwner).length) delete o.witherAddedBy;
   }
 }
 // มอบเส้นชีวิตจากสกิลติดตัว/สกิลรอง (โหมดท่าไม้ตาย 2: +1/ครั้ง และแหล่งปกติให้ได้ไม่เกิน 3)
@@ -736,7 +751,14 @@ const TRANSFORMS = require("./characters/_transforms")({
 
 // ---------- สถานะเกมส่วนกลาง ----------
 let players = {};
-let gameState = "LOBBY"; // LOBBY | PLAYING | CUTSCENE | SUMMARY | ATTACK | TRANSITION | GAMEOVER
+let gameState = "LOBBY"; // LOBBY | TEAM_MODE | TEAM_SETUP | PLAYING | CUTSCENE | SUMMARY | ATTACK | TRANSITION | GAMEOVER
+let gameMode = "ffa"; // ffa | duo | trio | pending
+let teamSize = 1;
+let teamCount = 0;
+let winningTeamId = null;
+let modeVotes = {};
+let effectSourceId = null;
+const TEAM_IDS = ["A", "B", "C"];
 let timeLeft = 0;
 let phaseTimerId = null;
 let attackerId = null;
@@ -793,6 +815,173 @@ function startPhaseTimer(seconds, onExpire) {
     if (timeLeft <= 0) { clearPhaseTimer(); onExpire(); }
     else broadcastState();
   }, 1000);
+}
+function teamModeActive() {
+  return gameMode === "duo" || gameMode === "trio";
+}
+function sameTeam(a, b) {
+  return !!(teamModeActive() && a && b && a.id !== b.id && a.teamId && b.teamId && a.teamId === b.teamId);
+}
+function friendlyEffectBlocked(target) {
+  const source = effectSourceId && players[effectSourceId];
+  return !!(source && target && sameTeam(source, target));
+}
+function withEffectSource(source, fn) {
+  const prev = effectSourceId;
+  effectSourceId = typeof source === "string" ? source : (source && source.id) || null;
+  try { return fn(); }
+  finally { effectSourceId = prev; }
+}
+function hisakawaSyncIn(p) {
+  if (p && p.characterId === "hisakawa_sister") CHAR_HOOKS.hisakawa_sister.syncIn(p);
+}
+function hisakawaSyncOut(p) {
+  if (p && p.characterId === "hisakawa_sister") CHAR_HOOKS.hisakawa_sister.syncOut(p);
+}
+function applyBuff(p, key, amount, turns) {
+  hisakawaSyncIn(p);
+  rawApplyBuff(p, key, amount, turns);
+  hisakawaSyncOut(p);
+}
+function applyDebuff(p, key, amount, turns) {
+  if (friendlyEffectBlocked(p)) return false;
+  hisakawaSyncIn(p);
+  const ok = rawApplyDebuff(p, key, amount, turns);
+  hisakawaSyncOut(p);
+  return ok;
+}
+function pregameStateActive() {
+  return gameState === "LOBBY" || gameState === "TEAM_MODE" || gameState === "TEAM_SETUP";
+}
+function resetTeamAssignments(resetMode = false) {
+  for (const p of Object.values(players)) {
+    p.teamId = null;
+    p.teamConfirmed = false;
+  }
+  if (resetMode) {
+    gameMode = "ffa";
+    teamSize = 1;
+    teamCount = 0;
+    winningTeamId = null;
+  }
+}
+function resetModeVotes() {
+  modeVotes = {};
+  for (const p of Object.values(players)) p.modeVote = null;
+}
+function resetPregameFlowToLobby() {
+  gameState = "LOBBY";
+  resetTeamAssignments(true);
+  resetModeVotes();
+  for (const p of Object.values(players)) p.ready = false;
+}
+function validGameMode(mode, count = Object.keys(players).length) {
+  if (mode === "ffa") return count >= 2;
+  if (mode === "duo") return count >= 4 && count % 2 === 0;
+  if (mode === "trio") return count === 6;
+  return false;
+}
+function modeOptionsFor(count = Object.keys(players).length) {
+  return [
+    { mode: "ffa", label: "Free For All", size: 1, enabled: validGameMode("ffa", count) },
+    { mode: "duo", label: "Duo", size: 2, enabled: validGameMode("duo", count) },
+    { mode: "trio", label: "Trio", size: 3, enabled: validGameMode("trio", count) },
+  ];
+}
+function currentTeamOptions() {
+  return TEAM_IDS.slice(0, teamCount).map((id) => ({ id, label: `Team ${id}`, size: teamSize }));
+}
+function modeVoteSummary() {
+  const list = Object.values(players);
+  return modeOptionsFor(list.length).map((opt) => {
+    const voters = list.filter((p) => modeVotes[p.id] === opt.mode).map((p) => p.id);
+    return { ...opt, voters, voteCount: voters.length };
+  });
+}
+function voteGameMode(playerId, mode) {
+  if (gameState !== "TEAM_MODE") return;
+  const p = players[playerId];
+  if (!p || !validGameMode(mode)) return;
+  modeVotes[playerId] = mode;
+  p.modeVote = mode;
+  const list = Object.values(players);
+  const votes = list.map((o) => modeVotes[o.id]).filter(Boolean);
+  if (votes.length === list.length) {
+    const counts = votes.reduce((acc, v) => ({ ...acc, [v]: (acc[v] || 0) + 1 }), {});
+    const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    if (ranked[0] && (!ranked[1] || ranked[0][1] > ranked[1][1])) {
+      startTeamSetup(ranked[0][0]);
+      return;
+    }
+  }
+  broadcastState();
+}
+function enterModeSelect() {
+  if (gameState !== "LOBBY") return;
+  const list = Object.values(players);
+  if (list.length < 2 || !list.every((p) => p.ready)) return;
+  resetTeamAssignments(false);
+  resetModeVotes();
+  gameMode = "pending";
+  teamSize = 1;
+  teamCount = 0;
+  winningTeamId = null;
+  gameState = "TEAM_MODE";
+  broadcastState();
+}
+function startTeamSetup(mode) {
+  const count = Object.keys(players).length;
+  if (!validGameMode(mode, count)) return;
+  resetModeVotes();
+  if (mode === "ffa") {
+    gameMode = "ffa";
+    teamSize = 1;
+    teamCount = 0;
+    resetTeamAssignments(false);
+    startMatch();
+    return;
+  }
+  gameMode = mode;
+  teamSize = mode === "duo" ? 2 : 3;
+  teamCount = Math.floor(count / teamSize);
+  resetTeamAssignments(false);
+  gameState = "TEAM_SETUP";
+  broadcastState();
+}
+function chooseTeam(playerId, teamId) {
+  if (gameState !== "TEAM_SETUP") return;
+  const p = players[playerId];
+  if (!p || p.teamConfirmed) return;
+  const id = String(teamId || "").toUpperCase();
+  if (!currentTeamOptions().some((t) => t.id === id)) return;
+  const members = Object.values(players).filter((o) => o.teamId === id);
+  if (members.length >= teamSize && p.teamId !== id) return;
+  p.teamId = id;
+  p.teamConfirmed = false;
+  broadcastState();
+}
+function confirmTeam(playerId, confirmed) {
+  if (gameState !== "TEAM_SETUP") return;
+  const p = players[playerId];
+  if (!p || !p.teamId) return;
+  p.teamConfirmed = !!confirmed;
+  broadcastState();
+  maybeStartTeamMatch();
+}
+function maybeStartTeamMatch() {
+  if (gameState !== "TEAM_SETUP" || !teamModeActive()) return;
+  const list = Object.values(players);
+  if (!validGameMode(gameMode, list.length)) return;
+  const fullTeams = currentTeamOptions().every((t) => list.filter((p) => p.teamId === t.id).length === teamSize);
+  if (fullTeams && list.every((p) => p.teamId && p.teamConfirmed)) startMatch();
+}
+function aliveTeamIds(list = alivePlayers()) {
+  return [...new Set(list.map((p) => p.teamId).filter(Boolean))];
+}
+function remainingTeamWinInfo(stillAlive = alivePlayers(), total = Object.keys(players).length) {
+  if (!teamModeActive() || total < 2) return { over: false, teamId: null };
+  const aliveTeams = aliveTeamIds(stillAlive);
+  return aliveTeams.length <= 1 ? { over: true, teamId: aliveTeams[0] || null } : { over: false, teamId: null };
 }
 
 
@@ -948,7 +1137,7 @@ const TEMARI_ANATA_DRAWS = 3;    // ANATA WAAAAAAAA: บังคับจั่
 //  และแยก ยามฟ้าสาง/เส้นชีวิต ออกไปลดทีละ 1 แทน — ดูใน st === "song")
 const DEBUFF_KEYS = ["discord", "sleep", "stun", "nodraw", "noskill", "sena",
   "energy", "nohealing", "moonmark", "overwork", "unplug", "weak", "fragile", "spellburden",
-  "oblada", "calamity", "hburn", "phenexBanUlt", "nanayaSeal", "miyakoSeal", "invert", "manaSeal", "manaRupture"];
+  "oblada", "hburn", "phenexBanUlt", "nanayaSeal", "miyakoSeal", "invert", "manaSeal", "manaRupture"];
 // เกราะสูงสุดของผู้เล่น: ปกติ 2 — ระหว่างสวมเกราะราชัน (ท่าไม้ตายคุวากาตะ) เพิ่ม +3 เป็น 5
 // ระหว่างสกิลติดตัว 3 เอวา 13 (เลือด <= 3) เพิ่ม +1
 // ระหว่าง Lie Like Vortigern (โอเบรอน) เป้าหมายได้เพดานเกราะ +1
@@ -958,6 +1147,7 @@ function maxArmorOf(p) {
   // เอวานเกเลี่ยน หมายเลข 13 (patch 2.2 alpha): ไม่มีเกราะเลยตามปกติ (เพดาน 0) — ได้เพดาน +1 เฉพาะช่วงสกิลติดตัว 3 ทำงาน (ด้านล่าง)
   const armorBase = (p && p.characterId === "hakuno")
     ? (p.hakunoGender === "female" ? HAKUNO_FEMALE_ARMOR_CAP : HAKUNO_MALE_ARMOR_CAP)
+    : (p && p.characterId === "hisakawa_sister") ? CHAR_HOOKS.hisakawa_sister.maxArmor(p)
     : (p && p.characterId === "eva13") ? 0
     : MAX_ARMOR;
   return armorBase
@@ -968,7 +1158,8 @@ function maxArmorOf(p) {
     + ((((p.statuses && p.statuses.absorbplus) || 0) > 0) ? RIDDHE_ABSORB_ARMOR : 0)
     + ((((p.statuses && p.statuses.riddheguard) || 0) > 0 || ((p.statuses && p.statuses.riddheward) || 0) > 0) ? 2 : 0)
     + (CHAR_HOOKS.broadband_man.contractBuffActive(engine, p) ? CONTRACT_ARMOR_BONUS : 0)
-    + (CHAR_HOOKS.eva13.isEva3Active(engine, p) ? 1 : 0);
+    + (CHAR_HOOKS.eva13.isEva3Active(engine, p) ? 1 : 0)
+    + (CHAR_HOOKS.escanor.armorBonus(p) || 0);
 }
 // เรจูอาคมบัญชา คำสั่ง 1 (ฟุจิมารุ): อมตะ 1 เทิร์น — ไม่รับความเสียหายใดๆ
 function sealActive(p) {
@@ -997,8 +1188,10 @@ function maybeBeatSave(p) {
 // ริต้า เบอร์นัล (characters/phenex.js) — wrapper รอบ CHAR_HOOKS.phenex.resolveRelease
 // ตายกลางเทิร์น (เลือดหมดจากสกิล/ผลสถานะ): ตกรอบทันที
 function instantDeath(p) {
-  // Ultraman Trigger: ตายในร่างพิเศษจะคืนร่างเดิมแทน และเหลือพลังชีวิต 1 หน่วย
-  if (p.characterId === "ultraman_trigger" && CHAR_HOOKS.ultraman_trigger.restore(engine, p, true)) return;
+  if (friendlyEffectBlocked(p)) return;
+  if (p.characterId === "escanor" && CHAR_HOOKS.escanor.tryNoonRevive(engine, p)) return;
+  if (p.characterId === "hisakawa_sister" && CHAR_HOOKS.hisakawa_sister.tryTwinDeath(engine, p)) return;
+  // Ultraman Trigger: ตายในร่างพิเศษถือว่าตายจริง ไม่คืนร่างแทน
   // ริต้า เบอร์นัล (สกิลติดตัว 1 patch 2.1.6, characters/phenex.js): ตายครั้งแรก -> เกิดใหม่แทนที่จะตกรอบ (ครั้งเดียวต่อเกม)
   if (p.characterId === "phenex" && CHAR_HOOKS.phenex.tryRebirth(engine, p)) return;
   // ริต้า เบอร์นัล (สกิลติดตัว 2 patch 2.1.7, characters/phenex.js): ตกรอบจริงขณะท่าไม้ตาย 2 ยังทำงานอยู่ -> ปลดปล่อยความเจ็บปวดที่สะสมทั้งหมดก่อนตาย
@@ -1071,7 +1264,10 @@ function positionUsedByOther(pos, sid) {
 // รูปที่แสดง: Beat Mode (ถาวรจนตาย) > ร่างสุดท้ายฟุจิมารุ (จนตาย) > Paradise (เหนือกว่าสกิลติดตัว NT-D)
 //  > NT-D คงอยู่จนแก้แค้น > ไคจู Black King > Ginga > สวมเกราะราชัน
 function displayImg(p) {
+  if (p.characterId === "escanor" && CHAR_HOOKS.escanor.displayImg) return CHAR_HOOKS.escanor.displayImg(p);
   if (p.characterId === "ultraman_trigger") return "/characters/ultraman_trigger/trigger.webp";
+  if (p.characterId === "hisakawa_sister") return CHAR_HOOKS.hisakawa_sister.displayImg(p);
+  if (p.characterId === "ignis" && CHAR_HOOKS.ignis.displayImg) return CHAR_HOOKS.ignis.displayImg(p);
   // โอเบรอน: ร่างสลับตามช่วงเวลากลางวัน/กลางคืนเสมอ
   if (p.characterId === "oberon") return isNightRound(roundNumber) ? OBERON_NIGHT_IMG : OBERON_MORNING_IMG;
   // ชเรด เอลัน: รวมร่างทำนองเพลงแล้ว = ร่างอควาเรียน สปาด้า ถาวร
@@ -1150,6 +1346,13 @@ function activeSkillMusic() {
     }
   }
   if (bestBeat) return bestBeat;
+  let bestHisakawa = null;
+  for (const p of alivePlayers()) {
+    if (p.characterId === "hisakawa_sister" && (p.statuses.hisakawaDream || 0) > 0) {
+      if (!bestHisakawa || (p.transformAt || 0) > bestHisakawa.at) bestHisakawa = { music: "hisakawa_sunday", at: p.transformAt || 0 };
+    }
+  }
+  if (bestHisakawa) return bestHisakawa;
   // ทาคุมิ ฟุจิวาระ: ถึงจะมองไม่เห็น แต่ฉันยังอยู่ ทำงานอยู่ — เพลง forever เล่นค้าง (priority สูงกว่าเพลงตามเกียร์ ต่ำกว่า Beat Mode)
   let bestTakumiBlackout = null;
   for (const p of alivePlayers()) {
@@ -1283,7 +1486,9 @@ function activeSkillMusic() {
 // เลือดจริงลด 1 หน่วย — เลือดชั่วคราว (แกมเบลอร์) รับแทนก่อนเสมอ (หมดไปเพราะได้รับความเสียหาย)
 // เชื่อมผล (patch 2.0.8): การลด HP จริงถูกแชร์ให้คู่เชื่อมเท่ากันด้วย (อมตะกันไว้ได้)
 function loseHp(p) {
-  if ((p.tempHp || 0) > 0) { p.tempHp--; return; }
+  hisakawaSyncIn(p);
+  if (friendlyEffectBlocked(p)) return;
+  if ((p.tempHp || 0) > 0) { p.tempHp--; hisakawaSyncOut(p); return; }
   // ฉันจะไม่ยอมสูญเสียใครไปอีก (ริดดี้ patch 2.1.1): ริดดี้เองตายไม่ได้ — เลือดค้างที่ 1
   if (p.hp <= 1 && CHAR_HOOKS.riddhe.guardProtects(p)) {
     if (p.riddheSaveLoggedRound !== roundNumber) {
@@ -1293,37 +1498,38 @@ function loseHp(p) {
     return;
   }
   p.hp--; p.dmgHp++;
+  hisakawaSyncOut(p);
   // ไม่อยากให้ใครต้องเจ็บปวด (ริต้า เบอร์นัล, characters/phenex.js): ระหว่างล่อเป้า สะสม "ความเจ็บปวด" +1 ทุกๆ 1 หน่วยเลือดจริงที่เสียไป
   CHAR_HOOKS.phenex.onHpLost(p);
   if (!linkMirror) {
-    const b = linkedBuddyOf(p) || CHAR_HOOKS.kai.kaiLinkedBuddyOf(engine, p);
-    if (b && !sealActive(b)) {
-      linkMirror = true;
-      loseHp(b);
-      linkMirror = false;
-    }
+    const buddies = linkedBuddiesOf(p);
+    linkMirror = true;
+    for (const b of buddies) if (!sealActive(b)) loseHp(b);
+    linkMirror = false;
   }
 }
 // เชื่อมผล (patch 2.1.1): เกราะที่เสียจริงถูกแชร์ให้คู่เชื่อมเท่ากันด้วย (คนละช่องกับ HP)
 function loseArmor(p) {
+  hisakawaSyncIn(p);
+  if (friendlyEffectBlocked(p)) return;
   p.armor--; p.dmgArmor++;
+  hisakawaSyncOut(p);
   // MonsterLive (ฮิคารุ, characters/hikaru.js): เกราะลดลง -> ฟื้นพลังชีวิตตามเกราะที่เสียไป
   CHAR_HOOKS.hikaru.onArmorLost(engine, p);
   // ไม่อยากให้ใครต้องเจ็บปวด (ริต้า เบอร์นัล, characters/phenex.js): ระหว่างล่อเป้า สะสม "ความเจ็บปวด" +1 ทุกๆ 1 หน่วยเกราะที่เสียไป
   CHAR_HOOKS.phenex.onArmorLost(p);
   if (!linkMirror) {
-    const b = linkedBuddyOf(p) || CHAR_HOOKS.kai.kaiLinkedBuddyOf(engine, p);
-    if (b && !sealActive(b) && b.armor > 0) {
-      linkMirror = true;
-      loseArmor(b);
-      linkMirror = false;
-    }
+    const buddies = linkedBuddiesOf(p);
+    linkMirror = true;
+    for (const b of buddies) if (!sealActive(b) && b.armor > 0) loseArmor(b);
+    linkMirror = false;
   }
 }
 // เรจูอาคมบัญชา (อมตะ): ไม่รับความเสียหายใดๆ ตลอดเทิร์น — กันไว้กลางทางทุกช่องทางดาเมจ
 function damageSoft(p) {
-  if (!p.alive || sealActive(p)) return;
-  if (p.shield > 0) { p.shield--; return; }
+  hisakawaSyncIn(p);
+  if (!p.alive || sealActive(p) || friendlyEffectBlocked(p)) return;
+  if (p.shield > 0) { p.shield--; hisakawaSyncOut(p); return; }
   if (p.armor > 0) loseArmor(p);
   else loseHp(p);
 }
@@ -1341,8 +1547,14 @@ function evaBlastEvade(o, e) {
 }
 // RS-Hopper ทั้งสองแบบ (universal-dispatcher wrappers — ตรรกะจริงอยู่ characters/eva13.js)
 // isNormalAttack: true เฉพาะที่ doAttack() เรียก (การโจมตีจากการเลือกเป้าหมายในเทิร์นปกติ ไม่ว่าจะมีบัฟเสริมพลังหรือไม่)
+function adjustIncomingDamage(p, n, isNormalAttack) {
+  const hook = CHAR_HOOKS[p && p.characterId];
+  return hook && hook.adjustIncomingDamage ? hook.adjustIncomingDamage(engine, p, n, isNormalAttack) : n;
+}
 function dealDirect(p, n, isNormalAttack) {
-  if (sealActive(p)) return;
+  if (sealActive(p) || friendlyEffectBlocked(p)) return;
+  n = adjustIncomingDamage(p, n, isNormalAttack);
+  if (n <= 0) return;
   if (isNormalAttack) { if (CHAR_HOOKS.eva13.normalAttackFloor(engine, p, n)) return; }
   else if (CHAR_HOOKS.eva13.rsHopperBlock(engine, p)) return;
   for (let i = 0; i < n; i++) {
@@ -1351,15 +1563,19 @@ function dealDirect(p, n, isNormalAttack) {
     loseHp(p);
   }
 }
-function dealArmorOnly(p, n) {
-  if (sealActive(p)) return;
+function dealArmorOnly(p, n, isNormalAttack) {
+  if (sealActive(p) || friendlyEffectBlocked(p)) return;
+  n = adjustIncomingDamage(p, n, isNormalAttack);
+  if (n <= 0) return;
   for (let i = 0; i < n; i++) {
     if (p.shield > 0) { p.shield--; continue; }
     if (p.armor > 0) loseArmor(p);
   }
 }
 function dealMixed(p, n, isNormalAttack) { // เกราะก่อนแล้วเลือด (สำหรับ NT-D)
-  if (sealActive(p)) return;
+  if (sealActive(p) || friendlyEffectBlocked(p)) return;
+  n = adjustIncomingDamage(p, n, isNormalAttack);
+  if (n <= 0) return;
   if (isNormalAttack) { if (CHAR_HOOKS.eva13.normalAttackFloor(engine, p, n)) return; }
   else if (CHAR_HOOKS.eva13.rsHopperBlock(engine, p)) return;
   for (let i = 0; i < n; i++) {
@@ -1469,7 +1685,7 @@ function voidUltimateOnBust(p) {
 
 function resetRoundDisplay(p) {
   p.dmgHp = 0; p.dmgArmor = 0; p.gainedSkill = 0;
-  p.wasAttacked = false; p.isWinner = false; p.isLoser = false;
+  p.wasAttacked = false; p.didAttackRound = false; p.isWinner = false; p.isLoser = false;
 }
 function resetCombat(p) {
   p.ready = false; // ห้องรอ: ต้องกดพร้อมใหม่ทุกครั้งที่กลับมาห้องรอ/เริ่มแมตช์ใหม่
@@ -1490,8 +1706,16 @@ function resetCombat(p) {
   // ---------- ร้านค้ามายา + เศรษฐกิจเหรียญ (patch 2.2 full) ----------
   p.gold = 0;        // เหรียญสะสม (เพดาน 30)
   p.inventory = [];  // ของที่ซื้อจากร้านค้า รอใช้ (รวมปืนหน่วย GUTS Select — หายทุกแมตช์ใหม่)
+  if (p.characterId === "ignis") CHAR_HOOKS.ignis.ensureBlackSparklence(p);
   p.gutsShotTurn = 0;              // ปืนหน่วย GUTS Select: เทิร์นล่าสุดที่ยิงไป (1 นัด/เทิร์น)
+  p.hyperTriggerReadyRound = 0;    // Hyper Key Trigger: หลังคืนร่างรอ 5 เทิร์นก่อนใช้ซ้ำ
+  p.triggerRecoveryTargetHp = 0;   // Ultraman Trigger: คืนร่างแล้วฟื้นเลือด +1/เทิร์นจนถึง HP ก่อนแปลงร่าง ถ้าโดนตีจะหยุด
   p.gutsGargorgonPending = false;  // Gargorgon Ray: รอแปลงเป็นสตั้นตอนต้นเทิร์นถัดไป
+  p.escanorCharge = 0;
+  p.escanorForcedMorning = 0;
+  p.escanorPendingWine = 0;
+  p.escanorLastStandUsed = false;
+  p.escanorNoonSkillLossRound = 0;
   // ---------- DoomGuy (patch 2.2 full) ----------
   if (p.characterId === "doomguy") p.doomWeapon = DOOM_STARTING_WEAPON; // เริ่มเกมได้ Combat Shotgun เสมอ
   p.doomQuickSwapUsed = false; // Quick Swap: 1 ครั้งต่อเทิร์น
@@ -1540,13 +1764,16 @@ function resetCombat(p) {
   p.bardPending = null;     // บทเพลงที่รอเลือกเป้าหมาย { pattern, name, need, allowSelf }
   p.bloodSection = 0;       // ท่อนทำนองแห่งโลหิต (ครบ 5 = มิติมายาบรรเลงโลหิต)
   p.soulSection = 0;        // ท่อนทำนองแห่งวิญญาณ (ครบ 5 = มิติมายาบรรเลงวิญญาณ)
-  p.linkedWith = null;      // Resonance: id ผู้เล่นที่ถูกเชื่อมผลด้วย
+  p.bardLinks = {};         // Resonance: คู่เชื่อมแยกตาม id Bard เจ้าของบทเพลง
   // ---------- ไค ชิซากิ (kai) ----------
   p.kaiLinkWith = null;     // เชื่อมต่อ (Overhaul#1): id คู่เชื่อม (มิเรอร์กัน — แยกจาก linkedWith ของ Bard)
   p.kaiRivalId = null;      // โทสะระงับด้วยโทสะ (Overhaul#3): id คู่ปรับที่ถูกบังคับโจมตี
   p.kaiSkillUsesRound = 0;   // มือซ้ายแห่งการรังสรรค์/มือขวาแห่งการลงทัณฑ์: งบรวม 2 ครั้งต่อเทิร์น ผสมกันได้อิสระ (เช่น รังสรรค์ 2 ครั้ง, หรือ 1+1)
   // ---------- ผู้สังหารจอมมหาเวทย์ (mageslayer) ----------
   p.mageslayerMarkedId = null;      // ตราล่าเวท: id เป้าหมายที่มาร์กอยู่ (เคลื่อนย้ายได้)
+  p.mageslayerMarks = {};
+  p.kaiMarksBy = {};
+  p.moonMarksBy = {};
   p.mageslayerHasMarked = false;    // เคยใช้ Witch Mark หรือยัง (ถาวร — ขับเคลื่อนภาพโปรไฟล์ MS01→MS02)
   p.mageslayerWitchMarkReadyRound = 0; // Witch Mark: รอบที่กลับมาใช้ได้หลังคูลดาวน์ 2 เทิร์น
   p.mageslayerLockedBurden = false; // Mana Burden: Bard ที่ติดตราล่าเวทตอนโดน — ล้าง spellburden ไม่ได้แม้ต้านสถานะ
@@ -1556,7 +1783,7 @@ function resetCombat(p) {
   p.takumiBlackoutFired = false; // ถึงจะมองไม่เห็น แต่ฉันยังอยู่: กันยิงซ้ำระหว่างสถานะเดียวกันยังทำงานอยู่
   // ---------- เรียวกิ ชิกิ (patch 2.0.6) ----------
   //  p.shikiUlt คงไว้ตามที่เลือกตอนเข้าห้อง (deatheye | wither) — ไม่รีเซ็ตระหว่างแมตช์
-  p.witherAdded = 0;        // เส้นชีวิตที่ความตายที่โรยราแจกให้คนนี้ (สูงสุด 3 — จบท่าแล้วลบออกคืน)
+  p.witherAddedBy = {};     // เส้นชีวิตที่ความตายที่โรยราแจก แยกตาม id ชิกิเจ้าของท่า
   // ---------- โอกูริ แคป (Rework) ----------
   p.oguriEnergy = OGURI_ENERGY_START; // Energy: เริ่มเกมได้รับ 8 แต้ม (สะสมสูงสุด 16)
   p.stamina = 0;             // Stamina ชาร์จ: เริ่มเกม 0 หน่วย ได้รับอัตโนมัติทุกเทิร์น
@@ -1622,6 +1849,7 @@ function resetCombat(p) {
   // (maxHpOf/maxArmorOf อ่านค่าพวกนี้ — คำนวณก่อนหน้านั้นจะติดค่าเก่าจากแมตช์ที่แล้ว)
   p.hp = maxHpOf(p);
   p.armor = maxArmorOf(p);
+  if (p.characterId === "hisakawa_sister") CHAR_HOOKS.hisakawa_sister.init(p);
 }
 
 
@@ -1642,7 +1870,7 @@ function publicStatuses(p) {
   return out;
 }
 function buildStateFor(viewerId) {
-  const revealAll = gameState !== "PLAYING" && gameState !== "LOBBY";
+  const revealAll = gameState !== "PLAYING" && gameState !== "LOBBY" && gameState !== "TEAM_MODE" && gameState !== "TEAM_SETUP";
   // เพลง ANATA WAAAAAAAA ทับทุกเพลงระหว่างช่วงจั่วการ์ด — จบลงเมื่อทุกคนพร้อมเปิดไพ่แล้ว
   const nightNow = isNightRound(roundNumber);
   // ราตรีกลืนกิน: เปิดเมื่อโอเบรอนใช้ท่าไม้ตาย 2 (Lie Like Vortigern) — ฉากหลังกลางคืนกลายเป็น
@@ -1652,6 +1880,7 @@ function buildStateFor(viewerId) {
   const shradeBg = CHAR_HOOKS.shrade_elan.bgActive(engine); // กลางคืน + มีชเรดร่างสปาด้า = ฉากหลังราตรีของชเรด
   // MOON*CELL (คิชินามิ ฮาคุโนะ patch 2.2.1): ฉากหลังกลายเป็น hakuno_fill.jpg ระหว่างท่าไม้ตายทำงาน
   const hakunoBg = Object.values(players).some((p) => p.characterId === "hakuno" && (p.statuses.moonCell || 0) > 0);
+  const hisakawaBg = Object.values(players).some((p) => p.alive && p.characterId === "hisakawa_sister" && (p.statuses.hisakawaDream || 0) > 0);
   // ฉันมองเห็นมันแล้ว (ชิกิ): ภาพ shiki_fill.png ซ้อนทับฉากหลัง | ความตายที่โรยรา: ฉากหลังวีดีโอ shiki_fill2.mp4
   //  โทโนะ ชิกิ (patch 2.1.7): มีดพับประจำตระกูล ระดับ 2 ขึ้นไป — ใช้ภาพซ้อนทับเดียวกับ "eye" (shiki_fill.png)
   //  นานายะ ชิกิ (patch 2.1.9): Mystic eye of death perception เปิดใช้งาน — ใช้ภาพซ้อนทับเดียวกัน (shiki_fill.png)
@@ -1683,14 +1912,14 @@ function buildStateFor(viewerId) {
   let locaOffer = null;
   if (gameState === "PLAYING" && viewer && viewer.alive) {
     const offerer = Object.values(players).find((o) => o.alive && o.contractOffer === viewerId);
-    if (offerer) contractOffer = { from: offerer.name, color: POSITION_COLORS[offerer.position] || "#9B4F96", img: "/characters/broadband_man/broadband_man_skill3.jpg" };
+    if (offerer) contractOffer = { fromId: offerer.id, from: offerer.name, color: POSITION_COLORS[offerer.position] || "#9B4F96", img: "/characters/broadband_man/broadband_man_skill3.jpg" };
     if (viewer.renewPending) {
       const boss = CHAR_HOOKS.broadband_man.contractBoss(engine, viewer);
       if (boss) renewAsk = { from: boss.name, fee: CONTRACT_FEE, color: POSITION_COLORS[boss.position] || "#9B4F96", img: "/characters/broadband_man/broadband_man.jpg" };
     }
     // Locacaca fruit (ซาโตรุ patch 2.0.8.2): ข้อเสนอผลไม้ที่รอผู้ชม state คนนี้ตอบ
     const locaFrom = Object.values(players).find((o) => o.alive && o.locaOffer === viewerId);
-    if (locaFrom) locaOffer = { from: locaFrom.name, steal: CHAR_HOOKS.satoru.LOCA_STEAL, color: POSITION_COLORS[locaFrom.position] || "#9B4F96", img: "/characters/satoru/locaca.png" };
+    if (locaFrom) locaOffer = { fromId: locaFrom.id, from: locaFrom.name, steal: CHAR_HOOKS.satoru.LOCA_STEAL, color: POSITION_COLORS[locaFrom.position] || "#9B4F96", img: "/characters/satoru/locaca.png" };
   }
   // ริต้า เบอร์นัล: ขอแค่ได้พบกันอีก — เลือกเป้าหมายปลดปล่อยความเจ็บปวด (ใช้ได้แม้ตกรอบไปแล้ว/ทุกเฟส)
   let phenexReleaseAsk = null;
@@ -1733,12 +1962,20 @@ function buildStateFor(viewerId) {
     // นานายะ ชิกิ (patch 2.1.9): หัวใจฆาตกร — กำลังรอเลือกโจมตีซ้ำ/ยกเลิกอยู่ (เฉพาะผู้เล่นที่เป็นเจ้าของสิทธิ์นี้)
     nanayaReattack: !!(viewer && viewer.nanayaReattackReady && gameState === "ATTACK" && attackerId === viewer.id),
     gameState,
+    gameMode,
+    teamSize,
+    teamCount,
+    teamOptions: currentTeamOptions(),
+    modeOptions: modeOptionsFor(),
+    modeVotes: modeVoteSummary(),
+    winningTeamId,
     timeLeft,
     roundNumber,
     cycle: nightNow ? "night" : "day", // กลางวัน/กลางคืน (สลับทุก 3 เทิร์น)
     oberonBg,
     shradeBg, // ราตรีของชเรด เอลัน (ฉากหลัง change_fill.jpg — ทุกค่ำคืนที่ยังอยู่ในร่างสปาด้า)
     hakunoBg, // MOON*CELL (คิชินามิ ฮาคุโนะ): ฉากหลัง hakuno_fill.jpg ระหว่างท่าไม้ตายทำงาน
+    hisakawaBg, // ฝันของเหล่าฝาแฝด: ฉากหลัง O-KU-RI-MO-NO-Sunday
     bardBg,   // มิติมายาบรรเลง (Bard): "blood" | "soul" | null
     shikiBg,  // ฉันมองเห็นมันแล้ว (ชิกิ): ซ้อน shiki_fill.png ทับฉากหลังปัจจุบัน
     maxPlayers: MAX_PLAYERS,
@@ -1790,6 +2027,21 @@ function buildStateFor(viewerId) {
       if (ch.id === "hikaru") {
         basicPub = pub(((p.statuses.ginga || 0) > 0 || (p.statuses.gingastrium || 0) > 0) ? ch.basic2 : ch.basic);
         secondaryPub = pub((p.statuses.gingastrium || 0) > 0 ? ch.secondary2 : ch.secondary);
+      }
+      if (ch.id === "escanor") {
+        basicPub = pub(CHAR_HOOKS.escanor.dynamicSkillFor(engine, p, ch, "basic"));
+        secondaryPub = pub(CHAR_HOOKS.escanor.dynamicSkillFor(engine, p, ch, "secondary"));
+        ultimatePub = pub(CHAR_HOOKS.escanor.dynamicSkillFor(engine, p, ch, "ultimate"));
+      }
+      if (ch.id === "hisakawa_sister") {
+        basicPub = pub(CHAR_HOOKS.hisakawa_sister.dynamicSkillFor(p, ch, "basic"));
+        secondaryPub = pub(CHAR_HOOKS.hisakawa_sister.dynamicSkillFor(p, ch, "secondary"));
+        ultimatePub = pub(CHAR_HOOKS.hisakawa_sister.dynamicSkillFor(p, ch, "ultimate"));
+      }
+      if (ch.id === "ignis") {
+        basicPub = pub(CHAR_HOOKS.ignis.dynamicSkillFor(p, ch, "basic"));
+        secondaryPub = pub(CHAR_HOOKS.ignis.dynamicSkillFor(p, ch, "secondary"));
+        ultimatePub = pub(CHAR_HOOKS.ignis.dynamicSkillFor(p, ch, "ultimate"));
       }
       // โอกูริ แคป (Rework): ยุคทองครบ 3 + Stamina ชาร์จ 75 ขึ้นไป — ท่าไม้ตายกลายเป็น Ashen Trail
       if (ch.id === "oguri") {
@@ -1848,6 +2100,9 @@ function buildStateFor(viewerId) {
         img: displayImg(p),
         position: p.position,
         color: POSITION_COLORS[p.position] || "#888",
+        teamId: p.teamId || null,
+        teamConfirmed: !!p.teamConfirmed,
+        modeVote: p.modeVote || null,
         locked: p.locked,
         busted: (show || promoShow || allyShow) ? bustedOf(p) : false,
         result: p.result,
@@ -1864,6 +2119,7 @@ function buildStateFor(viewerId) {
         rachan: !!(p.seen && p.seen.rachan) && (p.statuses.rachan || 0) > 0,
         // ยูนะ: ออร่าเฉพาะเป้าหมาย (Longing สีทอง / Delete สีม่วง / Smile for You สีเขียว-ฟ้า) — beatbark ไม่มีเป้าหมายเดี่ยว ดู yunaFieldFx
         fieldAura: (p.id === yunaTargetId && roundNumber <= yunaWindowEnd) ? yunaEffect : null,
+        hisakawa: p.characterId === "hisakawa_sister" ? CHAR_HOOKS.hisakawa_sister.publicState(p) : undefined,
         // ซาโตรุ (patch 2.0.8.2): แต้มสกิลถูกซ่อนจากผู้เล่นอื่นเสมอ (-1 = ซ่อน) / ทาคุมิ: บังตาแต้มสกิลของทุกคนยกเว้นตัวเองระหว่างท่าไม้ตายทำงาน (sentinel -1 แบบเดียวกัน กลับด้าน)
         skillPoints: (takumiBlackout && !mine) ? -1 : ((p.characterId === "satoru" && !mine && !passiveSealed(p)) ? -1 : p.skillPoints),
         maxSkill: maxSkillOf(p), // Bard: เพดานพลังงาน 9
@@ -1872,6 +2128,7 @@ function buildStateFor(viewerId) {
         gold: p.gold || 0, // ร้านค้ามายา (patch 2.2 full): เหรียญสะสม — ทุกคนเห็นของกันและกันได้
         inventory: mine ? (p.inventory || []) : null, // ของในคลัง — เห็นแค่ของตัวเอง
         gutsShotTurn: mine ? (p.gutsShotTurn || 0) : undefined, // ปืน GUTS Select: ยิงไปแล้วเทิร์นไหน (เทียบกับ roundNumber = ยิงครบโควตาแล้ว)
+        hyperTriggerCooldown: mine ? Math.max(0, (p.hyperTriggerReadyRound || 0) - roundNumber) : undefined,
         doomWeapon: p.doomWeapon || null, // DoomGuy: อาวุธที่ถืออยู่
         doomCharge: p.characterId === "doomguy" ? (p.doomCharge || 0) : undefined, // DoomGuy: ชาร์จ Crucible (เต็ม 5)
         doomWeaponHasEffect: p.characterId === "doomguy" ? !!(DOOM_WEAPONS[p.doomWeapon] || DOOM_WEAPONS.shotgun).effect : undefined, // DoomGuy: ปืนกระบอกนี้กดใช้ความสามารถพิเศษได้ไหม (Plasma Rifle/BFG 9000 ไม่มี)
@@ -1893,9 +2150,12 @@ function buildStateFor(viewerId) {
         soulSection: p.soulSection || 0,   // Bard: ท่อนทำนองแห่งวิญญาณ (ครบ 5 = มิติวิญญาณ)
         bardPending: p.bardPending ? { name: p.bardPending.name, need: p.bardPending.need, allowSelf: p.bardPending.allowSelf } : null, // Bard: บทเพลงรอเลือกเป้าหมาย
         // ไค ชิซากิ: สรุป Overhaul tracker (ชื่อผู้ถือ+ประเภทสถานะ) — เฉพาะผู้เล่นไคเท่านั้น (ตัวอื่นเห็น undefined)
-        kaiOverhaulSlots: p.characterId === "kai" ? kaiOverhaulSlots.map((s) => ({ playerId: s.playerId, name: (players[s.playerId] && players[s.playerId].name) || "", status: s.status, img: players[s.playerId] ? displayImg(players[s.playerId]) : null })) : undefined,
+        kaiOverhaulSlots: p.characterId === "kai" ? kaiOverhaulSlots.filter((s) => s.ownerId === p.id).map((s) => ({ playerId: s.playerId, name: (players[s.playerId] && players[s.playerId].name) || "", status: s.status, img: players[s.playerId] ? displayImg(players[s.playerId]) : null })) : undefined,
         mageslayerHasMarked: p.characterId === "mageslayer" ? !!p.mageslayerHasMarked : undefined, // ผู้สังหารจอมมหาเวทย์: เคยใช้ Witch Mark หรือยัง
         mageslayerWitchMarkCooldown: p.characterId === "mageslayer" ? Math.max(0, (p.mageslayerWitchMarkReadyRound || 0) - roundNumber) : undefined,
+        escanorCharge: p.characterId === "escanor" ? (p.escanorCharge || 0) : undefined,
+        escanorChargeMax: p.characterId === "escanor" ? CHAR_HOOKS.escanor.ESCANOR_CHARGE_MAX : undefined,
+        escanorForm: p.characterId === "escanor" ? CHAR_HOOKS.escanor.formOf(p) : undefined,
         kaiRivalId: mine ? (p.kaiRivalId || null) : undefined, // ไค ชิซากิ: คู่ปรับที่ถูกบังคับโจมตี (เห็นแค่ตัวเอง — ฝั่งอื่นเช็คจาก statuses.kaiRival1/2 ได้)
         kaiSkillUsesRound: p.characterId === "kai" ? (p.kaiSkillUsesRound || 0) : undefined, // ไค: งบสกิล 2 ครั้งต่อเทิร์น ใช้ไปแล้วกี่ครั้ง
         takumiGear: p.characterId === "takumi" ? (p.takumiGear || 1) : undefined, // ทาคุมิ: เกียร์ธรรมดาปัจจุบัน (1-6)
@@ -2032,9 +2292,11 @@ function runCutsceneQueue(onDone) {
 function checkLobbyReady() {
   if (gameState !== "LOBBY") return;
   const list = Object.values(players);
-  if (list.length >= 2 && list.every((p) => p.ready)) startMatch();
+  if (list.length >= 2 && list.every((p) => p.ready)) enterModeSelect();
 }
 function startMatch() {
+  if (!teamModeActive()) resetTeamAssignments(true);
+  winningTeamId = null;
   for (const p of Object.values(players)) resetCombat(p);
   roundNumber = 0;
   cycleShift = 0;
@@ -2076,6 +2338,7 @@ function shopItemName(item) {
   if (item.type === "skillPoint") return `ยาฟื้นแต้มสกิล +${item.value}`;
   if (item.type === "armor") return `ยาฟื้นเกราะ +${item.value}`;
   if (item.type === "gutsGun") return "ปืนหน่วย GUTS Select";
+  if (item.type === "blackSparklence") return "Black Sparklence";
   if (item.type === "gutsAmmo") return (GUTS_AMMO[item.ammo] || {}).name || "กระสุน";
   return "สินค้า";
 }
@@ -2095,9 +2358,12 @@ function openShop() {
     shopItems.push({ id: `shop_${shopRoundSeq}_${i}`, ...rollShopItem(), sold: false, soldTo: null });
   }
   // Hyper Key Trigger โผล่แน่นอน 1 ชิ้นต่อรอบร้านค้า และไม่ถูกสุ่มซ้ำในช่องอื่น
-  uncleShopItems = [{ id: `ushop_${shopRoundSeq}_hyper`, type: "gutsAmmo", ammo: "hyper_trigger", price: GUTS_AMMO.hyper_trigger.price, sold: false, soldTo: null }];
+  uncleShopItems = [
+    { id: `ushop_${shopRoundSeq}_hyper`, type: "gutsAmmo", ammo: "hyper_trigger", price: GUTS_AMMO.hyper_trigger.price, sold: false, soldTo: null },
+    { id: `ushop_${shopRoundSeq}_dark`, type: "gutsAmmo", ammo: "trigger_dark_key", price: GUTS_AMMO.trigger_dark_key.price, sold: false, soldTo: null },
+  ];
   let guns = 0;
-  for (let i = 1; i < UNCLE_SHOP_MAX_ITEMS; i++) {
+  for (let i = 2; i < UNCLE_SHOP_MAX_ITEMS; i++) {
     const rolled = rollUncleShopItem(guns < UNCLE_SHOP_MAX_GUNS);
     if (rolled.type === "gutsGun") guns++;
     uncleShopItems.push({ id: `ushop_${shopRoundSeq}_${i}`, ...rolled, sold: false, soldTo: null });
@@ -2109,6 +2375,12 @@ function openShop() {
 function hasGutsGun(p) {
   return (p.inventory || []).some((it) => it.type === "gutsGun");
 }
+function hasBlackSparklence(p) {
+  return p && p.characterId === "ignis" && (p.inventory || []).some((it) => it.type === "blackSparklence");
+}
+function hasGutsWeapon(p) {
+  return hasGutsGun(p) || hasBlackSparklence(p);
+}
 // ซื้อสินค้า: ใครกดก่อนได้ก่อน (Node เป็น single-thread — ประมวลผลทีละ event จึงไม่มี race condition จริง)
 //  หาจากทั้ง 2 ร้าน (id ไม่ซ้ำกันข้ามร้าน: shop_* กับ ushop_*)
 function buyShopItem(id, itemId) {
@@ -2118,7 +2390,9 @@ function buyShopItem(id, itemId) {
   if (!item || item.sold) return;
   if ((p.gold || 0) < item.price) return;
   p.inventory = p.inventory || [];
-  if (item.type === "gutsGun" && hasGutsGun(p)) return; // ปืนมีได้กระบอกเดียว
+  if (item.type === "gutsGun" && (hasGutsGun(p) || p.characterId === "ignis")) return;
+  if (item.type === "gutsAmmo" && item.ammo === "hyper_trigger" && p.characterId === "ignis") return;
+  if (item.type === "gutsAmmo" && (item.ammo === "hyper_trigger" || item.ammo === "trigger_dark_key") && p.inventory.some((it) => it.type === "gutsAmmo" && it.ammo === item.ammo)) return;
   item.sold = true;
   item.soldTo = p.id;
   p.gold -= item.price;
@@ -2171,17 +2445,27 @@ function useInventoryItem(id, uid, opts = {}) {
   } else if (item.type === "armor") {
     const healed = healArmor(p, item.value);
     lastLog.push(`🔧 ${p.name} ใช้ยาฟื้นเกราะ +${healed} จากคลัง`);
+  } else if (item.type === "wineBarrel") {
+    if (!CHAR_HOOKS.escanor.useWineBarrel(engine, p, item)) return;
   } else if (item.type === "tepeuMeal") {
     const healed = healHp(p, item.value);
     lastLog.push(`🍲 ${p.name} ใช้ "มื้อที่สุข" — ฟื้นพลังชีวิต +${healed} จากคลัง`);
-  } else if (item.type === "gutsGun") {
+  } else if (item.type === "gutsGun" || item.type === "blackSparklence") {
     return; // ปืนเป็นไอเทมถาวร ไม่ใช่ของกดใช้ — ต้อง return ก่อนถึง splice ท้ายฟังก์ชัน ไม่งั้นปืนหายทันทีที่กด
   } else if (item.type === "gutsAmmo") {
     if (item.ammo === "hyper_trigger") {
-      if (gameState !== "PLAYING" || p.locked || !hasGutsGun(p) || p.gutsShotTurn === roundNumber || p.characterId === "ultraman_trigger") return;
-      p.gutsShotTurn = roundNumber;
-      p.inventory.splice(idx, 1);
+      const readyRound = p.hyperTriggerReadyRound || 0;
+      if (gameState !== "PLAYING" || p.locked || !hasGutsGun(p) || p.gutsShotTurn === roundNumber || p.characterId === "ultraman_trigger" || p.characterId === "ignis" || roundNumber < readyRound) return;
       if (!CHAR_HOOKS.ultraman_trigger.activate(engine, p)) return;
+      p.gutsShotTurn = roundNumber;
+      pausePlayingForCutscene();
+      return;
+    }
+    if (item.ammo === "trigger_dark_key") {
+      if (gameState !== "PLAYING" || p.locked || !hasBlackSparklence(p) || p.gutsShotTurn === roundNumber) return;
+      if (!CHAR_HOOKS.ignis.activateTriggerDark(engine, p)) return;
+      p.inventory.splice(idx, 1);
+      p.gutsShotTurn = roundNumber;
       pausePlayingForCutscene();
       return;
     }
@@ -2212,11 +2496,11 @@ function useInventoryItem(id, uid, opts = {}) {
 //  ยิงได้เฉพาะช่วงจั่วไพ่และยังไม่เปิดไพ่ / ต้องมีปืน / 1 นัดต่อเทิร์น / เป้าหมายต้องเป็นคนอื่นที่ยังไม่ตกรอบ
 function gutsFireTargetOf(p, item, targetId) {
   if (gameState !== "PLAYING" || p.locked) return null;
-  if (!hasGutsGun(p)) return null;
+  if (!hasGutsWeapon(p)) return null;
   if (p.gutsShotTurn === roundNumber) return null;
   if (!GUTS_AMMO[item.ammo]) return null;
   const target = players[targetId];
-  if (!target || !target.alive || target.id === p.id) return null;
+  if (!target || !target.alive || target.id === p.id || sameTeam(p, target)) return null;
   return target;
 }
 // ให้ผลของกระสุน — เรียกหลังวีดีโอจบเท่านั้น (ดู pausePlayingForCutscene)
@@ -2427,6 +2711,8 @@ function dealRound() {
 
     // ---------- โอกูริ แคป (Rework): Stamina ชาร์จ / ยุคทอง / Zone (GrayBeast) / หมดแรง (Burnout) / Sunny Day — เช็คตอนเริ่มเทิร์น ----------
     CHAR_HOOKS.oguri.onRoundStartTick(engine, p);
+    CHAR_HOOKS.escanor.onRoundStartTick(engine, p, prevNight);
+    CHAR_HOOKS.hisakawa_sister.onRoundStartTick(engine, p);
 
     // ---------- ลุกไหม้ (hburn, สถานะ Universal): ดาเมจ 1/เทิร์น สะสมสูงสุด 6 — ย้าย body ไป characters/_universal_status.js แล้ว ----------
     tickBurn(engine, p);
@@ -2460,7 +2746,7 @@ function dealRound() {
     // และเสียพลังชีวิตแบบไม่สนเกราะเทิร์นละ 1 หน่วย — หักได้เรื่อยๆ แต่ห้ามตาย (ค้างที่ 1 หน่วย)
     if ((p.statuses.sleep || 0) > 0) {
       p.locked = true;
-      if (p.hp > 1) { p.hp--; p.dmgHp++; }
+      if (p.hp > 1) { p.hp--; p.dmgHp++; hisakawaSyncOut(p); }
       lastLog.push(`💤 ${p.name} หลับไหลจากคำลวงของราชาภูติ — ขยับไม่ได้ (เหลืออีก ${p.statuses.sleep} เทิร์น)`);
     }
 
@@ -2551,7 +2837,7 @@ function hit(id) {
     drawn = drawCardFor(p);
     if (drawn) p.cards.push(drawn);
   }
-  if (drawn) onCardDrawn(p, drawn);
+  if (drawn) { onCardDrawn(p, drawn); CHAR_HOOKS.escanor.onCardDraw(engine, p); }
   // สภาพชา (ดีบัฟ Universal — Thunder Bullet): กดจั่ว 1 ครั้ง ได้ไพ่ 2 ใบ
   //  ใบที่ 2 จั่วแบบสุ่มปกติเสมอ (โชคลาภช่วยแค่ใบแรก) และไม่เช็คเพดานแต้มซ้ำ — แตกได้ตามสภาพ
   if ((p.statuses.chaa || 0) > 0) {
@@ -2590,6 +2876,7 @@ function nanayaToggleEye(id) {
 }
 function useSkill(id, tier, targets, item) {
   const p = players[id];
+  if (!effectSourceId && p) return withEffectSource(p, () => useSkill(id, tier, targets, item));
   if (!p || !p.alive) return;
   if (gameState !== "PLAYING" || p.locked) return;
   if (!["basic", "secondary", "ultimate"].includes(tier)) return;
@@ -2687,19 +2974,34 @@ function useSkill(id, tier, targets, item) {
   if (ch && ch.id === "oguri") {
     if (tier === "ultimate") skill = oguriAshenReady(p) ? ch.ultimate2 : ch.ultimate;
   }
+  if (ch && ch.id === "escanor") {
+    skill = CHAR_HOOKS.escanor.prepareSkill(engine, p, tier, targets);
+    if (!skill) return;
+  }
+  if (ch && ch.id === "hisakawa_sister") {
+    skill = CHAR_HOOKS.hisakawa_sister.dynamicSkillFor(p, ch, tier);
+  }
+  if (ch && ch.id === "ignis") {
+    skill = CHAR_HOOKS.ignis.dynamicSkillFor(p, ch, tier);
+  }
   // สึงาชิ ทาคุโตะ (patch 2.2 new): Apprivoise! ทำงานแล้ว — สกิลพื้นฐานเปลี่ยนเป็น Star Sword Emeraude ถาวร
   if (ch && ch.id === "takuto" && tier === "basic" && (p.statuses.apprivoise || 0) > 0) skill = ch.basic2;
   // patch 2.2.5: กันตาย (สกิลติดตัว 1) เคยทำงานไปแล้ว — ท่าไม้ตายเปลี่ยนเป็นร่วมเดินทางไปกับฉันเถอะถาวร (แทนพิชิตแสงดาว)
   if (ch && ch.id === "takuto" && tier === "ultimate" && p.beatSaved) skill = ch.ultimate2;
   if (!skill) return;
+  const isEscanorSkill = p.characterId === "escanor";
+  const isHisakawaSkill = p.characterId === "hisakawa_sister";
+  const isIgnisSkill = p.characterId === "ignis";
   const isTriggerSkill = p.characterId === "ultraman_trigger";
   // โอเบรอน/โคโตเนะ: สกิลสลับตามช่วงเวลา — กลางคืนใช้เวอร์ชันกลางคืนแทน
   if (tier === "ultimate" && ch.ultimateNight && isNightRound(roundNumber)) skill = ch.ultimateNight;
   if (tier === "secondary" && ch.secondaryNight && isNightRound(roundNumber)) skill = ch.secondaryNight;
   if (tier === "basic" && ch.basicNight && isNightRound(roundNumber)) skill = ch.basicNight;
   if ((p.statuses.noskill || 0) > 0) return; // โดนหอกลองกินัสปัก: เทิร์นนี้ใช้สกิลไม่ได้
-  if (isTriggerSkill && tier === "secondary" && (!(p.statuses.triggerCircle > 0) || p.statuses.triggerMulti > 0)) return;
-  if (isTriggerSkill && tier === "ultimate" && (!(p.statuses.triggerCircle > 0) || p.statuses.triggerMulti > 0)) return;
+  if (isTriggerSkill && tier === "secondary" && (!(p.statuses.triggerCircle > 0) || p.statuses.triggerMulti > 0 || p.statuses.triggerZeperion > 0)) return;
+  if (isTriggerSkill && tier === "ultimate" && (!(p.statuses.triggerCircle > 0) || p.statuses.triggerMulti > 0 || p.statuses.triggerZeperion > 0)) return;
+  if (isHisakawaSkill && !CHAR_HOOKS.hisakawa_sister.canUseSkill(engine, p, tier, skill)) return;
+  if (isIgnisSkill && !CHAR_HOOKS.ignis.canUseSkill(engine, p, tier, skill)) return;
 
   // เวลาทอง (แกมเบลอร์): แต้มที่ใช้ของสกิลพื้นฐาน/สกิลรองลดครึ่งหนึ่ง
   const isGambler = p.characterId === "gambler";
@@ -2734,6 +3036,12 @@ function useSkill(id, tier, targets, item) {
   if (isLoca) {
     locaTarget = CHAR_HOOKS.satoru.prepareLocaTarget(engine, p, targets);
     if (!locaTarget) return;
+  }
+  const isIgnisSteal = isIgnisSkill && tier === "basic";
+  let ignisStealTarget = null;
+  if (isIgnisSteal) {
+    ignisStealTarget = CHAR_HOOKS.ignis.prepareStealTarget(engine, p, targets);
+    if (!ignisStealTarget) return;
   }
   // กระแสเวท / ภาระเวท (สถานะพื้นฐาน patch 2.0.8): ใช้พลังงานลดลง/เพิ่มขึ้นตามจำนวนที่ระบุ
   cost = Math.max(0, cost - statusAmtOf(p, "spellflow"));
@@ -3080,6 +3388,9 @@ function useSkill(id, tier, targets, item) {
   if (isKaiPunishment && kaiMarkTarget) flashSuffix = CHAR_HOOKS.kai.applyMark(engine, p, kaiMarkTarget, "kaiPunishment", "ลงทัณฑ์");
   // ---------- ผู้สังหารจอมมหาเวทย์ (characters/mageslayer.js) ----------
   if (isTriggerSkill) CHAR_HOOKS.ultraman_trigger.applySkill(engine, p, tier);
+  if (isHisakawaSkill) flashSuffix = CHAR_HOOKS.hisakawa_sister.applySkill(engine, p, tier, skill) || flashSuffix;
+  if (isIgnisSteal && ignisStealTarget) flashSuffix = CHAR_HOOKS.ignis.applySteal(engine, p, ignisStealTarget) || flashSuffix;
+  if (isIgnisSkill && !isIgnisSteal) flashSuffix = CHAR_HOOKS.ignis.applySkill(engine, p, tier, skill) || flashSuffix;
   if (isMsWitchMark && msWitchMarkTarget) flashSuffix = CHAR_HOOKS.mageslayer.applyWitchMark(engine, p, msWitchMarkTarget);
   if (isMsRupture && msRuptureTarget) flashSuffix = CHAR_HOOKS.mageslayer.applyRuptureEffect(engine, p, msRuptureTarget, skill.name);
   if (isMsBurden) {
@@ -3120,7 +3431,8 @@ function useSkill(id, tier, targets, item) {
 
   // ทงคัสสึ 3 มื้อ (เทมาริ patch 2.0.6): นับชามสะสม (characters/temari.js)
   if (p.characterId === "temari" && tier === "basic") CHAR_HOOKS.temari.applyBasicTonkatsu(p);
-  applyEffect(p, skill.effect);
+  if (isEscanorSkill) CHAR_HOOKS.escanor.applySkill(engine, p, tier, targets);
+  else if (!isHisakawaSkill && !isIgnisSkill) applyEffect(p, skill.effect);
 
   // ---------- บานาจ ลิงก์ (patch 2.1.2, characters/banagher.js) ----------
   if (isBanagherShield && banagherShieldTarget) CHAR_HOOKS.banagher.applyShieldEffect(engine, p, banagherShieldTarget);
@@ -3218,6 +3530,7 @@ function useSkill(id, tier, targets, item) {
 
   // ผู้สังหารจอมมหาเวทย์ (characters/mageslayer.js): ทุกครั้งที่ผู้เล่นคนใดใช้สกิลสำเร็จ — เช็คว่าถูกตราล่าเวทมาร์กอยู่ไหม
   CHAR_HOOKS.mageslayer.onTargetUsedSkill(engine, p);
+  CHAR_HOOKS.escanor.onSkillUsed(engine, p);
 
   // สกิลช่วงจั่วการ์ด (instant): เด้งโชว์ทันทีบนกระดานของทุกคน ไม่ต้องรอเปิดไพ่/ไม่ตัดจอดำ
   if (skill.instant) {
@@ -3225,7 +3538,7 @@ function useSkill(id, tier, targets, item) {
     const flashImg = isApplePick ? CHAR_HOOKS.appleguy.ITEMS[item].img
       : (skill.img || null);
     // เทเปา (ชิกิ): กดสกิลพื้นฐาน/สกิลรอง ให้เล่นเสียง tepeu_skill1_2 ก่อนเสมอ
-    const flashSound = (isTepeuCook || isTepeuPonder) ? "tepeu_skill1_2" : null;
+    const flashSound = (isTepeuCook || isTepeuPonder) ? "tepeu_skill1_2" : isHisakawaSkill ? CHAR_HOOKS.hisakawa_sister.skillVoice(p, tier, skill) : null;
     io.emit("skillFlash", { name: skill.name + flashSuffix, img: flashImg, by: p.name, color: POSITION_COLORS[p.position] || "#9B4F96", sound: flashSound });
   }
   // จำสกิลที่ใช้ในรอบ (ท่าไม้ตายมี cutscene ของตัวเอง / สกิลหลังเปิดไพ่ไปโชว์ตอนโจมตี)
@@ -3266,6 +3579,10 @@ function resolveOffer(b, t, accept, timeout) {
   b.contractOffer = null;
   if (!t || !t.alive) return;
   if (accept && b.alive) {
+    if (t.contractWith && t.contractWith !== b.id) {
+      lastLog.push(`📵 ข้อเสนอของ ${b.name} ถูกยกเลิก — ${t.name} มีคู่สัญญาอยู่แล้ว`);
+      return;
+    }
     b.contractPartner = t.id;
     t.contractWith = b.id;
     b.contractTurns = 0;
@@ -3273,6 +3590,12 @@ function resolveOffer(b, t, accept, timeout) {
     healArmor(t, CONTRACT_ARMOR_BONUS);
     lastLog.push(`📶 ${t.name} ตอบรับข้อเสนอของ ${b.name} — เป็นคู่สัญญา! เกราะ +${CONTRACT_ARMOR_BONUS} และพลังโจมตี +1 ตลอดสัญญา`);
     io.emit("skillFlash", { name: `สนใจใช้บริการเราไหม — ${t.name} ตอบรับสัญญา!`, img: "/characters/broadband_man/broadband_man_skill3.jpg", by: b.name, color: POSITION_COLORS[b.position] || "#9B4F96" });
+    for (const other of Object.values(players)) {
+      if (other.id !== b.id && other.contractOffer === t.id) {
+        other.contractOffer = null;
+        lastLog.push(`📵 ข้อเสนอของ ${other.name} ถูกถอนอัตโนมัติ — ${t.name} เลือกทำสัญญากับ ${b.name} แล้ว`);
+      }
+    }
   } else {
     // ปฏิเสธ: เสียเลือด 1 ไม่สนเกราะ + แต้มสกิลจบเทิร์นลด 1 เป็นเวลา 3 เทิร์น (นับเทิร์นถัดไป)
     dealDirect(t, 1);
@@ -3317,7 +3640,7 @@ function resolveRenew(t, accept, timeout) {
     b.contractPartner = null;
     b.contractTurns = 0;
     t.contractWith = null;
-    lastLog.push(`📵 ${t.name} ${timeout ? "ไม่ตอบ" : "ปฏิเสธ"}การต่อสัญญากับ ${b.name} — เสียเลือด 2 ไม่สนเกราะ${resistActive(t) ? " (ต้านสถานะผิดปกติ — ไม่ติดไร้ทางเยียวยา)" : " ติด \"ไร้ทางเยียวยา\" (ฟื้นเลือดตัวเองไม่ได้ 1 เทิร์น)"} และสัญญาสิ้นสุด`);
+    lastLog.push(`[Contract] ${t.name} ${timeout ? "no response" : "declined"} renewal with ${b.name} - takes 2 direct damage${resistActive(t) ? " (resisted no-healing)" : " and gains no-healing for 1 turn"}; contract ended`);
     io.emit("skillFlash", { name: `ชำระค่าบริการ — ${t.name} ยกเลิกสัญญา`, img: "/characters/broadband_man/broadband_man.jpg", by: b.name, color: POSITION_COLORS[b.position] || "#9B4F96" });
   }
   if (t.alive && t.hp <= 0) {
@@ -3345,17 +3668,18 @@ function resolveLoca(s, t, accept, timeout) {
     io.emit("skillFlash", { name: `Locacaca fruit — ${t.name} ปฏิเสธ`, img: "/characters/satoru/locaca.png", by: s.name, color: POSITION_COLORS[s.position] || "#9B4F96" });
   }
 }
-function answerLoca(id, accept) {
+function answerLoca(id, accept, fromId = null) {
   const t = players[id];
   if (gameState !== "PLAYING" || !t || !t.alive) return;
-  const s = Object.values(players).find((o) => o.alive && o.locaOffer === id);
+  const s = fromId ? players[fromId] : Object.values(players).find((o) => o.alive && o.locaOffer === id);
+  if (s && (!s.alive || s.locaOffer !== id)) return;
   if (!s) return;
   resolveLoca(s, t, accept, false);
   broadcastState();
   checkAllLocked();
 }
 // รับคำตอบจากเป้าหมาย (ตอบได้ระหว่างช่วงจั่วการ์ด แม้จะเปิดไพ่ไปแล้ว)
-function answerContract(id, accept) {
+function answerContract(id, accept, fromId = null) {
   const p = players[id];
   if (gameState !== "PLAYING" || !p || !p.alive) return;
   if (p.renewPending) {
@@ -3364,7 +3688,8 @@ function answerContract(id, accept) {
     checkAllLocked();
     return;
   }
-  const b = Object.values(players).find((o) => o.alive && o.contractOffer === id);
+  const b = fromId ? players[fromId] : Object.values(players).find((o) => o.alive && o.contractOffer === id);
+  if (b && (!b.alive || b.contractOffer !== id)) return;
   if (!b) return;
   resolveOffer(b, p, accept, false);
   broadcastState();
@@ -3395,19 +3720,30 @@ function resolveAllyOffer(r, t, accept, timeout) {
   r.allyOffer = null;
   if (!t || !t.alive) return;
   if (accept && r.alive) {
+    if (t.allyId && t.allyId !== r.id) {
+      lastLog.push(`🤝💔 ข้อเสนอของ ${r.name} ถูกยกเลิก — ${t.name} มีพันธมิตรอยู่แล้ว`);
+      return;
+    }
     r.allyId = t.id;
     t.allyId = r.id;
     lastLog.push(`🤝 ${t.name} ตอบรับข้อเสนอของ ${r.name} — บันชีและยูนิคอร์นเป็นพันธมิตรกัน! (เห็นแต้มการ์ดของกันและกัน · ท่าไม้ตายริดดี้เปลี่ยนเป็น "ฉันจะไม่ยอมสูญเสียใครไปอีก")`);
     io.emit("skillFlash", { name: "🤝 พันธมิตรบันชี × ยูนิคอร์น", img: RIDDHE_BANSHEE_IMG, by: r.name, color: POSITION_COLORS[r.position] || "#9B4F96" });
+    for (const other of Object.values(players)) {
+      if (other.id !== r.id && other.characterId === "riddhe" && other.allyOffer === t.id) {
+        other.allyOffer = null;
+        lastLog.push(`🤝💔 ข้อเสนอของ ${other.name} ถูกถอนอัตโนมัติ — ${t.name} เลือกเป็นพันธมิตรกับ ${r.name} แล้ว`);
+      }
+    }
   } else {
     lastLog.push(`🤝💔 ${t.name} ${timeout ? "ไม่ตอบ" : "ปฏิเสธ"}ข้อเสนอพันธมิตรของ ${r.name} — ริดดี้เดินเส้นทางเดี่ยว`);
     io.emit("skillFlash", { name: "ข้อเสนอพันธมิตร — ถูกปฏิเสธ", img: RIDDHE_BANSHEE_IMG, by: r.name, color: POSITION_COLORS[r.position] || "#9B4F96" });
   }
 }
-function answerAllyOffer(id, accept) {
+function answerAllyOffer(id, accept, fromId = null) {
   const t = players[id];
   if (gameState !== "PLAYING" || !t || !t.alive) return;
-  const r = Object.values(players).find((o) => o.alive && o.characterId === "riddhe" && o.allyOffer === id);
+  const r = fromId ? players[fromId] : Object.values(players).find((o) => o.alive && o.characterId === "riddhe" && o.allyOffer === id);
+  if (r && (!r.alive || r.characterId !== "riddhe" || r.allyOffer !== id)) return;
   if (!r) return;
   resolveAllyOffer(r, t, accept, false);
   broadcastState();
@@ -3479,16 +3815,25 @@ function kaiOverhaul(id) {
   const p = players[id];
   if (!p || !p.alive || p.characterId !== "kai") return;
   if (gameState !== "PLAYING" || p.locked) return;
-  if (kaiOverhaulSlots.length < 2) return;
-  const [a, b] = kaiOverhaulSlots.slice(0, 2);
+  const ownSlots = kaiOverhaulSlots.filter((slot) => slot.ownerId === p.id);
+  if (ownSlots.length < 2) return;
+  const [a, b] = ownSlots.slice(0, 2);
   const holderA = players[a.playerId];
   const holderB = players[b.playerId];
   if (!holderA || !holderA.alive || !holderB || !holderB.alive) return;
   CHAR_HOOKS.kai.resolveOverhaul(engine, holderA, a.status, holderB, b.status, p);
-  kaiOverhaulSlots = [];
+  kaiOverhaulSlots = kaiOverhaulSlots.filter((slot) => slot.ownerId !== p.id);
   for (const player of Object.values(players)) {
-    delete player.statuses.kaiCreation; delete player.statuses.kaiPunishment;
-    if (player.statusAmt) { delete player.statusAmt.kaiCreation; delete player.statusAmt.kaiPunishment; }
+    if (player.kaiMarksBy) delete player.kaiMarksBy[p.id];
+    for (const statusKey of ["kaiCreation", "kaiPunishment"]) {
+      const remaining = Object.values(player.kaiMarksBy || {}).filter((marks) => marks[statusKey]).length;
+      if (remaining > 0) player.statuses[statusKey] = 999;
+      else {
+        delete player.statuses[statusKey];
+        if (player.statusAmt) delete player.statusAmt[statusKey];
+      }
+    }
+    if (player.kaiMarksBy && !Object.keys(player.kaiMarksBy).length) delete player.kaiMarksBy;
   }
   p.transformAt = ++transformCounter;
   io.emit("skillFlash", { name: "Overhaul", img: displayImg(p), by: p.name, color: POSITION_COLORS[p.position] || "#9B4F96" });
@@ -3541,7 +3886,7 @@ function resolveRound() {
       p.batKarmaAsk = null;
       const options = ask.options.map((id) => players[id]).filter((o) => o && o.alive);
       const target = options.length ? options[Math.floor(Math.random() * options.length)] : null;
-      CHAR_HOOKS.bat_ben.resolveKarmaSend(engine, p, target, ask.dmg);
+      withEffectSource(p, () => CHAR_HOOKS.bat_ben.resolveKarmaSend(engine, p, target, ask.dmg));
     }
     // ริต้า เบอร์นัล: ขอแค่ได้พบกันอีก — ยังไม่เลือกเป้าหมายก่อนเปิดไพ่รอบถัดไป = สุ่มให้
     if (p.phenexReleaseAsk) {
@@ -3549,7 +3894,7 @@ function resolveRound() {
       p.phenexReleaseAsk = null;
       const options = ask.options.map((id) => players[id]).filter((o) => o && o.alive);
       const target = options.length ? options[Math.floor(Math.random() * options.length)] : null;
-      CHAR_HOOKS.phenex.resolveRelease(engine, p, target, ask.pain);
+      withEffectSource(p, () => CHAR_HOOKS.phenex.resolveRelease(engine, p, target, ask.pain));
     }
     // ---------- ริดดี้ มาร์เซนาส (patch 2.0.9): คำถามพันธมิตรที่ยังไม่ตอบเมื่อถึงเวลาเปิดไพ่ ----------
     if (p.allyPrompt) {
@@ -3620,7 +3965,7 @@ function resolveRound() {
     //  "ก่อน" สุ่มผู้ชนะ ติดแล้วได้เป็นผู้ชนะและได้เทิร์นโจมตีทันที
     //  บั๊กเดิม (แก้ที่นี่): โรลนี้เคยอยู่ใน afterSummary() ซึ่งทำงานหลังสุ่มผู้ชนะไปแล้ว และเช็คเฉพาะคนที่
     //  ถูกสุ่มได้เท่านั้น -> ถ้าดูมกายเสมอแต่ไม่ถูกสุ่ม ก็ไม่ได้โรลเลย ทำให้โอกาสจริงถูกหารด้วยจำนวนคนที่เสมอ
-    //  (เสมอ 2 คน = 37.5% / 3 คน = 25% / 4 คน = 18.7% แทนที่จะเป็น 75% ตามที่คำอธิบายสกิลระบุไว้)
+    //  (เสมอหลายคนยังโรลรายตัว แต่โอกาสต่อ DoomGuy ต้องอิง DOOM_TIE_ATTACK_CHANCE ตามคำอธิบายสกิล)
     let w = null;
     if (tied.length > 1) {
       for (const d of tied.filter((p) => p.characterId === "doomguy")) {
@@ -3700,6 +4045,7 @@ function resolveRound() {
     }
   }
   for (const p of combatants) if (!p.result) p.result = "safe";
+  CHAR_HOOKS.hisakawa_sister.onAfterRoundScores(engine, combatants, roundWinnerId, val);
 
   // เทเปา (characters/tepeu.js): มีเทเปายังอยู่ในสนาม -> ใครแพ้ติดกันเกิน 3 เทิร์น เส้นชีวิตลดลง 1 หน่วย
   CHAR_HOOKS.tepeu.onRoundLoseStreak(engine, combatants);
@@ -3761,6 +4107,7 @@ function afterResolve() {
   CHAR_HOOKS.tepeu.resolveAllKills(engine);
   // ---------- Ashen Trail: Cinderella Gray (โอกูริ, characters/oguri.js): หลังเปิดไพ่ — โจมตีทุกคนที่ไพ่แตก ----------
   CHAR_HOOKS.oguri.onAfterResolveAshenTrail(engine);
+  CHAR_HOOKS.escanor.onAfterResolve(engine);
   // ---------- ทาคุมิ ฟุจิวาระ (characters/takumi.js): ถึงจะมองไม่เห็น แต่ฉันยังอยู่ — คนแรกที่ไพ่แตกระหว่างบัฟยังทำงาน ----------
   CHAR_HOOKS.takumi.tryBustTrigger(engine);
 
@@ -3811,7 +4158,8 @@ function goSummary() {
 // ---- โจมตี ----
 // เรจูอาคมบัญชา (อมตะ): ไม่ถูกเลือกเป็นเป้าโจมตีตลอดเทิร์น
 function attackableTargets(atkId) {
-  return alivePlayers().filter((p) => p.id !== atkId && !sealActive(p));
+  const attacker = players[atkId];
+  return alivePlayers().filter((p) => p.id !== atkId && !sameTeam(attacker, p) && !sealActive(p));
 }
 function afterSummary() {
   const winner = players[roundWinnerId];
@@ -3833,12 +4181,7 @@ function afterSummary() {
     endTurn();
     return;
   }
-  // ซาโตรุ อาเคฟุ (patch 2.0.8.2): สกิลติดตัว — โจมตีธรรมดาไม่ได้เลย (ยกเว้นระหว่าง MOON*CELL ของคิชินามิ ฮาคุโนะ)
-  if (winner && winner.alive && winner.characterId === "satoru" && !moonCellActive()) {
-    lastLog.push(`🩺 ${winner.name} ไม่เคยลงมือไล่ล่าใครด้วยตัวเอง — ไม่มีเทิร์นโจมตี (สกิลติดตัว)`);
-    endTurn();
-    return;
-  }
+
   // แบทแมน (characters/bat_ben.js): ระหว่างเร้นเงา ออกจากเงามืดมาโจมตีไม่ได้
   if (winner && winner.alive && CHAR_HOOKS.bat_ben.cannotAttack(winner)) {
     lastLog.push(`🌑 ${winner.name} ยังเร้นเงาอยู่ — ไม่ออกมาจากความมืด ไม่มีเทิร์นโจมตี`);
@@ -3851,8 +4194,8 @@ function afterSummary() {
     endTurn();
     return;
   }
-  // DoomGuy (characters/doomguy.js) สกิลติดตัว: ปกติเสมอแต้มจะไม่มีเทิร์นโจมตี — โรล 75% ไปแล้วตอนตัดสิน
-  //  ผู้ชนะใน resolveRound() (ห้ามโรลซ้ำที่นี่ ไม่งั้นโอกาสจริงจะกลายเป็น 0.75 x 0.75 = 56%)
+  // DoomGuy (characters/doomguy.js) สกิลติดตัว: ปกติเสมอแต้มจะไม่มีเทิร์นโจมตี — โรลไปแล้วตอนตัดสิน
+  //  ผู้ชนะใน resolveRound() (ห้ามโรลซ้ำที่นี่ ไม่งั้นโอกาสจริงจะถูกคูณซ้ำ)
   const doomTieOverride = doomTieAttack && !!winner && winner.alive && winner.characterId === "doomguy";
   if (winner && winner.alive && (!roundTiedWin || doomTieOverride)) {
     const targets = attackableTargets(winner.id);
@@ -3889,6 +4232,16 @@ function postAttackFollowup(attacker) {
   // สึงาชิ ทาคุโตะ (characters/takuto.js): อย่างนายน่ะ จะไปเข้าใจอะไร (พิชิตแสงดาว) — หลังคอมโบ Saphir+Emeraude โอกาส 50% ได้โจมตีต่อเป็นครั้งที่ 3
   if (attacker && attacker.alive && attacker.characterId === "takuto") {
     if (CHAR_HOOKS.takuto.startThirdAttack(engine, attacker)) return;
+  }
+  if (CHAR_HOOKS.hisakawa_sister.startHayateAssistAttack(engine, attacker)) {
+    gameState = "ATTACK";
+    startPhaseTimer(ATTACK_TIME, () => {
+      const t = attackableTargets(attackerId);
+      if (t.length) doAttack(attackerId, t[Math.floor(Math.random() * t.length)].id);
+      else endTurn();
+    });
+    broadcastState();
+    return;
   }
   if (attacker) { delete attacker.statuses.miyakoHeal; delete attacker.statuses.yaak; }
   endTurn();
@@ -3939,49 +4292,37 @@ function computeAttackBase(engine, attacker, target) {
 function doAttack(byId, targetId) {
   if (gameState !== "ATTACK" || byId !== attackerId) return;
   const attacker = players[byId];
+  if (!effectSourceId && attacker) return withEffectSource(attacker, () => doAttack(byId, targetId));
   let target = players[targetId];
-  if (!attacker || !target || !target.alive || target.id === attacker.id) return;
-  if (attacker.characterId === "ultraman_trigger" && (attacker.statuses.triggerMulti || 0) > 0
-    && !CHAR_HOOKS.ultraman_trigger.isHighestHpTarget(engine, attacker, target)) return;
+  if (!attacker || !target || !target.alive || target.id === attacker.id || sameTeam(attacker, target)) return;
   if (sealActive(target)) return; // เรจูอาคมบัญชา (อมตะ): เลือกโจมตีไม่ได้
-  if (attacker.characterId === "satoru" && !moonCellActive()) return; // ซาโตรุ (patch 2.0.8.2): โจมตีธรรมดาไม่ได้เลย (ยกเว้นระหว่าง MOON*CELL)
   if (CHAR_HOOKS.bat_ben.cannotAttack(attacker)) return;              // แบทแมน (patch 2.2.7): ระหว่างเร้นเงา โจมตีไม่ได้
   if (CHAR_HOOKS.princess_shiki.cannotAttack(attacker)) return;       // เจ้าหญิงราก (patch 2.2.7): โจมตีไม่ได้ เว้นแต่ติดชักดาบ
   // ไค ชิซากิ: โทสะระงับด้วยโทสะ — มีคู่ปรับ (kaiRival1/kaiRival2 ยังไม่หมด) บังคับเป้าหมายมีแค่คู่ปรับเท่านั้น
   if (attacker.kaiRivalId && ((attacker.statuses.kaiRival1 || 0) > 0 || (attacker.statuses.kaiRival2 || 0) > 0) && target.id !== attacker.kaiRivalId) return;
   clearPhaseTimer();
+  attacker.didAttackRound = true;
   attacker.nanayaReattackReady = false; // หัวใจฆาตกร (นานายะ ชิกิ): กำลังใช้โอกาสโจมตีซ้ำนี้อยู่ (หรือไม่เกี่ยวข้องกับตัวละครนี้)
 
-  // ---------- ริดดี้: Absorb Shield — ล่อเป้า: การโจมตีของผู้เล่นทุกคนถูกดึงมาที่ริดดี้ (ผลเกิดหลังเปิดไพ่) ----------
   let riddheTaunted = false;
-  {
-    const taunter = CHAR_HOOKS.riddhe.findTaunter(engine, attacker);
-    if (taunter && target.id !== taunter.id) {
-      lastLog.push(`🧲 Absorb Shield — ${taunter.name} ล่อเป้า! การโจมตีของ ${attacker.name} ถูกดึงจาก ${target.name} มาที่ตัวเอง`);
-      target = taunter;
-      riddheTaunted = true;
-    }
-  }
-
-  // ---------- ริต้า เบอร์นัล: ไม่อยากให้ใครต้องเจ็บปวด — ล่อเป้าการโจมตีของทุกคนมาที่ตัวเอง 3 เทิร์น ----------
   let phenexTaunted = false;
-  {
-    const phenexTaunter = CHAR_HOOKS.phenex.findTaunter(engine, attacker);
-    if (phenexTaunter && target.id !== phenexTaunter.id) {
-      lastLog.push(`🥺 ไม่อยากให้ใครต้องเจ็บปวด — ${phenexTaunter.name} ล่อเป้า! การโจมตีของ ${attacker.name} ถูกดึงจาก ${target.name} มาที่ตัวเอง`);
-      target = phenexTaunter;
-      phenexTaunted = true;
-    }
-  }
-
-  // ---------- แบทแมน: เข้ามาเลย — ล่อเป้าการโจมตีของทุกคนมาที่ตัวเอง 5 เทิร์น ----------
   let batTaunted = false;
-  {
-    const batTaunter = CHAR_HOOKS.bat_ben.findTaunter(engine, attacker);
-    if (batTaunter && target.id !== batTaunter.id) {
-      lastLog.push(`🦇 เข้ามาเลย — ${batTaunter.name} ล่อเป้า! การโจมตีของ ${attacker.name} ถูกดึงจาก ${target.name} มาที่ตัวเอง`);
-      target = batTaunter;
-      batTaunted = true;
+  // ตัวล่อเป้าทุกชนิดเข้าคิวเดียวกัน แล้วกระจายผู้โจมตีตามตำแหน่ง เพื่อไม่ให้คนแรก/ชนิดที่ประมวลผลทีหลังแย่งผลทั้งหมด
+  const taunters = [
+    ...CHAR_HOOKS.riddhe.findTaunters(engine, attacker),
+    ...CHAR_HOOKS.phenex.findTaunters(engine, attacker),
+    ...CHAR_HOOKS.bat_ben.findTaunters(engine, attacker),
+  ].filter((t) => !sameTeam(attacker, t)).sort((a, b) => a.position - b.position);
+  if (taunters.length) {
+    const taunter = taunters[Math.max(0, (attacker.position || 1) - 1) % taunters.length];
+    if (target.id !== taunter.id) {
+      const oldTarget = target;
+      target = taunter;
+      riddheTaunted = taunter.characterId === "riddhe";
+      phenexTaunted = taunter.characterId === "phenex";
+      batTaunted = taunter.characterId === "bat_ben";
+      const label = riddheTaunted ? "🧲 Absorb Shield" : phenexTaunted ? "🥺 ไม่อยากให้ใครต้องเจ็บปวด" : "🦇 เข้ามาเลย";
+      lastLog.push(`${label} — ${taunter.name} ล่อเป้า! การโจมตีของ ${attacker.name} ถูกดึงจาก ${oldTarget.name} มาที่ตัวเอง`);
     }
   }
 
@@ -3997,7 +4338,7 @@ function doAttack(byId, targetId) {
       const ultImg = (TRANSFORMS[ultKey] && TRANSFORMS[ultKey].img)
         || (isBardDim ? TRANSFORMS.bardDim.img : ultKey === "ashen" ? TRANSFORMS.oguriAshen.img : displayImg(attacker));
       delete attacker.statuses[ultKey];
-      if (ultKey === "wither") clearWitherLines();                   // ลบเส้นชีวิตที่ท่าแจกไว้ออกด้วย
+      if (ultKey === "wither") clearWitherLines(attacker.id);       // ลบเฉพาะเส้นชีวิตที่ท่าของเจ้าของคนนี้แจกไว้
       if (ultKey === "anata") { attacker.anataTargets = null; anataMusicSeq = 0; } // ANATA WAAAAAAAA (patch 2.0.8)
       if (ultKey === "riddheguard") { const rb = riddheAllied(attacker); if (rb) delete rb.statuses.riddheward; } // ริดดี้ ท่า 2: ถอดเกราะฝั่งบานาจด้วย
       // มิติมายาบรรเลง (patch 2.0.8.1): มิติปิดลง — ท่อนทำนองทั้งหมดถูกรีเซ็ต (แบบเดียวกับมิติจบเอง)
@@ -4103,6 +4444,7 @@ function doAttack(byId, targetId) {
 
   // โอกูริ แคป (Rework, characters/oguri.js — Training บัฟเสริม Flow): โอกาสหลบการโจมตี 50%
   if (CHAR_HOOKS.oguri.tryFlowDodge(engine, attacker, target)) return;
+  if (CHAR_HOOKS.escanor.tryNightDodge(engine, attacker, target)) return;
 
   // ---------- ซาโตรุ อาเคฟุ (patch 2.0.8.2): สกิลติดตัวลบล้างการโจมตี + Wonder of U สวนกลับ ----------
   if (target.characterId === "satoru") {
@@ -4138,7 +4480,7 @@ function doAttack(byId, targetId) {
     shradeDayOff, oguriGoldAtk, victoryAtk, beamPlusAtk, riddheNtdOn, riddheUltBonus, riddheP1Atk,
     riddheAvAtk, phenexPurgeAtk, miyakoUltAtk, hakunoInvertAtk, hakunoNoRegenAtk,
     rachanAtk, fourthAtk, doomLockonAtk, cardAtkBonus,
-    triggerCircleAtk, triggerMultiAtk, triggerZeperionAtk, triggerLightBonus,
+    triggerCircleAtk, triggerMultiAtk, triggerZeperionAtk, triggerLightBonus, triggerMultiHighestHp, triggerMultiLowHpPenalty,
   } = computeAttackBase(engine, attacker, target);
   // ผกผัน (สถานะ Universal patch 2.2.1): โบนัสพลังโจมตีที่ควรได้ กลับกลายเป็นลดพลังโจมตีแทน (คำนวณรอบเพดานฐาน 1 หน่วย)
   if (invertActive(attacker)) base = Math.max(0, 1 - (base - 1));
@@ -4200,6 +4542,8 @@ function doAttack(byId, targetId) {
   // หอกผู้พิชิต (สึงาชิ ทาคุโตะ patch 2.2.5): ทับดาเมจทั้งหมดด้วยค่าคงที่ 5 หน่วย (เหนือกว่าทุกโบนัส/ดีบัฟที่คำนวณมาข้างบน)
   const takutoLanceAtk = attacker.characterId === "takuto" && (attacker.statuses.lance || 0) > 0;
   if (takutoLanceAtk) dmg = TAKUTO_LANCE_DMG;
+  if (CHAR_HOOKS.escanor.adjustOutgoingDamage) dmg = CHAR_HOOKS.escanor.adjustOutgoingDamage(engine, attacker, target, dmg);
+  if (attacker.characterId === "satoru") dmg = 0; // ซาโตรุ: โจมตีธรรมดาดาเมจ 0 แล้วติด ObLa หลังโจมตี
 
   // ---------- ริต้า เบอร์นัล (characters/phenex.js): ฝันไปเถอะ — ตั้งรับ สะท้อนความเสียหายทั้งหมดกลับผู้โจมตีแทนที่จะรับเอง ----------
   if (CHAR_HOOKS.phenex.tryReflectHit(engine, attacker, target, dmg)) return;
@@ -4255,6 +4599,11 @@ function doAttack(byId, targetId) {
   CHAR_HOOKS.kotone.onAttackConsumeDanceBuff(engine, attacker);
   // Ginga Strium (ฮิคารุ, characters/hikaru.js): โจมตีโดนเป้าหมาย -> ติดลุกไหม้ให้เป้าหมาย / ถูกโจมตีขณะอยู่ในร่างนี้ -> ผู้โจมตีติดลุกไหม้สวนกลับ
   CHAR_HOOKS.hikaru.onAttackBurnApply(engine, attacker, target);
+  CHAR_HOOKS.escanor.onAttackLanded(engine, attacker, target);
+  CHAR_HOOKS.satoru.applyPassiveAttack(engine, attacker, target);
+  const hisakawaAttackFx = CHAR_HOOKS.hisakawa_sister.onAttackLanded(engine, attacker, target);
+  const ignisAttackFx = CHAR_HOOKS.ignis.onAttackLanded(engine, attacker, target, { triggerDarkCryAtk, triggerDarkImpactAtk });
+  const hisakawaDreamFx = CHAR_HOOKS.hisakawa_sister.maybeDreamFollowup(engine, attacker, target);
   // ริต้า เบอร์นัล: อย่าอยู่เลย แกน่ะ! — เล่นวีดีโอก่อนสรุปผล + ลบ/แบนท่าไม้ตายเป้าหมาย (นับมิติมายาบรรเลงของคีตกวีด้วย)
   if (phenexPurgeAtk) {
     triggerCutscene(attacker, "phenexPurge");
@@ -4265,7 +4614,7 @@ function doAttack(byId, targetId) {
         const ultName = shikiUltNameOf(target, purgeKey);
         delete target.statuses[purgeKey];
         if (target.statusAmt) delete target.statusAmt[purgeKey];
-        if (purgeKey === "wither") clearWitherLines();
+        if (purgeKey === "wither") clearWitherLines(target.id);
         if (purgeKey === "anata") { target.anataTargets = null; anataMusicSeq = 0; }
         if (purgeKey === "riddheguard") { const rb = riddheAllied(target); if (rb) delete rb.statuses.riddheward; }
         if (isBardDim) { target.bloodSection = 0; target.soulSection = 0; }
@@ -4445,6 +4794,9 @@ function doAttack(byId, targetId) {
   // สกิลที่มีผลกับการโจมตีครั้งนี้ (โชว์ใต้อนิเมชัน แยกฝั่งชัดเจน: atk = ฝั่งโจมตี | def = ฝั่งป้องกัน)
   const fxSkills = [];
   const addFx = (x, side) => { if (x) fxSkills.push({ ...x, side }); };
+  for (const fx of hisakawaAttackFx || []) addFx(fx, fx.side || "atk");
+  for (const fx of ignisAttackFx || []) addFx(fx, fx.side || "atk");
+  if (hisakawaDreamFx) addFx(hisakawaDreamFx, "atk");
   if (beam) addFx(skillByStatus(attacker, "beam"), "atk");
   if (ohger) addFx(skillByStatus(attacker, "ohger"), "atk");
   if (rachanAtk) addFx({ name: `คิงโอเจอร์ +${rachanAtk}`, img: OHGER_FORM, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
@@ -4512,7 +4864,10 @@ function doAttack(byId, targetId) {
   if (riddheAvAtk) addFx({ name: "อย่าทิ้งฉันไป +1 (ถาวร)", img: RIDDHE_NTD2_IMG, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
   if (riddheTaunted) addFx({ name: "Absorb Shield (ล่อเป้ามาที่ตัวเอง)", img: "/characters/riddhe/skill1/banshee_skill1.webp", by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
   if (triggerCircleAtk) addFx({ name: "Circle Arms — แสงสว่าง +2 / ฟื้นชีวิต +2", img: "/characters/ultraman_trigger/skill1/trigger_skill1.webp", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (triggerMultiAtk) addFx({ name: "Multi Sword Finish +1 / แสงสว่างเพิ่ม +2", img: "/characters/ultraman_trigger/skill2/trigger_skill2.png", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
+  if (triggerMultiAtk) {
+    const multiText = triggerMultiLowHpPenalty ? "Multi Sword Finish: HP ต่ำกว่า 5 ดาเมจเหลือ 2" : triggerMultiHighestHp ? "Multi Sword Finish +1 / แสงสว่างเพิ่ม +2" : "Multi Sword Finish / แสงสว่างเพิ่ม +2";
+    addFx({ name: multiText, img: "/characters/ultraman_trigger/skill2/trigger_skill2.png", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
+  }
   if (triggerZeperionAtk) addFx({ name: `ลำแสง Zeperion +${triggerLightBonus} จากแสงสว่าง`, img: "/characters/ultraman_trigger/skill3/trigger_skill3.jpg", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
   if (phenexTaunted) addFx({ name: "ไม่อยากให้ใครต้องเจ็บปวด (ล่อเป้ามาที่ตัวเอง)", img: PHENEX_NTD_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
   if (batTaunted) addFx({ name: "เข้ามาเลย (ล่อเป้ามาที่ตัวเอง)", img: BAT_SKILL3_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
@@ -4570,6 +4925,7 @@ function endTurn() {
 
   // หลบหลีก (สถานะ Universal): แต่ละสแตคหมดอายุเองตามเทิร์นของตัวเอง / โชคลาภ (Bard): ไม่ได้ใช้ 3 เทิร์นติดกัน = หมดฤทธิ์
   for (const p of Object.values(players)) {
+    CHAR_HOOKS.escanor.onEndTurnSolar(engine, p);
     tickEvadeStacks(engine, p);
     CHAR_HOOKS.bard.onEndTurnIdleDecay(engine, p);
     // RS-Hopper (characters/eva13.js): ฟื้น 1 ชาร์จทุกๆ 3 เทิร์น (สูงสุด 3)
@@ -4594,6 +4950,7 @@ function endTurn() {
       if (k === "doomDrain") continue; // [โดนดูด] (ดูมกาย, Plasma Rifle): tickDrain() นับถอยหลัง/ลบเองแล้ว ไม่ให้ลูปนี้ลดซ้ำ
       if (k === "doomExplode" || k === "doomLockon") continue; // [ระเบิด]/[ล็อคเป้า] (ดูมกาย, Combat Shotgun/Heavy Cannon): ค้างอยู่จนกว่าจะโดนโจมตีใช้จริง ไม่ลดเทิร์นเอง
       if (k === "fortune") continue; // โชคลาภ (Bard): คงอยู่จนกว่าจะจั่วไพ่ครั้งถัดไป (หมดอายุเองถ้าไม่ใช้ 3 เทิร์น — ดูด้านบน)
+      if (k === "linked") { CHAR_HOOKS.bard.tickLinks(p); continue; } // Resonance: นับอายุแยกตาม Bard เจ้าของบทเพลง
       if (k === "rsHopper") continue; // RS-Hopper (เอวา 13): สแตคชาร์จ ไม่ใช่ตัวนับเทิร์น — ฟื้นเองทุก 3 เทิร์น (ดูด้านบน)
       if (k === "cassius") continue; // หอกแห่งแคสเซียส (เอวา 13): คงอยู่จนกว่าจะได้โจมตี (ไม่ลดเทิร์น)
       if (k === "yaak") continue;    // ย๊ากก! (อาริมะ มิยาโกะ): คงอยู่จนกว่าจะได้โจมตี (ไม่ลดเทิร์น)
@@ -4614,7 +4971,11 @@ function endTurn() {
       // ---------- Ultraman Trigger ----------
       if (k === "triggerForm") continue; // นับครบ 10 เทิร์นและคืน snapshot แยกที่ท้าย endTurn()
       if (k === "triggerMulti") continue; // จักรแห่งแสงคงอยู่จนกว่าจะโจมตีสำเร็จ 1 ครั้ง
-      if (k === "triggerLight") continue; // แสงสว่างคงอยู่จนเจ้าของ Trigger คืนร่าง
+      if (k === "triggerZeperion") continue; // ลำแสง Zeperion คงอยู่จนกว่าจะโจมตีสำเร็จ 1 ครั้ง
+      if (k === "triggerLight") continue; // แสงสว่างคงอยู่จนเจ้าของ Trigger คืนร่างหรือโดน Zeperion ล้าง
+      if (k === "hisakawaTempo") continue;
+      if (k === "triggerDarkImpact" || k === "triggerDarkWail") continue; // จังหวะนี้แหละ: คงอยู่จนกว่าจะได้ใช้ 1 ครั้ง
+      if (k === "escanorMorning" || k === "escanorNight" || k === "escanorNoon" || k === "escanorLastStand" || k === "escanorSpear" || k === "escanorFlare" || k === "escanorFlareNoon" || k === "escanorPunch" || k === "escanorRhitta" || k === "escanorRhittaNoon" || k === "escanorSun") continue;
       // ---------- โอกูริ แคป (patch 2.0.8.1) ----------
       if (k === "graybeast") continue;  // ร่าง Zone: ถาวรจนกว่าจะเข้าร่างหมดแรง
       // burnout (ร่างหมดแรง): เดิมถูกยกเว้นไม่ลดเทิร์นตรงนี้ แต่ไม่มีจุดไหนในโค้ดเคลียร์ทิ้งเองเลย (ไม่มี delete p.statuses.burnout ที่ไหนทั้งไฟล์)
@@ -4633,7 +4994,6 @@ function endTurn() {
           CHAR_HOOKS.bard.onDimExpire(engine, p);
         }
         // เชื่อมผลจบลง (Resonance): ตัดลิงก์ทั้งสองฝั่ง
-        if (k === "linked") p.linkedWith = null;
         // ไค ชิซากิ: เชื่อมต่อ/คู่ปรับ หมดอายุ -> ล้าง mirror ทั้งสองฝั่ง (โค้ดแยกจาก Resonance ของ Bard)
         if (k === "kaiLink") CHAR_HOOKS.kai.onExpireKaiLink(p);
         if (k === "kaiRival1" || k === "kaiRival2") CHAR_HOOKS.kai.onExpireKaiRival(p);
@@ -4659,11 +5019,11 @@ function endTurn() {
         }
         // ความตายที่โรยราหมดเวลา (ชิกิ patch 2.0.6.1): ลบเส้นชีวิตส่วนที่ท่าไม้ตายแจกไปออกจากทุกคน
         if (k === "wither" && p.characterId === "shiki") {
-          clearWitherLines();
+          clearWitherLines(p.id);
           lastLog.push(`🥀 ${p.name} ความตายที่โรยราหมดเวลา — เส้นชีวิตที่สะสมช่วงท่าไม้ตายถูกลบออกให้ทุกคน`);
         }
-        // MOON*CELL หมดเวลา (คิชินามิ ฮาคุโนะ patch 2.2.1): คืนบัฟ/ดีบัฟที่ล้างไว้ทั้งหมด หลังลูปนี้จบ (ดูด้านล่าง)
         if (k === "moonCell" && p.characterId === "hakuno") moonCellEndedBy = p;
+        if (k === "triggerDarkForm" && p.characterId === "ignis") CHAR_HOOKS.ignis.restoreFromTriggerDark(engine, p);
         // ฉันคว้ามันได้แล้ว หมดเวลา (สึงาชิ ทาคุโตะ patch 2.2.3): กลับเป็นทาคุโตะปกติ — ล้างดาบที่ค้างอยู่ ต้องเก็บดวงดาวใหม่ให้ครบ 5 อีกครั้ง
         if (k === "apprivoise" && p.characterId === "takuto") {
           delete p.statuses.emeraude;
@@ -4689,7 +5049,9 @@ function endTurn() {
     // [โหมงานหนัก] (โคโตเนะ patch 2.2.2): โล่พังและฟื้นไม่ได้ — ล้างโล่ที่ได้มาระหว่างเทิร์นทิ้ง (เดิมเป็นเกราะ)
     CHAR_HOOKS.kotone.onEndTurnOverworkShieldWipe(p);
     p.armor = Math.min(p.armor, maxArmorOf(p)); // กันเกราะเกินเพดาน
+    hisakawaSyncOut(p);
   }
+  for (const p of Object.values(players)) CHAR_HOOKS.hisakawa_sister.onEndTurnTick(engine, p);
   // MOON*CELL หมดเวลา (คิชินามิ ฮาคุโนะ): คืนบัฟ/ดีบัฟที่ล้างไว้ทั้งหมดให้ทุกคน (ยกเว้นตัวเอง) + ติดไร้ทางเยียวยา 3 เทิร์น
   //  ทำหลังลูปลดเทิร์นสถานะทั้งหมดจบแล้ว กันไม่ให้สถานะที่เพิ่งคืนกลับมาโดนลดเทิร์นซ้ำในเทิร์นเดียวกัน
   if (moonCellEndedBy) {
@@ -4705,6 +5067,22 @@ function endTurn() {
     lastLog.push(`🌙 ${moonCellEndedBy.name} คำสาปแห่งดวงจันทร์ MOON*CELL สิ้นสุดลง — คืนบัฟ/ดีบัฟที่ถูกล้างไว้ทั้งหมด และทุกคน (ยกเว้น ${moonCellEndedBy.name}) ติดสถานะ "ไร้ทางเยียวยา" ${HAKUNO_NORECOVER_TURNS} เทิร์น`);
   }
 
+  // Ultraman Trigger: หลังคืนร่างตามเวลา HP เหลือ 1 แล้วฟื้นเอง +1/เทิร์นจนถึง HP ตอนก่อนแปลงร่าง; ถ้าโดนตีระหว่างนี้ การฟื้นอัตโนมัติหยุดทันที
+  for (const p of alivePlayers()) {
+    const targetHp = p.triggerRecoveryTargetHp || 0;
+    if (targetHp <= 0) continue;
+    if (p.wasAttacked) {
+      delete p.triggerRecoveryTargetHp;
+      lastLog.push(`✨ ${p.name} ถูกโจมตีระหว่างฟื้นตัวหลังคืนร่าง — การฟื้นอัตโนมัติจาก Hyper Key Trigger หยุดลง`);
+      continue;
+    }
+    if (p.hp < targetHp) {
+      const healed = healHp(p, 1);
+      if (healed > 0) lastLog.push(`✨ ${p.name} ฟื้นตัวหลังคืนร่างจาก Hyper Key Trigger +${healed} (${p.hp}/${targetHp})`);
+    }
+    if (p.hp >= targetHp) delete p.triggerRecoveryTargetHp;
+  }
+
   // จบเทิร์นรอบนั้น +1 — ช่วงกลางวันได้แต้มสกิลเพิ่มอีก +1 (ระบบกลางวัน/กลางคืน)
   const dayBonus = morningBonusActive(roundNumber); // patch 2.1.7: แจกเฉพาะเช้าที่ 2, 4, 6, ...
   for (const p of alivePlayers()) {
@@ -4715,6 +5093,8 @@ function endTurn() {
     if (p.characterId === "hakuno" && p.hakunoGender === "female") gain += 1;
     // Ultraman Trigger: สกิลติดตัวฟื้นแต้มสกิลเพิ่มอีก 1 หน่วยทุกเทิร์น
     if (p.characterId === "ultraman_trigger") gain += 1;
+    if (p.characterId === "hisakawa_sister") gain += CHAR_HOOKS.hisakawa_sister.extraSkillRegen(p);
+    if (p.characterId === "ignis") gain += CHAR_HOOKS.ignis.extraSkillRegen(engine, p);
     // ค่าปรับปฏิเสธข้อเสนอ (เจ้าแห่งเน็ตบ้าน): แต้มสกิลหลังจบเทิร์นลด 1
     if ((p.skillDrain || 0) > 0) {
       gain = Math.max(0, gain - 1);
@@ -4726,7 +5106,8 @@ function endTurn() {
   if (dayBonus) lastLog.push("☀️ จบเทิร์นช่วงกลางวัน — ทุกคนได้แต้มสกิลเพิ่ม +1");
   // ระบบเหรียญ (patch 2.2 full): จบเทิร์น +1 เหรียญให้ทุกคน (เพดาน 30 — เต็มแล้วไม่ได้เพิ่มจน spending ลดลง)
   for (const p of alivePlayers()) {
-    if ((p.gold || 0) < GOLD_MAX) p.gold = Math.min(GOLD_MAX, (p.gold || 0) + GOLD_PER_TURN);
+    const goldGain = GOLD_PER_TURN + (p.characterId === "hisakawa_sister" ? CHAR_HOOKS.hisakawa_sister.extraGoldRegen(p) : 0) + (p.characterId === "ignis" ? CHAR_HOOKS.ignis.extraGoldRegen(engine, p) : 0);
+    if ((p.gold || 0) < GOLD_MAX) p.gold = Math.min(GOLD_MAX, (p.gold || 0) + goldGain);
   }
 
   // ชิวๆครับน้องๆ (Apple guy): จบเทิร์นได้แต้มสกิลเพิ่ม +1 จนกว่าจะถูกโจมตี
@@ -4858,7 +5239,20 @@ function endTurn() {
     // สกิลติดตัว 2 ริดดี้ (characters/riddhe.js): เหลือแค่คู่พันธมิตรบันชี × ยูนิคอร์นบนสนาม -> ถามจะคงพันธมิตรจนจบเกมไหม
     CHAR_HOOKS.riddhe.maybeAskFinalAlliance(engine, stillAlive);
 
-    if (total >= 2 && stillAlive.length <= 1) {
+    const teamWin = remainingTeamWinInfo(stillAlive, total);
+    if (teamWin.over) {
+      winningTeamId = teamWin.teamId;
+      if (winningTeamId) {
+        const winners = stillAlive.filter((p) => p.teamId === winningTeamId).map((p) => p.name).join(" & ");
+        lastLog.push(`🏆 Team ${winningTeamId} (${winners}) ชนะ!`);
+      } else {
+        lastLog.push("ไม่มีทีมที่รอด — เสมอ");
+      }
+      gameState = "GAMEOVER";
+      timeLeft = 0;
+      broadcastState();
+    } else if (!teamModeActive() && total >= 2 && stillAlive.length <= 1) {
+      winningTeamId = null;
       if (stillAlive.length === 1) lastLog.push(`🏆 ${stillAlive[0].name} คือผู้ชนะคนสุดท้าย!`);
       else lastLog.push("ไม่มีผู้รอด — เสมอ");
       gameState = "GAMEOVER";
@@ -4874,6 +5268,7 @@ function endTurn() {
 
 function backToLobby() {
   gameState = "LOBBY";
+  resetTeamAssignments(true);
   clearPhaseTimer();
   timeLeft = 0;
   attackerId = null;
@@ -4949,7 +5344,7 @@ function removeDisconnectedPlayer(playerId) {
   const p = players[playerId];
   if (!p || p.connected) return;
   const wasAttacker = attackerId === playerId;
-  const wasLobby = gameState === 'LOBBY';
+  const wasPregame = pregameStateActive();
   forgetPlayerSession(p);
   delete players[playerId];
   disconnectTimers.delete(playerId);
@@ -4961,7 +5356,12 @@ function removeDisconnectedPlayer(playerId) {
     broadcastPositions();
     return;
   }
-  if (wasLobby) for (const o of Object.values(players)) o.ready = false;
+  if (wasPregame) {
+    resetPregameFlowToLobby();
+    broadcastState();
+    broadcastPositions();
+    return;
+  }
   if (gameState === 'ATTACK' && wasAttacker) endTurn();
   else if (gameState === 'PLAYING') { checkAllLocked(); broadcastState(); }
   else broadcastState();
@@ -5036,6 +5436,7 @@ io.on('connection', (socket) => {
       socketId: socket.id,
       connected: true,
       ready: false, // ห้องรอ: ต้องกดพร้อมก่อนเกมถึงจะเริ่มได้ (ครบทุกคน = เริ่มอัตโนมัติ)
+      teamId: null, teamConfirmed: false, modeVote: null,
       name: (name || "ผู้เล่น").toString().slice(0, 12),
       position: pos, characterId: ch.id, avatar: ch.avatar, img: ch.img,
       cards: [], locked: false, busted: false, result: null,
@@ -5060,10 +5461,10 @@ io.on('connection', (socket) => {
       healNextTurn: 0, unplugHold: null,
       shradeForm: false,
       bardNotes: [], bardNotesUsed: 0, bardPending: null,
-      bloodSection: 0, soulSection: 0, linkedWith: null,
-      kaiLinkWith: null, kaiRivalId: null,
-      mageslayerMarkedId: null, mageslayerHasMarked: false, mageslayerWitchMarkReadyRound: 0, mageslayerLockedBurden: false,
-      shikiUlt: shikiUlt === "wither" ? "wither" : "deatheye", witherAdded: 0,
+      bloodSection: 0, soulSection: 0, bardLinks: {},
+      kaiLinkWith: null, kaiRivalId: null, kaiMarksBy: {},
+      mageslayerMarkedId: null, mageslayerMarks: {}, mageslayerHasMarked: false, mageslayerWitchMarkReadyRound: 0, mageslayerLockedBurden: false,
+      shikiUlt: shikiUlt === "wither" ? "wither" : "deatheye", witherAddedBy: {},
       oguriEnergy: OGURI_ENERGY_START, stamina: 0, oguriChargeCapBonus: 0, oguriZoneTurns: 0, staggerNext: 0,
       maxHpPenalty: 0, wouGuardCd: 0, calamityDraw: 0, locaOffer: null,
       allyPrompt: false, allyOffer: null, allyId: null, allyBreakAsk: null, allyFinalAsk: false,
@@ -5085,9 +5486,25 @@ io.on('connection', (socket) => {
     // This button is for solo testing; multiplayer starts only after everyone is ready.
     if (gameState === 'LOBBY' && Object.keys(players).length === 1) startMatch();
   }, 2);
+  onPlayerEvent(socket, 'selectGameMode', (id, { mode } = {}) => {
+    if (gameState !== 'TEAM_MODE') return;
+    voteGameMode(id, mode);
+  }, 4);
+  onPlayerEvent(socket, 'teamBackToMode', () => {
+    if (gameState !== 'TEAM_SETUP') return;
+    resetTeamAssignments(false);
+    resetModeVotes();
+    gameMode = 'pending';
+    teamSize = 1;
+    teamCount = 0;
+    gameState = 'TEAM_MODE';
+    broadcastState();
+  }, 4);
+  onPlayerEvent(socket, 'chooseTeam', (id, { teamId } = {}) => chooseTeam(id, teamId), 8);
+  onPlayerEvent(socket, 'confirmTeam', (id, { confirmed } = {}) => confirmTeam(id, confirmed), 8);
   // ห้องรอ: กดพร้อม/ยกเลิกพร้อม — ครบทุกคน (อย่างน้อย 2 คน) เริ่มเกมอัตโนมัติ
   onPlayerEvent(socket, 'toggleReady', (playerId) => {
-    if (gameState !== "LOBBY") return;
+    if (!pregameStateActive()) return;
     const p = players[playerId];
     if (!p) return;
     p.ready = !p.ready;
@@ -5099,9 +5516,9 @@ io.on('connection', (socket) => {
   onPlayerEvent(socket, 'lock', (id) => lock(id), 4);
   onPlayerEvent(socket, 'useSkill', (id, { tier, targets, item } = {}) => useSkill(id, tier, targets, item), 12);
   onPlayerEvent(socket, 'buyShopItem', (id, { itemId } = {}) => buyShopItem(id, itemId), 8);
-  onPlayerEvent(socket, 'useInventoryItem', (id, { uid, cardIndex, color, targetId } = {}) => useInventoryItem(id, uid, { cardIndex, color, targetId }), 8);
-  onPlayerEvent(socket, 'hakunoCommandSpell', (id, { command } = {}) => hakunoCommandSpell(id, command), 6);
-  onPlayerEvent(socket, 'locaAnswer', (id, { accept } = {}) => answerLoca(id, !!accept), 4);
+  onPlayerEvent(socket, 'useInventoryItem', (id, { uid, cardIndex, color, targetId } = {}) => withEffectSource(players[id], () => useInventoryItem(id, uid, { cardIndex, color, targetId })), 8);
+  onPlayerEvent(socket, 'hakunoCommandSpell', (id, { command } = {}) => withEffectSource(players[id], () => hakunoCommandSpell(id, command)), 6);
+  onPlayerEvent(socket, 'locaAnswer', (id, { accept, fromId } = {}) => answerLoca(id, !!accept, fromId), 4);
   onPlayerEvent(socket, 'riddheAlly', (id, { targetId } = {}) => riddheChooseAlly(id, targetId), 4);
   // ริต้า เบอร์นัล: ขอแค่ได้พบกันอีก — เลือกเป้าหมายปลดปล่อยความเจ็บปวด (ใช้ได้แม้ตกรอบไปแล้ว)
   onPlayerEvent(socket, 'phenexRelease', (playerId, { targetId } = {}) => {
@@ -5111,7 +5528,7 @@ io.on('connection', (socket) => {
     p.phenexReleaseAsk = null;
     const options = ask.options.map((id) => players[id]).filter((o) => o && o.alive);
     const target = options.find((o) => o.id === targetId) || null;
-    CHAR_HOOKS.phenex.resolveRelease(engine, p, target, ask.pain);
+    withEffectSource(p, () => CHAR_HOOKS.phenex.resolveRelease(engine, p, target, ask.pain));
     // คำตอบนี้มาแบบ async นอกรอบ resolveRound ปกติ (ตอบช้ากว่ารอบที่ตายจริงก็ได้ — "ใช้ได้แม้ตกรอบไปแล้ว/ทุกเฟส")
     //  ต้องเล่นวีดีโอที่ค้างคิว (ถ้ามี) โดยไม่ทำลาย gameState/ตัวจับเวลาของเฟสที่กำลังทำงานอยู่ตอนนี้
     //  (บั๊กเดิม: เรียก runCutsceneQueue(() => broadcastState()) ตรงๆ ทำให้ gameState ค้างที่ "CUTSCENE"
@@ -5137,7 +5554,7 @@ io.on('connection', (socket) => {
     p.batKarmaAsk = null;
     const options = ask.options.map((id) => players[id]).filter((o) => o && o.alive);
     const target = options.find((o) => o.id === targetId) || null;
-    CHAR_HOOKS.bat_ben.resolveKarmaSend(engine, p, target, ask.dmg);
+    withEffectSource(p, () => CHAR_HOOKS.bat_ben.resolveKarmaSend(engine, p, target, ask.dmg));
     // คำตอบมาแบบ async นอกรอบปกติ — ต้องเล่นวีดีโอที่ค้างคิวโดยไม่ทำลาย gameState/ตัวจับเวลาของเฟสปัจจุบัน
     //  (เหตุผลเดียวกับ phenexRelease ด้านบน — เรียก runCutsceneQueue ตรงๆ จะทำให้เกมค้างที่เฟส CUTSCENE)
     if (cutsceneQueue.length) {
@@ -5153,12 +5570,12 @@ io.on('connection', (socket) => {
       broadcastState();
     }
   });
-  onPlayerEvent(socket, 'allyAnswer', (id, { accept } = {}) => answerAllyOffer(id, !!accept), 4);
+  onPlayerEvent(socket, 'allyAnswer', (id, { accept, fromId } = {}) => answerAllyOffer(id, !!accept, fromId), 4);
   onPlayerEvent(socket, 'allyBreakAnswer', (id, { cancel } = {}) => answerAllyBreak(id, !!cancel), 4);
   onPlayerEvent(socket, 'allyFinalAnswer', (id, { keep } = {}) => answerAllyFinal(id, !!keep), 4);
-  onPlayerEvent(socket, 'bardTarget', (id, { targets } = {}) => bardTarget(id, targets), 8);
-  onPlayerEvent(socket, 'kaiOverhaul', (id) => kaiOverhaul(id), 4);
-  onPlayerEvent(socket, 'contractAnswer', (id, { accept } = {}) => answerContract(id, !!accept), 4);
+  onPlayerEvent(socket, 'bardTarget', (id, { targets } = {}) => withEffectSource(players[id], () => bardTarget(id, targets)), 8);
+  onPlayerEvent(socket, 'kaiOverhaul', (id) => withEffectSource(players[id], () => kaiOverhaul(id)), 4);
+  onPlayerEvent(socket, 'contractAnswer', (id, { accept, fromId } = {}) => withEffectSource(players[fromId] || players[id], () => answerContract(id, !!accept, fromId)), 4);
   onPlayerEvent(socket, 'attack', (id, { targetId } = {}) => doAttack(id, targetId), 6);
   onPlayerEvent(socket, 'nanayaToggleEye', (id) => nanayaToggleEye(id), 4);
   onPlayerEvent(socket, 'nanayaCancelReattack', (id) => nanayaCancelReattack(id), 4);
@@ -5166,7 +5583,7 @@ io.on('connection', (socket) => {
 
   safeOn(socket, "leave", () => {
     if (!consumeEventQuota(socket, 'leave', 2, 10_000)) return;
-    if (gameState !== "LOBBY") return;
+    if (!pregameStateActive()) return;
     const playerId = playerIdFor(socket);
     const p = playerId && players[playerId];
     if (!p) return;
@@ -5174,8 +5591,8 @@ io.on('connection', (socket) => {
     forgetPlayerSession(p);
     delete players[playerId];
     socketPlayerIds.delete(socket.id);
-    // มีคนออกจากห้องรอ -> สถานะพร้อมของคนที่เหลือทั้งหมดรีเซ็ตกลับเป็นไม่พร้อม (กันเริ่มเกมด้วยรายชื่อที่เปลี่ยนไปแล้ว)
-    for (const o of Object.values(players)) o.ready = false;
+    // มีคนออกก่อนเริ่มเกม -> ย้อนกลับห้องรอและรีเซ็ตความพร้อม/ทีมของคนที่เหลือ
+    resetPregameFlowToLobby();
     broadcastState();
     broadcastPositions();
   });
@@ -5188,12 +5605,10 @@ io.on('connection', (socket) => {
     if (p && p.socketId === socket.id) {
       p.connected = false;
       p.socketId = null;
-      if (gameState === 'LOBBY') {
-        for (const other of Object.values(players)) other.ready = false;
-      }
+      if (pregameStateActive()) resetPregameFlowToLobby();
       // During a match the player is parked indefinitely and may reclaim this
       // exact character/session whenever they return. Lobby slots still expire.
-      if (gameState === 'LOBBY') scheduleDisconnectedRemoval(playerId);
+      if (pregameStateActive()) scheduleDisconnectedRemoval(playerId);
       broadcastState();
     }
     broadcastPositions();
@@ -5283,6 +5698,18 @@ const engine = {
   doomWeaponMarkPending,
   get gameState() { return gameState; },
   setGameState(v) { gameState = v; },
+  get gameMode() { return gameMode; },
+  setGameMode(v) { gameMode = v; },
+  setTeamCount(v) { teamCount = v; },
+  setTeamSize(v) { teamSize = v; },
+  resetModeVotes,
+  voteGameMode,
+  remainingTeamWinInfo,
+  get winningTeamId() { return winningTeamId; },
+  teamModeActive,
+  sameTeam,
+  friendlyEffectBlocked,
+  withEffectSource,
   get roundNumber() { return roundNumber; },
   setRoundNumber(v) { roundNumber = v; },
   get attackerId() { return attackerId; },
@@ -5306,6 +5733,7 @@ const engine = {
   setYunaTrigger({ effect, targetId, windowEnd }) { yunaEffect = effect; yunaTargetId = targetId; yunaWindowEnd = windowEnd; yunaMusicSeq++; },
   pushCutsceneRaw(entry) { cutsceneQueue.push(entry); },
   log(msg) { lastLog.push(msg); },
+  colorOf(p) { return POSITION_COLORS[p.position] || "#888"; },
   nextTransformCounter() { return ++transformCounter; },
   endTurn,
   doAttack,
@@ -5314,6 +5742,7 @@ const engine = {
   nightCycleIndex,
   GOLD_MAX,
   // ---------- ร้านค้ามายา + ร้านขายของลุงเท่ง (เปิดไว้ให้ tests/shop.test.js เรียกตรงๆ) ----------
+  shopItemName,
   GUTS_AMMO,
   GUTS_GUN_PRICE,
   GUTS_CHAA_TURNS,
@@ -5326,6 +5755,8 @@ const engine = {
   gutsFireTargetOf,
   applyGutsBullet,
   hasGutsGun,
+  hasBlackSparklence,
+  hasGutsWeapon,
   hit,
   get shopItems() { return shopItems; },
   setShopItems(v) { shopItems = v; },
@@ -5335,7 +5766,7 @@ const engine = {
   netramanaActive,
   statusAmtOf,
   calculateScore,
-  applyBuff,
+  applyBuff: rawApplyBuff,
   applyDebuff,
   cleanseDebuffs,
   BASIC_DEBUFF_CLEAR,
@@ -5354,6 +5785,7 @@ const engine = {
   dealDirect,
   dealMixed,
   dealArmorOnly,
+  damageSoft,
   instantDeath,
   displayImg,
   passiveSealed,

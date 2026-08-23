@@ -66,10 +66,14 @@ module.exports = {
       }
       case "JJR": // Resonance: เชื่อมผล 2 คน 3 เทิร์น
         if (ts.length < 2) return;
-        ts[0].linkedWith = ts[1].id;
-        ts[1].linkedWith = ts[0].id;
-        ts[0].statuses.linked = Math.max(ts[0].statuses.linked || 0, 3);
-        ts[1].statuses.linked = Math.max(ts[1].statuses.linked || 0, 3);
+        if (!((ts[0].statuses.linked || 0) > 0)) ts[0].bardLinks = {};
+        if (!((ts[1].statuses.linked || 0) > 0)) ts[1].bardLinks = {};
+        ts[0].bardLinks = ts[0].bardLinks || {};
+        ts[1].bardLinks = ts[1].bardLinks || {};
+        ts[0].bardLinks[p.id] = { buddyId: ts[1].id, turns: 3 };
+        ts[1].bardLinks[p.id] = { buddyId: ts[0].id, turns: 3 };
+        ts[0].statuses.linked = Math.max(...Object.values(ts[0].bardLinks).map((link) => link.turns));
+        ts[1].statuses.linked = Math.max(...Object.values(ts[1].bardLinks).map((link) => link.turns));
         engine.log(`🎼🔗 Resonance — ${ts[0].name} และ ${ts[1].name} ถูกเชื่อมผล 3 เทิร์น (HP/เกราะ โดนดาเมจ หรือฟื้นฟู แชร์ให้กันเท่ากัน 1:1)`);
         break;
       case "JRJ": // Discord: เปราะบาง +1 ดาเมจ 3 เทิร์น
@@ -140,12 +144,29 @@ module.exports = {
 
   // มิติมายาบรรเลงที่เปิดอยู่บนสนาม: "day" (โลหิต) | "night" (วิญญาณ) | null — เรียกจาก isNightRound/morningBonusActive
   dimCycle(engine) {
-    for (const p of Object.values(engine.players)) {
-      if (!p || !p.alive || p.characterId !== "bard") continue;
-      if ((p.statuses.bloodDim || 0) > 0) return "day";
-      if ((p.statuses.soulDim || 0) > 0) return "night";
+    const active = Object.values(engine.players)
+      .filter((p) => p && p.alive && p.characterId === "bard" && ((p.statuses.bloodDim || 0) > 0 || (p.statuses.soulDim || 0) > 0))
+      .sort((a, b) => (b.transformAt || 0) - (a.transformAt || 0));
+    if (!active.length) return null;
+    return (active[0].statuses.bloodDim || 0) > 0 ? "day" : "night";
+  },
+
+  linkedBuddiesOf(engine, p) {
+    if (!p || !((p.statuses && p.statuses.linked) > 0)) return [];
+    return Object.values(p.bardLinks || {})
+      .map((link) => engine.players[link.buddyId])
+      .filter((buddy, index, all) => buddy && buddy.alive && buddy.id !== p.id
+        && (buddy.statuses.linked || 0) > 0 && all.findIndex((x) => x && x.id === buddy.id) === index);
+  },
+
+  tickLinks(p) {
+    for (const link of Object.values(p.bardLinks || {})) link.turns--;
+    for (const [ownerId, link] of Object.entries(p.bardLinks || {})) {
+      if (link.turns <= 0) delete p.bardLinks[ownerId];
     }
-    return null;
+    const turns = Object.values(p.bardLinks || {}).map((link) => link.turns);
+    if (turns.length) p.statuses.linked = Math.max(...turns);
+    else { delete p.statuses.linked; delete p.bardLinks; }
   },
 
   // เรียกจาก round-start — ถูกขัดจังหวะการประพันธ์ (หลับ/สตั้น/ใบ้สกิล ฯลฯ) -> โน้ตทั้งหมดถูกรีเซ็ต

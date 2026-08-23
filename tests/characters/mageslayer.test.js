@@ -40,6 +40,7 @@ test('stealEnergy: direct-assignment transfer bypasses Song\'s Curse (target los
 test('onAttackPostDamage: steals energy clamped to [1,4] based on damage dealt', () => {
   const ms = mkPlayer({ skillPoints: 0 });
   const target = mkPlayer({ characterId: 'tohno', skillPoints: 10 });
+  mageslayer.applyWitchMark(engine, ms, target);
   mageslayer.onAttackPostDamage(engine, ms, target, 2); // dmg=2 -> steal 2
   assert.equal(ms.skillPoints, 2);
   assert.equal(target.skillPoints, 8);
@@ -48,6 +49,7 @@ test('onAttackPostDamage: steals energy clamped to [1,4] based on damage dealt',
 test('onAttackPostDamage: damage below 1 still steals a minimum of 1', () => {
   const ms = mkPlayer({ skillPoints: 0 });
   const target = mkPlayer({ characterId: 'tohno', skillPoints: 10 });
+  mageslayer.applyWitchMark(engine, ms, target);
   mageslayer.onAttackPostDamage(engine, ms, target, 0);
   assert.equal(ms.skillPoints, 1, 'min 1 even at 0 damage');
 });
@@ -55,6 +57,7 @@ test('onAttackPostDamage: damage below 1 still steals a minimum of 1', () => {
 test('onAttackPostDamage: damage above 4 is capped at stealing 4', () => {
   const ms = mkPlayer({ skillPoints: 0 });
   const target = mkPlayer({ characterId: 'tohno', skillPoints: 10 });
+  mageslayer.applyWitchMark(engine, ms, target);
   mageslayer.onAttackPostDamage(engine, ms, target, 9);
   assert.equal(ms.skillPoints, 4, 'max 4 even at 9 damage');
 });
@@ -62,6 +65,7 @@ test('onAttackPostDamage: damage above 4 is capped at stealing 4', () => {
 test('onAttackPostDamage: target at 0 energy BEFORE the steal gets sealed 2 turns (checked before the steal itself)', () => {
   const ms = mkPlayer({ skillPoints: 0 });
   const target = mkPlayer({ characterId: 'tohno', skillPoints: 0 });
+  mageslayer.applyWitchMark(engine, ms, target);
   mageslayer.onAttackPostDamage(engine, ms, target, 3);
   assert.equal(target.statuses.manaSeal, 2);
   assert.equal(target.skillPoints, 0, 'nothing to steal — steal is a no-op');
@@ -70,6 +74,7 @@ test('onAttackPostDamage: target at 0 energy BEFORE the steal gets sealed 2 turn
 test('onAttackPostDamage: target with energy > 0 before the hit does not get sealed even if the steal drains them to 0', () => {
   const ms = mkPlayer({ skillPoints: 0 });
   const target = mkPlayer({ characterId: 'tohno', skillPoints: 1 });
+  mageslayer.applyWitchMark(engine, ms, target);
   mageslayer.onAttackPostDamage(engine, ms, target, 3);
   assert.equal(target.statuses.manaSeal || 0, 0, 'had energy before the hit — seal check happens pre-steal');
 });
@@ -85,6 +90,7 @@ test('onAttackPostDamage: consumes all Fury stacks at once — heals attacker by
 test('onAttackDodgeSteal: target dodging the attack still gets 1 energy stolen', () => {
   const ms = mkPlayer({ skillPoints: 0 });
   const target = mkPlayer({ characterId: 'tohno', skillPoints: 5 });
+  mageslayer.applyWitchMark(engine, ms, target);
   mageslayer.onAttackDodgeSteal(engine, ms, target);
   assert.equal(ms.skillPoints, 1);
   assert.equal(target.skillPoints, 4);
@@ -171,40 +177,40 @@ test('onBustOrLoseRoll: 35% chance to gain 1 Fury stack, capped at 2, no-op for 
   assert.equal(other.statuses.mageslayerFury || 0, 0);
 });
 
-test('resolveManaRupture: damage tiers by target energy — 7-8=1, 2-6=3, 0-1=5+stun(1, or 2 vs Bard)', () => {
+test('resolveManaRupture: damage tiers use the energy snapshot captured when the debuff was applied', () => {
   const caster = mkPlayer({ skillPoints: 0 });
   const t1 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 8 });
-  mageslayer.resolveManaRupture(engine, caster, t1);
+  mageslayer.resolveManaRupture(engine, caster, t1, { energy: 8, dmg: 1 });
   assert.equal(t1.hp, 9, 'tier 7-8 -> 1 damage');
 
   const t2 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 2 });
-  mageslayer.resolveManaRupture(engine, caster, t2);
+  mageslayer.resolveManaRupture(engine, caster, t2, { energy: 2, dmg: 3 });
   assert.equal(t2.hp, 7, 'tier 2-6 (low end, energy=2) -> 3 damage');
 
   const t3 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 6 });
-  mageslayer.resolveManaRupture(engine, caster, t3);
+  mageslayer.resolveManaRupture(engine, caster, t3, { energy: 6, dmg: 3 });
   assert.equal(t3.hp, 7, 'tier 2-6 (high end, energy=6) -> 3 damage');
 
   const t4 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 1 });
-  mageslayer.resolveManaRupture(engine, caster, t4);
+  mageslayer.resolveManaRupture(engine, caster, t4, { energy: 1, dmg: 5 });
   assert.equal(t4.hp, 5, 'tier 0-1 (energy=1) -> 5 damage');
-  assert.equal(t4.statuses.stun, 1, 'non-bard: stun 1 turn');
+  assert.equal(t4.statuses.stun || 0, 0, 'reworked Mana Rupture no longer stuns');
 
   const t5 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 0 });
-  mageslayer.resolveManaRupture(engine, caster, t5);
+  mageslayer.resolveManaRupture(engine, caster, t5, { energy: 0, dmg: 5 });
   assert.equal(t5.hp, 5, 'tier 0-1 (energy=0) -> 5 damage');
-  assert.equal(t5.statuses.stun, 1, 'non-bard: stun 1 turn');
+  assert.equal(t5.statuses.stun || 0, 0, 'no stun');
 
   const bard = mkPlayer({ characterId: 'bard', hp: 10, armor: 0, skillPoints: 0 });
-  mageslayer.resolveManaRupture(engine, caster, bard);
+  mageslayer.resolveManaRupture(engine, caster, bard, { energy: 0, dmg: 5 });
   assert.equal(bard.hp, 5);
-  assert.equal(bard.statuses.stun, 2, 'bard special case: stun 2 turns');
+  assert.equal(bard.statuses.stun || 0, 0, 'Bard no longer receives a special stun');
 });
 
 test('resolveManaRupture: caster\'s energy is unchanged (no more +2 energy back — removed to respect Song\'s Curse)', () => {
   const caster = mkPlayer({ skillPoints: 0 });
   const t = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 5 });
-  mageslayer.resolveManaRupture(engine, caster, t);
+  mageslayer.resolveManaRupture(engine, caster, t, { energy: 5, dmg: 3 });
   assert.equal(caster.skillPoints, 0, 'no energy return anymore');
 });
 

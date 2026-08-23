@@ -28,13 +28,15 @@ module.exports = {
       let gaveAny = false;
       for (const o of engine.alivePlayers()) {
         if (o.id === s.id) continue;
-        if ((o.witherAdded || 0) >= SHIKI_WITHER_ADD_MAX) continue; // ท่าไม้ตายแจกครบ 3 หน่วยแล้ว
+        const addedByThisShiki = (o.witherAddedBy && o.witherAddedBy[s.id]) || 0;
+        if (addedByThisShiki >= SHIKI_WITHER_ADD_MAX) continue; // โควตาแยกต่อชิกิแต่ละคน
         if (engine.resistActive(o)) continue; // ต้านสถานะผิดปกติ — ไม่ได้เส้นชีวิตเพิ่มรอบนี้
         const cur = o.statuses.deathline || 0;
         const next = Math.min(SHIKI_WITHER_LINE_MAX, cur + 1);
         if (next > cur) {
           o.statuses.deathline = next;
-          o.witherAdded = (o.witherAdded || 0) + 1;
+          o.witherAddedBy = o.witherAddedBy || {};
+          o.witherAddedBy[s.id] = addedByThisShiki + 1;
           gaveAny = true;
         }
       }
@@ -96,7 +98,10 @@ module.exports = {
   // เรียกจาก useSkill() ในส่วน effect — เปิดท่าไม้ตาย 2: ความตายที่โรยรา (5 เทิร์น แจกเส้นชีวิต)
   activateWither(engine, p) {
     p.transformAt = engine.nextTransformCounter();
-    for (const o of Object.values(engine.players)) o.witherAdded = 0;
+    for (const o of Object.values(engine.players)) {
+      o.witherAddedBy = o.witherAddedBy || {};
+      o.witherAddedBy[p.id] = 0;
+    }
     engine.log(`🥀 ${p.name} ความตายที่โรยรา — ความตายเริ่มโรยราลงบนสนาม 5 เทิร์น! (เส้นชีวิตแปรเป็นดาเมจเสริมการโจมตีปกติ +1 ต่อเส้น — พลังโจมตีรวมสูงสุด ${SHIKI_WITHER_ATK_CAP} · โอกาสสังหารทันที ${Math.round(SHIKI_WITHER_KILL_CHANCE * 100)}% คงที่ · ท่าไม้ตายแจกเส้นชีวิตได้สูงสุด ${SHIKI_WITHER_ADD_MAX} หน่วยต่อคน)`);
   },
 
@@ -157,8 +162,8 @@ module.exports = {
       engine.queueCutscene(attacker, "shikiWitherKill"); // เล่นวีดีโอก่อนสังหารทุกครั้ง
       delete attacker.statuses.wither; // สังหารได้แล้ว 1 คน — ท่าไม้ตายจบลง
       delete target.statuses.deathline;
-      target.witherAdded = 0;
-      engine.clearWitherLines(); // ลบเส้นชีวิตส่วนที่ท่าไม้ตายแจกไปออกจากทุกคน
+      if (target.witherAddedBy) delete target.witherAddedBy[attacker.id];
+      engine.clearWitherLines(attacker.id); // ลบเฉพาะเส้นชีวิตที่ชิกิคนนี้แจกไป
       this.applyKnifeHeal(engine, attacker); // มีดพก: ยังเป็นการโจมตีปกติ — ฟื้นเลือดให้ตัวเองตามปกติ
       engine.instantDeath(target);
       target.wasAttacked = true;

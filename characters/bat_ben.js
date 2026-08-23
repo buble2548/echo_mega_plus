@@ -185,9 +185,12 @@ module.exports = {
 
   // เรียกจาก doAttack() ตอนเลือกเป้าหมาย — หาผู้ล่อเป้า คืน player หรือ null (แพทเทิร์นเดียวกับริดดี้/ริต้า)
   findTaunter(engine, attacker) {
-    return engine.alivePlayers().find(
+    return this.findTaunters(engine, attacker)[0] || null;
+  },
+  findTaunters(engine, attacker) {
+    return engine.alivePlayers().filter(
       (r) => r.id !== attacker.id && r.characterId === "bat_ben" && (r.statuses.batTaunt || 0) > 0 && !engine.sealActive(r)
-    ) || null;
+    );
   },
 
   // เรียกจาก doAttack() หลังลงความเสียหายกับแบทแมนแล้ว — ความเสียหายเท่ากันเกิดกับผู้โจมตีด้วย

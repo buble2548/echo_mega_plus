@@ -1,6 +1,6 @@
-// ============================================================
+﻿// ============================================================
 //  ดูมกาย (DoomGuy, patch 2.2 full) — Quick Swap / Weapon (ความสามารถพิเศษตามอาวุธ) / Crucible (ท่าไม้ตาย) /
-//  สกิลติดตัว (ฮีล+ชาร์จ Crucible ทุกครั้งที่โจมตี) / สกิลติดตัว 2 (เสมอแต้มยังได้โจมตี 75%)
+//  สกิลติดตัว (ฮีล+ชาร์จ Crucible ทุกครั้งที่โจมตี) / สกิลติดตัว 2 (เสมอแต้มยังได้โจมตี 50%)
 //  ย้ายออกมาจาก server.js — ดู characters/index.js สำหรับไฟล์มัดรวม
 //  หมายเหตุ: ตาราง `DOOM_WEAPONS`/`rollDoomWeapon`/ค่าคงที่ atk พื้นฐาน (DOOM_CRUCIBLE_ATK) ยังอยู่ server.js
 //  เพราะถูกอ่านตรงๆ ใน doAttack()'s shared damage-sum expression (`doomBaseAtk`/`doomPierceAtk`) — นอกขอบเขต Phase 1
@@ -152,7 +152,7 @@ module.exports = {
   },
 
   // เรียกจาก resolveRound() ตอนตัดสินผู้ชนะ (ก่อนสุ่มผู้ชนะจากคนที่เสมอกัน) — สกิลติดตัว: เสมอแต้มปกติไม่มี
-  //  เทิร์นโจมตี แต่มีโอกาส DOOM_TIE_ATTACK_CHANCE (75%) ที่จะได้เป็นผู้ชนะและยังได้โจมตี คืน true ถ้าทำงาน
+  //  เทิร์นโจมตี แต่มีโอกาส DOOM_TIE_ATTACK_CHANCE ที่จะได้เป็นผู้ชนะและยังได้โจมตี คืน true ถ้าทำงาน
   tryTieAttack(engine, winner) {
     if (!(winner && winner.alive && winner.characterId === "doomguy")) return false;
     if (engine.passiveSealed(winner)) return false; // สกิลติดตัวถูกปิดอยู่ (อันนี้ของนายรึเปล่า ฯลฯ)

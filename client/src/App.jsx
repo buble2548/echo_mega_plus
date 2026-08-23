@@ -59,9 +59,10 @@ export default function App() {
     // (ต่างจากตอนกดยืนยันตัวละครที่ต้องรอ server ตอบแบบไม่รู้เวลาแน่นอน) ถ้าใช้ holdCover ที่นี่จะเจอบั๊กใหม่:
     // ม่านจะปล่อยเปิดทันทีตั้งแต่เฟรมแรก (เพราะ screenKey เปลี่ยนพร้อมกันในเรนเดอร์เดียวกันอยู่แล้ว)
     const onState = (s) => {
-      const wasLobby = prevGameStateRef.current === "LOBBY";
-      const nowInGame = s.gameState !== "LOBBY";
-      if (wasLobby && nowInGame) {
+      const matchStates = new Set(["PLAYING", "CUTSCENE", "SUMMARY", "ATTACK", "ATTACKING", "TRANSITION", "GAMEOVER"]);
+      const wasInMatch = matchStates.has(prevGameStateRef.current);
+      const nowInMatch = matchStates.has(s.gameState);
+      if (!wasInMatch && nowInMatch) {
         curtainRef.current?.preTrigger("gameintro");
         setIntroPlayers(s.players);
         setShowIntro(true);
@@ -249,7 +250,7 @@ export default function App() {
   } else if (!state) {
     screen = <div className="min-h-screen grid place-items-center text-lg opacity-70">กำลังเชื่อมต่อ...</div>;
     screenKey = "connecting";
-  } else if (state.gameState === "LOBBY") {
+  } else if (["LOBBY", "TEAM_MODE", "TEAM_SETUP"].includes(state.gameState)) {
     screen = (
       <Lobby
         state={state}

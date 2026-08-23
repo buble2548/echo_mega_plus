@@ -1,5 +1,6 @@
 const TRIGGER_FORM_TURNS = 10;
 const TRIGGER_LIGHT_MAX = 6;
+const TRIGGER_KEY_COOLDOWN_TURNS = 5;
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -9,6 +10,7 @@ module.exports = {
   id: "ultraman_trigger",
   TRIGGER_FORM_TURNS,
   TRIGGER_LIGHT_MAX,
+  TRIGGER_KEY_COOLDOWN_TURNS,
 
   activate(engine, p) {
     if (!p || !p.alive || p.characterId === "ultraman_trigger") return false;
@@ -30,16 +32,22 @@ module.exports = {
     return true;
   },
 
-  restore(engine, p, deathReturn = false) {
+  restore(engine, p) {
     if (!p || p.characterId !== "ultraman_trigger" || !p.triggerSnapshot) return false;
     const snapshot = p.triggerSnapshot;
     const triggerId = p.id;
+    const recoveryTargetHp = Math.max(1, snapshot.hp || 1);
     const shown = { ...(snapshot.cutsceneShown || {}), ...(p.cutsceneShown || {}) };
     const connected = p.connected;
     Object.keys(p).forEach((key) => delete p[key]);
     Object.assign(p, clone(snapshot));
     p.cutsceneShown = shown;
     p.connected = connected;
+    p.hp = 1;
+    p.armor = engine.maxArmorOf(p);
+    p.shield = 0;
+    p.triggerRecoveryTargetHp = recoveryTargetHp;
+    p.hyperTriggerReadyRound = engine.roundNumber + TRIGGER_KEY_COOLDOWN_TURNS;
     for (const target of Object.values(engine.players)) {
       if (!target.triggerLightBy) continue;
       delete target.triggerLightBy[triggerId];
@@ -50,15 +58,7 @@ module.exports = {
         delete target.statuses.triggerLight;
       }
     }
-    if (deathReturn) {
-      p.hp = 1;
-      p.alive = true;
-      p.result = null;
-      p.locked = false;
-    }
-    engine.log(deathReturn
-      ? `✨ ${p.name} พ่ายแพ้ในร่าง Ultraman Trigger — คืนร่างเดิมและเหลือพลังชีวิต 1 หน่วย`
-      : `✨ ${p.name} ครบ ${TRIGGER_FORM_TURNS} เทิร์น — คืนร่างเดิมพร้อมสถานะทุกอย่างก่อนแปลงร่าง`);
+    engine.log(`✨ ${p.name} ครบ ${TRIGGER_FORM_TURNS} เทิร์น — คืนร่างเดิม พลังชีวิตเหลือ 1 เกราะเต็ม และ Hyper Key Trigger จะกลับมาใช้ได้อีกครั้งใน ${TRIGGER_KEY_COOLDOWN_TURNS} เทิร์น`);
     return true;
   },
 
@@ -66,11 +66,14 @@ module.exports = {
     ctx.triggerCircleAtk = (attacker.statuses.triggerCircle || 0) > 0;
     ctx.triggerMultiAtk = (attacker.statuses.triggerMulti || 0) > 0;
     ctx.triggerZeperionAtk = (attacker.statuses.triggerZeperion || 0) > 0;
+    ctx.triggerMultiHighestHp = ctx.triggerMultiAtk && this.isHighestHpTarget(engine, attacker, target);
+    ctx.triggerMultiLowHpPenalty = ctx.triggerMultiAtk && target.hp < 5;
     const light = target.triggerLightBy
       ? Math.min(TRIGGER_LIGHT_MAX, Object.values(target.triggerLightBy).reduce((sum, n) => sum + n, 0))
       : 0;
     ctx.triggerLightBonus = ctx.triggerZeperionAtk ? Math.floor(light / 2) : 0;
-    return 3 + (ctx.triggerMultiAtk ? 1 : 0) + ctx.triggerLightBonus;
+    const multiBase = ctx.triggerMultiLowHpPenalty ? 2 : 3 + (ctx.triggerMultiHighestHp ? 1 : 0);
+    return (ctx.triggerMultiAtk ? multiBase : 3) + ctx.triggerLightBonus;
   },
 
   applySkill(engine, p, tier) {
@@ -80,15 +83,15 @@ module.exports = {
       return true;
     }
     if (tier === "secondary") {
-      if (!(p.statuses.triggerCircle > 0) || p.statuses.triggerMulti > 0) return false;
+      if (!(p.statuses.triggerCircle > 0) || p.statuses.triggerMulti > 0 || p.statuses.triggerZeperion > 0) return false;
       p.statuses.triggerMulti = 999;
       engine.log(`⭕ ${p.name} Multi Sword Finish — ได้รับ [จักรแห่งแสง] จนกว่าจะโจมตีสำเร็จ 1 ครั้ง`);
       return true;
     }
     if (tier === "ultimate") {
-      if (!(p.statuses.triggerCircle > 0) || p.statuses.triggerMulti > 0) return false;
-      p.statuses.triggerZeperion = 1;
-      engine.log(`🌟 ${p.name} เตรียมลำแสง Zeperion — ดาเมจเพิ่มตามแสงสว่างของเป้าหมายในเทิร์นนี้`);
+      if (!(p.statuses.triggerCircle > 0) || p.statuses.triggerMulti > 0 || p.statuses.triggerZeperion > 0) return false;
+      p.statuses.triggerZeperion = 999;
+      engine.log(`🌟 ${p.name} เตรียมลำแสง Zeperion — คงอยู่จนกว่าจะโจมตีสำเร็จ ดาเมจเพิ่มตามแสงสว่างของเป้าหมาย`);
       return true;
     }
     return false;
@@ -98,6 +101,17 @@ module.exports = {
     const candidates = engine.alivePlayers().filter((o) => o.id !== attacker.id && !engine.sealActive(o));
     const maxHp = Math.max(...candidates.map((o) => o.hp));
     return target.hp === maxHp;
+  },
+
+  clearTargetLight(target) {
+    if (!target || !target.statuses) return 0;
+    const removed = target.triggerLightBy
+      ? Object.values(target.triggerLightBy).reduce((sum, n) => sum + n, 0)
+      : (target.statuses.triggerLight || 0);
+    delete target.triggerLightBy;
+    delete target.statuses.triggerLight;
+    if (target.statusAmt) delete target.statusAmt.triggerLight;
+    return Math.min(TRIGGER_LIGHT_MAX, removed);
   },
 
   onAttackLanded(engine, attacker, target, ctx) {
@@ -118,6 +132,8 @@ module.exports = {
     if (ctx.triggerZeperionAtk) {
       delete attacker.statuses.triggerZeperion;
       engine.triggerCutscene(attacker, "triggerZeperion");
+      const removed = this.clearTargetLight(target);
+      if (removed > 0) engine.log(`🌟 Zeperion Ray — แสงสว่างของ ${target.name} ถูกล้างออกทั้งหมด (-${removed})`);
     }
   },
 };

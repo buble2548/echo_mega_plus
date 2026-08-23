@@ -37,13 +37,28 @@ module.exports = {
   applyWitchMark(engine, p, target) {
     if (p.mageslayerMarkedId) {
       const old = engine.players[p.mageslayerMarkedId];
-      if (old) { delete old.statuses.mageslayerMark; if (old.statusAmt) delete old.statusAmt.mageslayerMark; }
+      if (old) {
+        if (!((old.statuses.mageslayerMark || 0) > 0)) old.mageslayerMarks = {};
+        if (old.mageslayerMarks) delete old.mageslayerMarks[p.id];
+        const remaining = Object.keys(old.mageslayerMarks || {}).length;
+        if (remaining > 0) old.statuses.mageslayerMark = 999;
+        else {
+          delete old.mageslayerMarks;
+          delete old.statuses.mageslayerMark;
+          if (old.statusAmt) delete old.statusAmt.mageslayerMark;
+        }
+      }
       p.mageslayerMarkedId = null;
     }
+    const markWasActive = (target.statuses.mageslayerMark || 0) > 0;
+    if (!markWasActive) target.mageslayerMarks = {};
     if (!engine.applyDebuff(target, "mageslayerMark", null, 999)) {
       engine.log(`🛡️ ${target.name} ต้านสถานะผิดปกติ — ตราล่าเวทไม่ติด`);
       return " — ต้านสถานะผิดปกติ";
     }
+    target.mageslayerMarks = target.mageslayerMarks || {};
+    target.mageslayerMarks[p.id] = true;
+    target.statuses.mageslayerMark = 999;
     p.mageslayerMarkedId = target.id;
     p.mageslayerHasMarked = true;
     p.mageslayerWitchMarkReadyRound = engine.roundNumber + 2;
@@ -65,7 +80,9 @@ module.exports = {
   //  ผนึกพลังงานถ้าเป้าหมายพลังงาน 0 ก่อนขโมย / เคลียร์ Fury stack ที่เพิ่งใช้ไปพร้อมดูดเลือด
   onAttackPostDamage(engine, attacker, target, dmg) {
     if (attacker.characterId !== "mageslayer") return;
-    const marked = attacker.mageslayerMarkedId === target.id && (target.statuses.mageslayerMark || 0) > 0;
+    const marked = attacker.mageslayerMarkedId === target.id
+      && (target.statuses.mageslayerMark || 0) > 0
+      && (!target.mageslayerMarks || !!target.mageslayerMarks[attacker.id]);
     if (marked) {
       const targetEnergyBefore = target.skillPoints || 0; // เช็คก่อน Witch Mark ลดมันลง
       const wantSteal = Math.max(1, Math.min(4, dmg));
@@ -91,7 +108,8 @@ module.exports = {
   // เรียกจาก doAttack()'s evade branch — เป้าหมายหลบหลีกได้ยังถูกขโมยพลังงาน 1 หน่วยเสมอ
   onAttackDodgeSteal(engine, attacker, target) {
     if (attacker.characterId !== "mageslayer") return;
-    if (attacker.mageslayerMarkedId !== target.id || !((target.statuses.mageslayerMark || 0) > 0)) return;
+    if (attacker.mageslayerMarkedId !== target.id || !((target.statuses.mageslayerMark || 0) > 0)
+      || (target.mageslayerMarks && !target.mageslayerMarks[attacker.id])) return;
     const stolen = this.stealEnergy(engine, attacker, target, 1);
     if (stolen > 0) engine.log(`🔮 ${attacker.name} Witch Mark — ${target.name} หลบหลีกได้ แต่ยังถูกขโมยพลังงาน ${stolen} หน่วย`);
   },
@@ -101,7 +119,8 @@ module.exports = {
   onTargetUsedSkill(engine, p) {
     for (const ms of engine.alivePlayers()) {
       if (ms.characterId !== "mageslayer" || ms.id === p.id) continue;
-      if (ms.mageslayerMarkedId !== p.id || !((p.statuses.mageslayerMark || 0) > 0)) continue;
+      if (ms.mageslayerMarkedId !== p.id || !((p.statuses.mageslayerMark || 0) > 0)
+        || (p.mageslayerMarks && !p.mageslayerMarks[ms.id])) continue;
       if (Math.random() >= MS_MARK_STEAL_CHANCE) continue;
       if ((p.skillPoints || 0) <= 0) {
         if (engine.applyDebuff(p, "manaSeal", null, MS_SEAL_TURNS)) {
@@ -138,10 +157,8 @@ module.exports = {
 
   applyRuptureEffect(engine, p, target, skillName) {
     if (engine.satoruOnTargeted(target, p, `สกิล ${skillName} `).negated) return " — ถูกลบล้าง";
-    if (!engine.applyDebuff(target, "manaRupture", null, 2)) {
-      engine.log(`🛡️ ${target.name} ต้านสถานะผิดปกติ — Mana Rupture ไม่ติด`);
-      return " — ถูกต้านสถานะ";
-    }
+    target.statuses = target.statuses || {};
+    target.statuses.manaRupture = Math.max(target.statuses.manaRupture || 0, 2);
     const energy = target.skillPoints || 0;
     const dmg = this.ruptureDamageForEnergy(energy);
     target.manaRuptures = target.manaRuptures || [];

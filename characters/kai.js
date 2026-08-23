@@ -19,7 +19,12 @@ module.exports = {
   // เรียกจาก useSkill() ในส่วน effect — มือซ้ายแห่งการรังสรรค์ / มือขวาแห่งการลงทัณฑ์
   //  statusKey: "kaiCreation" | "kaiPunishment" — ห้ามมอบซ้ำให้เป้าหมายที่ยังมีอยู่จริง / ต้านได้ (ไม่นับเข้า tracker)
   applyMark(engine, p, target, statusKey, label) {
-    if ((target.statuses[statusKey] || 0) > 0) {
+    target.kaiMarksBy = target.kaiMarksBy || {};
+    if (!((target.statuses[statusKey] || 0) > 0)) {
+      for (const marks of Object.values(target.kaiMarksBy)) delete marks[statusKey];
+    }
+    target.kaiMarksBy[p.id] = target.kaiMarksBy[p.id] || {};
+    if (target.kaiMarksBy[p.id][statusKey]) {
       engine.log(`✋ ${target.name} มี${label}อยู่แล้ว — ${p.name} มอบซ้ำไม่ได้`);
       return ` — ${target.name} มี${label}อยู่แล้ว`;
     }
@@ -27,8 +32,11 @@ module.exports = {
       engine.log(`🛡️ ${target.name} ต้านสถานะผิดปกติ — ไม่ติด${label}`);
       return ` — ${target.name} ต้านสถานะผิดปกติ`;
     }
-    engine.kaiOverhaulSlots.push({ playerId: target.id, status: statusKey });
-    engine.log(`✋ ${p.name} มอบ${label}ให้ ${target.name} (ถาวรจนกว่าจะใช้ผ่าน Overhaul หรือถูกต้าน) — Overhaul ${engine.kaiOverhaulSlots.length}/2`);
+    target.kaiMarksBy[p.id][statusKey] = true;
+    target.statuses[statusKey] = 999;
+    engine.kaiOverhaulSlots.push({ ownerId: p.id, playerId: target.id, status: statusKey });
+    const ownSlots = engine.kaiOverhaulSlots.filter((slot) => slot.ownerId === p.id).length;
+    engine.log(`✋ ${p.name} มอบ${label}ให้ ${target.name} (ถาวรจนกว่าจะใช้ผ่าน Overhaul หรือถูกต้าน) — Overhaul ${ownSlots}/2`);
     return ` — ${target.name} ติด${label}`;
   },
 
@@ -42,9 +50,22 @@ module.exports = {
 
   // สถานะที่เกี่ยวข้องกับ Overhaul หายไปนอกช่องทาง Overhaul (ตาย/ถูกล้าง) -> ลบออกจาก tracker ด้วย
   pruneOverhaulSlots(engine) {
+    for (const holder of Object.values(engine.players)) {
+      if (!holder.kaiMarksBy) continue;
+      for (const statusKey of ["kaiCreation", "kaiPunishment"]) {
+        if (!((holder.statuses[statusKey] || 0) > 0)) {
+          for (const marks of Object.values(holder.kaiMarksBy)) delete marks[statusKey];
+        }
+      }
+      for (const [ownerId, marks] of Object.entries(holder.kaiMarksBy)) {
+        if (!Object.keys(marks).length) delete holder.kaiMarksBy[ownerId];
+      }
+    }
     engine.setKaiOverhaulSlots(engine.kaiOverhaulSlots.filter((slot) => {
       const holder = engine.players[slot.playerId];
-      return holder && holder.alive && (holder.statuses[slot.status] || 0) > 0;
+      if (!(holder && holder.alive && (holder.statuses[slot.status] || 0) > 0)) return false;
+      if (!slot.ownerId) return true; // รองรับข้อมูลแมตช์/เทสต์รูปแบบเก่า
+      return !!(holder.kaiMarksBy && holder.kaiMarksBy[slot.ownerId] && holder.kaiMarksBy[slot.ownerId][slot.status]);
     }));
   },
 

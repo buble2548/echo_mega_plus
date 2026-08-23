@@ -1,70 +1,70 @@
-// ============================================================
-//  ระบบเสียง ECHO + master volume
-//  - master volume คุมทุกเสียง (เพลง / เอฟเฟกต์ / เสียงพากย์ / วีดีโอ) ด้วย curve ยกกำลังสอง
-//    ให้หลอดปรับเสียงมีผลชัดเจน (linear เดิมฟังแทบไม่ต่าง)
-//  - เพลงเล่นต่อจากจุดเดิมเฉพาะ "ในแมตช์เดียวกัน" — เริ่มเกมใหม่รีเซ็ตทั้งหมด (resetMusicPositions)
-//  - เพลงสกิล/ท่าไม้ตาย: ส่ง seq มาด้วย ถ้า seq เปลี่ยน (เปิดท่าใหม่ / ถูกทับด้วยเพลงเดียวกัน
-//    ของอีกคน) เพลงจะเริ่มใหม่จากต้น
+﻿// ============================================================
+//  à¸£à¸°à¸šà¸šà¹€à¸ªà¸µà¸¢à¸‡ ECHO + master volume
+//  - master volume à¸„à¸¸à¸¡à¸—à¸¸à¸à¹€à¸ªà¸µà¸¢à¸‡ (à¹€à¸žà¸¥à¸‡ / à¹€à¸­à¸Ÿà¹€à¸Ÿà¸à¸•à¹Œ / à¹€à¸ªà¸µà¸¢à¸‡à¸žà¸²à¸à¸¢à¹Œ / à¸§à¸µà¸”à¸µà¹‚à¸­) à¸”à¹‰à¸§à¸¢ curve à¸¢à¸à¸à¸³à¸¥à¸±à¸‡à¸ªà¸­à¸‡
+//    à¹ƒà¸«à¹‰à¸«à¸¥à¸­à¸”à¸›à¸£à¸±à¸šà¹€à¸ªà¸µà¸¢à¸‡à¸¡à¸µà¸œà¸¥à¸Šà¸±à¸”à¹€à¸ˆà¸™ (linear à¹€à¸”à¸´à¸¡à¸Ÿà¸±à¸‡à¹à¸—à¸šà¹„à¸¡à¹ˆà¸•à¹ˆà¸²à¸‡)
+//  - à¹€à¸žà¸¥à¸‡à¹€à¸¥à¹ˆà¸™à¸•à¹ˆà¸­à¸ˆà¸²à¸à¸ˆà¸¸à¸”à¹€à¸”à¸´à¸¡à¹€à¸‰à¸žà¸²à¸° "à¹ƒà¸™à¹à¸¡à¸•à¸Šà¹Œà¹€à¸”à¸µà¸¢à¸§à¸à¸±à¸™" â€” à¹€à¸£à¸´à¹ˆà¸¡à¹€à¸à¸¡à¹ƒà¸«à¸¡à¹ˆà¸£à¸µà¹€à¸‹à¹‡à¸•à¸—à¸±à¹‰à¸‡à¸«à¸¡à¸” (resetMusicPositions)
+//  - à¹€à¸žà¸¥à¸‡à¸ªà¸à¸´à¸¥/à¸—à¹ˆà¸²à¹„à¸¡à¹‰à¸•à¸²à¸¢: à¸ªà¹ˆà¸‡ seq à¸¡à¸²à¸”à¹‰à¸§à¸¢ à¸–à¹‰à¸² seq à¹€à¸›à¸¥à¸µà¹ˆà¸¢à¸™ (à¹€à¸›à¸´à¸”à¸—à¹ˆà¸²à¹ƒà¸«à¸¡à¹ˆ / à¸–à¸¹à¸à¸—à¸±à¸šà¸”à¹‰à¸§à¸¢à¹€à¸žà¸¥à¸‡à¹€à¸”à¸µà¸¢à¸§à¸à¸±à¸™
+//    à¸‚à¸­à¸‡à¸­à¸µà¸à¸„à¸™) à¹€à¸žà¸¥à¸‡à¸ˆà¸°à¹€à¸£à¸´à¹ˆà¸¡à¹ƒà¸«à¸¡à¹ˆà¸ˆà¸²à¸à¸•à¹‰à¸™
 // ============================================================
 
 const FILES = {
   main_home: "/theme_song/main_home.mp3",
   card_prepare_turn: "/theme_song/card_prepare_turn.mp3",
-  new_morning: "/theme_song/new_morning.mp3", // เพลงช่วงกลางวัน (patch พิเศษ)
-  new_night: "/theme_song/new_night.mp3",     // เพลงช่วงกลางคืน (patch พิเศษ)
-  shrade: "/characters/shrade_elan/shrade_theme.mp3", // เพลงระหว่างชาร์จ แด่เพื่อนรักของฉัน (ชเรด เอลัน)
-  shiki: "/characters/shiki/shiki_theme.mp3",         // เพลงระหว่างท่าไม้ตาย ฉันมองเห็นมันแล้ว (ชิกิ)
-  shiki2: "/characters/shiki/shiki_theme2.mp3",       // เพลงระหว่างท่าไม้ตาย 2 ความตายที่โรยรา (ชิกิ patch 2.0.6)
-  tohno: "/characters/tohno/tohno_theme.mp3",         // เพลงระหว่างสกิลติดตัวโทโนะเปิดใช้งาน (ระดับ 2 ขึ้นไป — patch 2.1.7)
-  nanaya: "/characters/nanaya/nanaya_theme.mp3",      // เพลงระหว่างสกิลติดตัว 1 นานายะ ชิกิ เปิดใช้งาน (patch 2.1.9)
-  hakuno: "/characters/hakuno/hakuno_theme.mp3",      // เพลงระหว่าง MOON*CELL คิชินามิ ฮาคุโนะ ทำงาน (patch 2.2.1)
-  nanayaVoice1: "/characters/nanaya/voice/nanaya_voice1.m4a", // เสียงพากย์สุ่มตอนนานายะชนะการจั่ว
+  new_morning: "/theme_song/new_morning.mp3", // à¹€à¸žà¸¥à¸‡à¸Šà¹ˆà¸§à¸‡à¸à¸¥à¸²à¸‡à¸§à¸±à¸™ (patch à¸žà¸´à¹€à¸¨à¸©)
+  new_night: "/theme_song/new_night.mp3",     // à¹€à¸žà¸¥à¸‡à¸Šà¹ˆà¸§à¸‡à¸à¸¥à¸²à¸‡à¸„à¸·à¸™ (patch à¸žà¸´à¹€à¸¨à¸©)
+  shrade: "/characters/shrade_elan/shrade_theme.mp3", // à¹€à¸žà¸¥à¸‡à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡à¸Šà¸²à¸£à¹Œà¸ˆ à¹à¸”à¹ˆà¹€à¸žà¸·à¹ˆà¸­à¸™à¸£à¸±à¸à¸‚à¸­à¸‡à¸‰à¸±à¸™ (à¸Šà¹€à¸£à¸” à¹€à¸­à¸¥à¸±à¸™)
+  shiki: "/characters/shiki/shiki_theme.mp3",         // à¹€à¸žà¸¥à¸‡à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡à¸—à¹ˆà¸²à¹„à¸¡à¹‰à¸•à¸²à¸¢ à¸‰à¸±à¸™à¸¡à¸­à¸‡à¹€à¸«à¹‡à¸™à¸¡à¸±à¸™à¹à¸¥à¹‰à¸§ (à¸Šà¸´à¸à¸´)
+  shiki2: "/characters/shiki/shiki_theme2.mp3",       // à¹€à¸žà¸¥à¸‡à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡à¸—à¹ˆà¸²à¹„à¸¡à¹‰à¸•à¸²à¸¢ 2 à¸„à¸§à¸²à¸¡à¸•à¸²à¸¢à¸—à¸µà¹ˆà¹‚à¸£à¸¢à¸£à¸² (à¸Šà¸´à¸à¸´ patch 2.0.6)
+  tohno: "/characters/tohno/tohno_theme.mp3",         // à¹€à¸žà¸¥à¸‡à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡à¸ªà¸à¸´à¸¥à¸•à¸´à¸”à¸•à¸±à¸§à¹‚à¸—à¹‚à¸™à¸°à¹€à¸›à¸´à¸”à¹ƒà¸Šà¹‰à¸‡à¸²à¸™ (à¸£à¸°à¸”à¸±à¸š 2 à¸‚à¸¶à¹‰à¸™à¹„à¸› â€” patch 2.1.7)
+  nanaya: "/characters/nanaya/nanaya_theme.mp3",      // à¹€à¸žà¸¥à¸‡à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡à¸ªà¸à¸´à¸¥à¸•à¸´à¸”à¸•à¸±à¸§ 1 à¸™à¸²à¸™à¸²à¸¢à¸° à¸Šà¸´à¸à¸´ à¹€à¸›à¸´à¸”à¹ƒà¸Šà¹‰à¸‡à¸²à¸™ (patch 2.1.9)
+  hakuno: "/characters/hakuno/hakuno_theme.mp3",      // à¹€à¸žà¸¥à¸‡à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡ MOON*CELL à¸„à¸´à¸Šà¸´à¸™à¸²à¸¡à¸´ à¸®à¸²à¸„à¸¸à¹‚à¸™à¸° à¸—à¸³à¸‡à¸²à¸™ (patch 2.2.1)
+  nanayaVoice1: "/characters/nanaya/voice/nanaya_voice1.m4a", // à¹€à¸ªà¸µà¸¢à¸‡à¸žà¸²à¸à¸¢à¹Œà¸ªà¸¸à¹ˆà¸¡à¸•à¸­à¸™à¸™à¸²à¸™à¸²à¸¢à¸°à¸Šà¸™à¸°à¸à¸²à¸£à¸ˆà¸±à¹ˆà¸§
   nanayaVoice2: "/characters/nanaya/voice/nanaya_voice2.m4a",
   nanayaVoice3: "/characters/nanaya/voice/nanaya_voice3.m4a",
   nanayaVoice4: "/characters/nanaya/voice/nanaya_voice4.m4a",
   nanayaVoice5: "/characters/nanaya/voice/nanaya_voice5.m4a",
-  bard_dim: "/characters/bard/bard_dim_theme.mp3",    // BGM ระหว่างมิติมายาบรรเลง (Bard — วนลูป 3 เทิร์น)
-  bard_note1: "/characters/bard/bard_note1.mp3",      // เสียงเติมโน้ตช่องที่ 1 (Bard)
-  bard_note2: "/characters/bard/bard_note2.mp3",      // เสียงเติมโน้ตช่องที่ 2
-  bard_note3: "/characters/bard/bard_note3.mp3",      // เสียงเติมโน้ตช่องที่ 3
-  bard_note4: "/characters/bard/bard_note4.mp3",      // เสียงเติมโน้ต (สำรอง)
-  bard_melody1: "/characters/bard/bard_melody1.mp3",  // เสียงบรรเลงทำนอง สาย Crimson
-  bard_melody2: "/characters/bard/bard_melody2.mp3",  // เสียงบรรเลงทำนอง สาย Jade
-  bard_melody3: "/characters/bard/bard_melody3.mp3",  // เสียงบรรเลงทำนอง Encore ทำงานซ้ำ
+  bard_dim: "/characters/bard/bard_dim_theme.mp3",    // BGM à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡à¸¡à¸´à¸•à¸´à¸¡à¸²à¸¢à¸²à¸šà¸£à¸£à¹€à¸¥à¸‡ (Bard â€” à¸§à¸™à¸¥à¸¹à¸› 3 à¹€à¸—à¸´à¸£à¹Œà¸™)
+  bard_note1: "/characters/bard/bard_note1.mp3",      // à¹€à¸ªà¸µà¸¢à¸‡à¹€à¸•à¸´à¸¡à¹‚à¸™à¹‰à¸•à¸Šà¹ˆà¸­à¸‡à¸—à¸µà¹ˆ 1 (Bard)
+  bard_note2: "/characters/bard/bard_note2.mp3",      // à¹€à¸ªà¸µà¸¢à¸‡à¹€à¸•à¸´à¸¡à¹‚à¸™à¹‰à¸•à¸Šà¹ˆà¸­à¸‡à¸—à¸µà¹ˆ 2
+  bard_note3: "/characters/bard/bard_note3.mp3",      // à¹€à¸ªà¸µà¸¢à¸‡à¹€à¸•à¸´à¸¡à¹‚à¸™à¹‰à¸•à¸Šà¹ˆà¸­à¸‡à¸—à¸µà¹ˆ 3
+  bard_note4: "/characters/bard/bard_note4.mp3",      // à¹€à¸ªà¸µà¸¢à¸‡à¹€à¸•à¸´à¸¡à¹‚à¸™à¹‰à¸• (à¸ªà¸³à¸£à¸­à¸‡)
+  bard_melody1: "/characters/bard/bard_melody1.mp3",  // à¹€à¸ªà¸µà¸¢à¸‡à¸šà¸£à¸£à¹€à¸¥à¸‡à¸—à¸³à¸™à¸­à¸‡ à¸ªà¸²à¸¢ Crimson
+  bard_melody2: "/characters/bard/bard_melody2.mp3",  // à¹€à¸ªà¸µà¸¢à¸‡à¸šà¸£à¸£à¹€à¸¥à¸‡à¸—à¸³à¸™à¸­à¸‡ à¸ªà¸²à¸¢ Jade
+  bard_melody3: "/characters/bard/bard_melody3.mp3",  // à¹€à¸ªà¸µà¸¢à¸‡à¸šà¸£à¸£à¹€à¸¥à¸‡à¸—à¸³à¸™à¸­à¸‡ Encore à¸—à¸³à¸‡à¸²à¸™à¸‹à¹‰à¸³
   ginga: "/characters/hikaru/ginga_song.mp3",
-  gingastrium: "/characters/hikaru/hikaru_update/ginga_theme2.mp3", // เพลงระหว่างร่าง Ginga Strium (ท่าไม้ตาย patch 2.1.3) — แทนที่เพลง ginga ที่เล่นค้างจากสกิลรอง
+  gingastrium: "/characters/hikaru/hikaru_update/ginga_theme2.mp3", // à¹€à¸žà¸¥à¸‡à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡à¸£à¹ˆà¸²à¸‡ Ginga Strium (à¸—à¹ˆà¸²à¹„à¸¡à¹‰à¸•à¸²à¸¢ patch 2.1.3) â€” à¹à¸—à¸™à¸—à¸µà¹ˆà¹€à¸žà¸¥à¸‡ ginga à¸—à¸µà¹ˆà¹€à¸¥à¹ˆà¸™à¸„à¹‰à¸²à¸‡à¸ˆà¸²à¸à¸ªà¸à¸´à¸¥à¸£à¸­à¸‡
   unicorn: "/characters/banagher/unicorn_song.mp3",
-  final_normal: "/characters/kuwagata/final_normal.mp3", // เพลงระหว่างสวมเกราะราชัน
-  ex_guts: "/characters/kuwagata/ex_guts.mp3",           // เพลง Beat Mode (ทับทุกเพลงจนตาย)
-  normal_k: "/characters/kuwagata/normal_k.mp3",         // เสียงพากย์หลังวีดีโอสวมเกราะราชัน
-  ex_k: "/characters/kuwagata/ex_k.mp3",                 // เสียงพากย์หลังวีดีโอ Beat Mode
-  temari_final_theme: "/characters/temari/temari_final_theme.mp3", // เพลง ANATA WAAAAAAAA (เล่นถึงตอนเปิดไพ่)
-  gambler: "/characters/gambler/gambler_theme.mp3",  // เพลงระหว่างบัฟเวลาทอง 777 (แกมเบลอร์)
-  eva13: "/characters/eva13/eva13_theme.mp3",        // เพลงระหว่าง Fourth Impact (เอวา 13)
-  oberon: "/characters/oberon/orberon theme.mp3",    // เพลงประจำตัวโอเบรอน (ระหว่าง Lie Like Vortigern)
-  // ยูนะ ไอดอลประจำสนาม (patch 2.2.6): เพลงล็อกทั้งสนามตลอด 5 เทิร์นที่เอฟเฟกต์ทำงาน
+  final_normal: "/characters/kuwagata/final_normal.mp3", // à¹€à¸žà¸¥à¸‡à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡à¸ªà¸§à¸¡à¹€à¸à¸£à¸²à¸°à¸£à¸²à¸Šà¸±à¸™
+  ex_guts: "/characters/kuwagata/ex_guts.mp3",           // à¹€à¸žà¸¥à¸‡ Beat Mode (à¸—à¸±à¸šà¸—à¸¸à¸à¹€à¸žà¸¥à¸‡à¸ˆà¸™à¸•à¸²à¸¢)
+  normal_k: "/characters/kuwagata/normal_k.mp3",         // à¹€à¸ªà¸µà¸¢à¸‡à¸žà¸²à¸à¸¢à¹Œà¸«à¸¥à¸±à¸‡à¸§à¸µà¸”à¸µà¹‚à¸­à¸ªà¸§à¸¡à¹€à¸à¸£à¸²à¸°à¸£à¸²à¸Šà¸±à¸™
+  ex_k: "/characters/kuwagata/ex_k.mp3",                 // à¹€à¸ªà¸µà¸¢à¸‡à¸žà¸²à¸à¸¢à¹Œà¸«à¸¥à¸±à¸‡à¸§à¸µà¸”à¸µà¹‚à¸­ Beat Mode
+  temari_final_theme: "/characters/temari/temari_final_theme.mp3", // à¹€à¸žà¸¥à¸‡ ANATA WAAAAAAAA (à¹€à¸¥à¹ˆà¸™à¸–à¸¶à¸‡à¸•à¸­à¸™à¹€à¸›à¸´à¸”à¹„à¸žà¹ˆ)
+  gambler: "/characters/gambler/gambler_theme.mp3",  // à¹€à¸žà¸¥à¸‡à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡à¸šà¸±à¸Ÿà¹€à¸§à¸¥à¸²à¸—à¸­à¸‡ 777 (à¹à¸à¸¡à¹€à¸šà¸¥à¸­à¸£à¹Œ)
+  eva13: "/characters/eva13/eva13_theme.mp3",        // à¹€à¸žà¸¥à¸‡à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡ Fourth Impact (à¹€à¸­à¸§à¸² 13)
+  oberon: "/characters/oberon/orberon theme.mp3",    // à¹€à¸žà¸¥à¸‡à¸›à¸£à¸°à¸ˆà¸³à¸•à¸±à¸§à¹‚à¸­à¹€à¸šà¸£à¸­à¸™ (à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡ Lie Like Vortigern)
+  // à¸¢à¸¹à¸™à¸° à¹„à¸­à¸”à¸­à¸¥à¸›à¸£à¸°à¸ˆà¸³à¸ªà¸™à¸²à¸¡ (patch 2.2.6): à¹€à¸žà¸¥à¸‡à¸¥à¹‡à¸­à¸à¸—à¸±à¹‰à¸‡à¸ªà¸™à¸²à¸¡à¸•à¸¥à¸­à¸” 5 à¹€à¸—à¸´à¸£à¹Œà¸™à¸—à¸µà¹ˆà¹€à¸­à¸Ÿà¹€à¸Ÿà¸à¸•à¹Œà¸—à¸³à¸‡à¸²à¸™
   yuna_longing: "/characters/yuna/Longing.mp3",
   yuna_delete: "/characters/yuna/Delete.mp3",
   yuna_smile: "/characters/yuna/Smile for You.mp3",
   yuna_beatbark: "/characters/yuna/Break Beat Bark!.mp3",
-  oguri: "/characters/oguri/oguri_theme.mp3",          // เพลงประจำตัวโอกูริ แคป (เริ่มตอนเข้าร่าง Zone — เล่นค้างระหว่างอยู่ร่าง)
-  wonderofu: "/characters/satoru/wonderofu_theme.mp3", // เพลง Wonder of U (ซาโตรุ — เล่นค้างตราบใดที่มีคนติด Calamity)
-  doomguy: "/characters/doomguy/สกิลอัลติเมติ/Doom Eternal OST - The Only Thing They Fear Is You (Mick Gordon) [Doom Eternal Theme].mp3", // เพลงระหว่างท่าไม้ตาย Crucible (DoomGuy)
-  takuto: "/characters/takuto/takuto_theme.mp3", // เพลงประจำตัวหลังฉันคว้ามันได้แล้ว (สึงาชิ ทาคุโตะ)
-  takuto2: "/characters/takuto/upadate/takuto_theme2.m4a", // เพลงประจำตัวหลังสกิลติดตัว 1 กันตายทำงาน (สึงาชิ ทาคุโตะ patch 2.2.4)
-  tepeu: "/characters/tepeu/tepeu_theme.mp3", // เพลงระหว่างฉากหลัง "นายเป็นคนทำตัวเองนะ" ทำงาน (เทเปา ชิกิ)
-  tepeu_skill1_2: "/characters/tepeu/tepeu_skill1_2.m4a", // เสียงกดสกิลพื้นฐาน/สกิลรอง (เทเปา ชิกิ)
-  // ไค ชิซากิ: เสียงพากย์สุ่มทุกครั้งที่ใช้สกิล (พื้นฐาน/รอง/Overhaul)
+  oguri: "/characters/oguri/oguri_theme.mp3",          // à¹€à¸žà¸¥à¸‡à¸›à¸£à¸°à¸ˆà¸³à¸•à¸±à¸§à¹‚à¸­à¸à¸¹à¸£à¸´ à¹à¸„à¸› (à¹€à¸£à¸´à¹ˆà¸¡à¸•à¸­à¸™à¹€à¸‚à¹‰à¸²à¸£à¹ˆà¸²à¸‡ Zone â€” à¹€à¸¥à¹ˆà¸™à¸„à¹‰à¸²à¸‡à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡à¸­à¸¢à¸¹à¹ˆà¸£à¹ˆà¸²à¸‡)
+  wonderofu: "/characters/satoru/wonderofu_theme.mp3", // à¹€à¸žà¸¥à¸‡ Wonder of U (à¸‹à¸²à¹‚à¸•à¸£à¸¸ â€” à¹€à¸¥à¹ˆà¸™à¸„à¹‰à¸²à¸‡à¸•à¸£à¸²à¸šà¹ƒà¸”à¸—à¸µà¹ˆà¸¡à¸µà¸„à¸™à¸•à¸´à¸” Calamity)
+  doomguy: "/characters/doomguy/à¸ªà¸à¸´à¸¥à¸­à¸±à¸¥à¸•à¸´à¹€à¸¡à¸•à¸´/Doom Eternal OST - The Only Thing They Fear Is You (Mick Gordon) [Doom Eternal Theme].mp3", // à¹€à¸žà¸¥à¸‡à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡à¸—à¹ˆà¸²à¹„à¸¡à¹‰à¸•à¸²à¸¢ Crucible (DoomGuy)
+  takuto: "/characters/takuto/takuto_theme.mp3", // à¹€à¸žà¸¥à¸‡à¸›à¸£à¸°à¸ˆà¸³à¸•à¸±à¸§à¸«à¸¥à¸±à¸‡à¸‰à¸±à¸™à¸„à¸§à¹‰à¸²à¸¡à¸±à¸™à¹„à¸”à¹‰à¹à¸¥à¹‰à¸§ (à¸ªà¸¶à¸‡à¸²à¸Šà¸´ à¸—à¸²à¸„à¸¸à¹‚à¸•à¸°)
+  takuto2: "/characters/takuto/upadate/takuto_theme2.m4a", // à¹€à¸žà¸¥à¸‡à¸›à¸£à¸°à¸ˆà¸³à¸•à¸±à¸§à¸«à¸¥à¸±à¸‡à¸ªà¸à¸´à¸¥à¸•à¸´à¸”à¸•à¸±à¸§ 1 à¸à¸±à¸™à¸•à¸²à¸¢à¸—à¸³à¸‡à¸²à¸™ (à¸ªà¸¶à¸‡à¸²à¸Šà¸´ à¸—à¸²à¸„à¸¸à¹‚à¸•à¸° patch 2.2.4)
+  tepeu: "/characters/tepeu/tepeu_theme.mp3", // à¹€à¸žà¸¥à¸‡à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡à¸‰à¸²à¸à¸«à¸¥à¸±à¸‡ "à¸™à¸²à¸¢à¹€à¸›à¹‡à¸™à¸„à¸™à¸—à¸³à¸•à¸±à¸§à¹€à¸­à¸‡à¸™à¸°" à¸—à¸³à¸‡à¸²à¸™ (à¹€à¸—à¹€à¸›à¸² à¸Šà¸´à¸à¸´)
+  tepeu_skill1_2: "/characters/tepeu/tepeu_skill1_2.m4a", // à¹€à¸ªà¸µà¸¢à¸‡à¸à¸”à¸ªà¸à¸´à¸¥à¸žà¸·à¹‰à¸™à¸à¸²à¸™/à¸ªà¸à¸´à¸¥à¸£à¸­à¸‡ (à¹€à¸—à¹€à¸›à¸² à¸Šà¸´à¸à¸´)
+  // à¹„à¸„ à¸Šà¸´à¸‹à¸²à¸à¸´: à¹€à¸ªà¸µà¸¢à¸‡à¸žà¸²à¸à¸¢à¹Œà¸ªà¸¸à¹ˆà¸¡à¸—à¸¸à¸à¸„à¸£à¸±à¹‰à¸‡à¸—à¸µà¹ˆà¹ƒà¸Šà¹‰à¸ªà¸à¸´à¸¥ (à¸žà¸·à¹‰à¸™à¸à¸²à¸™/à¸£à¸­à¸‡/Overhaul)
   kaiVoice1: "/characters/kai/voice/kai_voice1.m4a",
   kaiVoice2: "/characters/kai/voice/kai_voice2.m4a",
   kaiVoice3: "/characters/kai/voice/kai_voice3.m4a",
   kaiVoice4: "/characters/kai/voice/kai_voice4.m4a",
   kaiVoice5: "/characters/kai/voice/kai_voice5.m4a",
-  // ผู้สังหารจอมมหาเวทย์: เสียงโจมตีปกติเฉพาะตัว / เสียงหลัง Mana Rupture / เพลงระหว่างมี Mana Burden (spellburden) ติดตัวเอง
+  // à¸œà¸¹à¹‰à¸ªà¸±à¸‡à¸«à¸²à¸£à¸ˆà¸­à¸¡à¸¡à¸«à¸²à¹€à¸§à¸—à¸¢à¹Œ: à¹€à¸ªà¸µà¸¢à¸‡à¹‚à¸ˆà¸¡à¸•à¸µà¸›à¸à¸•à¸´à¹€à¸‰à¸žà¸²à¸°à¸•à¸±à¸§ / à¹€à¸ªà¸µà¸¢à¸‡à¸«à¸¥à¸±à¸‡ Mana Rupture / à¹€à¸žà¸¥à¸‡à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡à¸¡à¸µ Mana Burden (spellburden) à¸•à¸´à¸”à¸•à¸±à¸§à¹€à¸­à¸‡
   mageslayer_attack: "/characters/mageslayer/BA.mp3",
   mageslayer_skill2: "/characters/mageslayer/SFX_Skill_2.mp3",
   mageslayer_ult: "/characters/mageslayer/BGM_Ult.mp3",
-  // เสียงอาวุธ DoomGuy (patch 2.2 full): เสียงโจมตี/เสียงใช้สกิลรอง Weapon แยกตามอาวุธที่ถืออยู่
+  // à¹€à¸ªà¸µà¸¢à¸‡à¸­à¸²à¸§à¸¸à¸˜ DoomGuy (patch 2.2 full): à¹€à¸ªà¸µà¸¢à¸‡à¹‚à¸ˆà¸¡à¸•à¸µ/à¹€à¸ªà¸µà¸¢à¸‡à¹ƒà¸Šà¹‰à¸ªà¸à¸´à¸¥à¸£à¸­à¸‡ Weapon à¹à¸¢à¸à¸•à¸²à¸¡à¸­à¸²à¸§à¸¸à¸˜à¸—à¸µà¹ˆà¸–à¸·à¸­à¸­à¸¢à¸¹à¹ˆ
   doomguy_cs_shoot: "/characters/doomguy/sound/CS Shoot.mp3",
   doomguy_cs_skill: "/characters/doomguy/sound/CS Skill.mp3",
   doomguy_hc_shoot: "/characters/doomguy/sound/HC Shoot.mp3",
@@ -79,36 +79,43 @@ const FILES = {
   doomguy_bt_shoot: "/characters/doomguy/sound/BT Shoot.mp3",
   doomguy_bt_skill: "/characters/doomguy/sound/BT Skill.mp3",
   doomguy_bfg_shoot: "/characters/doomguy/sound/BFG.mp3",
-  // ทาคุมิ ฟุจิวาระ: เพลงประจำตัวตามเกียร์ (เกียร์ 3-5 / เกียร์ 6) + เพลงระหว่างท่าไม้ตาย "ถึงจะมองไม่เห็น แต่ฉันยังอยู่" ทำงาน
+  // à¸—à¸²à¸„à¸¸à¸¡à¸´ à¸Ÿà¸¸à¸ˆà¸´à¸§à¸²à¸£à¸°: à¹€à¸žà¸¥à¸‡à¸›à¸£à¸°à¸ˆà¸³à¸•à¸±à¸§à¸•à¸²à¸¡à¹€à¸à¸µà¸¢à¸£à¹Œ (à¹€à¸à¸µà¸¢à¸£à¹Œ 3-5 / à¹€à¸à¸µà¸¢à¸£à¹Œ 6) + à¹€à¸žà¸¥à¸‡à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡à¸—à¹ˆà¸²à¹„à¸¡à¹‰à¸•à¸²à¸¢ "à¸–à¸¶à¸‡à¸ˆà¸°à¸¡à¸­à¸‡à¹„à¸¡à¹ˆà¹€à¸«à¹‡à¸™ à¹à¸•à¹ˆà¸‰à¸±à¸™à¸¢à¸±à¸‡à¸­à¸¢à¸¹à¹ˆ" à¸—à¸³à¸‡à¸²à¸™
   all_around: "/characters/takumi/all_around.mp3",
   secret_love: "/characters/takumi/secret_love.mp3",
   forever: "/characters/takumi/forever.mp3",
-  // แบทแมน (เบน แอฟเฟล็ก) patch 2.2.7: เพลงระหว่างท่าไม้ตาย "เข้ามาเลย" ทำงาน (ล่อเป้า 5 เทิร์น)
+  // à¹à¸šà¸—à¹à¸¡à¸™ (à¹€à¸šà¸™ à¹à¸­à¸Ÿà¹€à¸Ÿà¸¥à¹‡à¸) patch 2.2.7: à¹€à¸žà¸¥à¸‡à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡à¸—à¹ˆà¸²à¹„à¸¡à¹‰à¸•à¸²à¸¢ "à¹€à¸‚à¹‰à¸²à¸¡à¸²à¹€à¸¥à¸¢" à¸—à¸³à¸‡à¸²à¸™ (à¸¥à¹ˆà¸­à¹€à¸›à¹‰à¸² 5 à¹€à¸—à¸´à¸£à¹Œà¸™)
   bat_ben: "/characters/bat_ben/bat_ben_theme.mp3",
-  // เจ้าหญิงราก (เรียวกิ ชิกิ) patch 2.2.7: เพลงระหว่างท่าไม้ตาย "ทุกอย่างจะต้องราบรื่น" ทำงาน
+  // à¹€à¸ˆà¹‰à¸²à¸«à¸à¸´à¸‡à¸£à¸²à¸ (à¹€à¸£à¸µà¸¢à¸§à¸à¸´ à¸Šà¸´à¸à¸´) patch 2.2.7: à¹€à¸žà¸¥à¸‡à¸£à¸°à¸«à¸§à¹ˆà¸²à¸‡à¸—à¹ˆà¸²à¹„à¸¡à¹‰à¸•à¸²à¸¢ "à¸—à¸¸à¸à¸­à¸¢à¹ˆà¸²à¸‡à¸ˆà¸°à¸•à¹‰à¸­à¸‡à¸£à¸²à¸šà¸£à¸·à¹ˆà¸™" à¸—à¸³à¸‡à¸²à¸™
   p_shiki: "/characters/princess_shiki/p_shiki_theme.m4a",
   trigger: "/characters/ultraman_trigger/trigger_theme.mp3",
+  hisakawa_sunday: "/characters/hisakawa_sister/skill3/O-Ku-Ri-Mo-No.mp3",
+  hisakawa_nagi_1: "/characters/hisakawa_sister/voice/nagi/nagi_voice.m4a",
+  hisakawa_nagi_2: "/characters/hisakawa_sister/voice/nagi/nagi_voice2.m4a",
+  hisakawa_nagi_3: "/characters/hisakawa_sister/voice/nagi/nagi_voice3.m4a",
+  hisakawa_hayate_1: "/characters/hisakawa_sister/voice/hayate_voice.m4a",
+  hisakawa_hayate_2: "/characters/hisakawa_sister/voice/hayate_voice2.m4a",
+  hisakawa_hayate_3: "/characters/hisakawa_sister/voice/hayate_voice3.m4a",
   action_button: "/effect_sound/action_button.wav",
   trun_change: "/effect_sound/trun_change.wav",
   attack: "/effect_sound/attack.wav",
 };
 
-// ระดับเสียงพื้นฐานต่อชนิด (ก่อนคูณ master) — บาลานซ์ให้ดังใกล้เคียงกัน
+// à¸£à¸°à¸”à¸±à¸šà¹€à¸ªà¸µà¸¢à¸‡à¸žà¸·à¹‰à¸™à¸à¸²à¸™à¸•à¹ˆà¸­à¸Šà¸™à¸´à¸” (à¸à¹ˆà¸­à¸™à¸„à¸¹à¸“ master) â€” à¸šà¸²à¸¥à¸²à¸™à¸‹à¹Œà¹ƒà¸«à¹‰à¸”à¸±à¸‡à¹ƒà¸à¸¥à¹‰à¹€à¸„à¸µà¸¢à¸‡à¸à¸±à¸™
 const MUSIC_BASE = 0.55;
 const SFX_BASE = 0.85;
 const CLICK_BASE = 0.55;
 const VIDEO_BASE = 0.8;
 
-// เพลงบางเพลงต้นฉบับดังกว่าเพลงอื่นมาก (เพลงคุวากาตะทั้ง 2 แบบ) — ลดเฉพาะตัวให้สมดุลกับเพลงอื่น
+// à¹€à¸žà¸¥à¸‡à¸šà¸²à¸‡à¹€à¸žà¸¥à¸‡à¸•à¹‰à¸™à¸‰à¸šà¸±à¸šà¸”à¸±à¸‡à¸à¸§à¹ˆà¸²à¹€à¸žà¸¥à¸‡à¸­à¸·à¹ˆà¸™à¸¡à¸²à¸ (à¹€à¸žà¸¥à¸‡à¸„à¸¸à¸§à¸²à¸à¸²à¸•à¸°à¸—à¸±à¹‰à¸‡ 2 à¹à¸šà¸š) â€” à¸¥à¸”à¹€à¸‰à¸žà¸²à¸°à¸•à¸±à¸§à¹ƒà¸«à¹‰à¸ªà¸¡à¸”à¸¸à¸¥à¸à¸±à¸šà¹€à¸žà¸¥à¸‡à¸­à¸·à¹ˆà¸™
 const MUSIC_TRACK_SCALE = {
-  final_normal: 0.6, // สวมเกราะราชัน
+  final_normal: 0.6, // à¸ªà¸§à¸¡à¹€à¸à¸£à¸²à¸°à¸£à¸²à¸Šà¸±à¸™
   ex_guts: 0.6,       // Beat Mode
 };
 function trackVolume(name) {
   return MUSIC_BASE * (MUSIC_TRACK_SCALE[name] ?? 1) * vcurve();
 }
 
-// ---------- master volume (จำค่าไว้ใน localStorage) ----------
+// ---------- master volume (à¸ˆà¸³à¸„à¹ˆà¸²à¹„à¸§à¹‰à¹ƒà¸™ localStorage) ----------
 let masterVolume = 0.8;
 try {
   const saved = parseFloat(localStorage.getItem("echo_vol"));
@@ -116,11 +123,11 @@ try {
 } catch {}
 const volListeners = new Set();
 
-// curve ยกกำลังสอง: หูคนรับรู้ความดังแบบ log — ทำให้เลื่อนหลอดแล้วรู้สึกเปลี่ยนจริง
+// curve à¸¢à¸à¸à¸³à¸¥à¸±à¸‡à¸ªà¸­à¸‡: à¸«à¸¹à¸„à¸™à¸£à¸±à¸šà¸£à¸¹à¹‰à¸„à¸§à¸²à¸¡à¸”à¸±à¸‡à¹à¸šà¸š log â€” à¸—à¸³à¹ƒà¸«à¹‰à¹€à¸¥à¸·à¹ˆà¸­à¸™à¸«à¸¥à¸­à¸”à¹à¸¥à¹‰à¸§à¸£à¸¹à¹‰à¸ªà¸¶à¸à¹€à¸›à¸¥à¸µà¹ˆà¸¢à¸™à¸ˆà¸£à¸´à¸‡
 const vcurve = () => masterVolume * masterVolume;
 
 export function getMasterVolume() { return masterVolume; }
-export function videoVolume() { return VIDEO_BASE * vcurve(); } // ให้ <video> ใช้ (ผ่าน curve เดียวกัน)
+export function videoVolume() { return VIDEO_BASE * vcurve(); } // à¹ƒà¸«à¹‰ <video> à¹ƒà¸Šà¹‰ (à¸œà¹ˆà¸²à¸™ curve à¹€à¸”à¸µà¸¢à¸§à¸à¸±à¸™)
 export function onVolumeChange(fn) { volListeners.add(fn); return () => volListeners.delete(fn); }
 export function setMasterVolume(v) {
   masterVolume = Math.max(0, Math.min(1, v));
@@ -130,9 +137,9 @@ export function setMasterVolume(v) {
 }
 
 let currentMusic = null;
-// seq ล่าสุด "ต่อเพลง" (ไม่ใช่ต่อการสลับเพลง): จำไว้แม้เพลงถูกพัก/สลับออก
-// -> กลับมาเล่นเพลงเดิมด้วย seq เดิม (เช่น หลังจบ cutscene ของคนอื่น) = เล่นต่อจากจุดเดิม ไม่เริ่มใหม่
-// -> seq ใหม่ (เปิดท่าครั้งใหม่ / คนอื่นเปิดท่าเพลงเดียวกันทับ) = เริ่มจากต้น
+// seq à¸¥à¹ˆà¸²à¸ªà¸¸à¸” "à¸•à¹ˆà¸­à¹€à¸žà¸¥à¸‡" (à¹„à¸¡à¹ˆà¹ƒà¸Šà¹ˆà¸•à¹ˆà¸­à¸à¸²à¸£à¸ªà¸¥à¸±à¸šà¹€à¸žà¸¥à¸‡): à¸ˆà¸³à¹„à¸§à¹‰à¹à¸¡à¹‰à¹€à¸žà¸¥à¸‡à¸–à¸¹à¸à¸žà¸±à¸/à¸ªà¸¥à¸±à¸šà¸­à¸­à¸
+// -> à¸à¸¥à¸±à¸šà¸¡à¸²à¹€à¸¥à¹ˆà¸™à¹€à¸žà¸¥à¸‡à¹€à¸”à¸´à¸¡à¸”à¹‰à¸§à¸¢ seq à¹€à¸”à¸´à¸¡ (à¹€à¸Šà¹ˆà¸™ à¸«à¸¥à¸±à¸‡à¸ˆà¸š cutscene à¸‚à¸­à¸‡à¸„à¸™à¸­à¸·à¹ˆà¸™) = à¹€à¸¥à¹ˆà¸™à¸•à¹ˆà¸­à¸ˆà¸²à¸à¸ˆà¸¸à¸”à¹€à¸”à¸´à¸¡ à¹„à¸¡à¹ˆà¹€à¸£à¸´à¹ˆà¸¡à¹ƒà¸«à¸¡à¹ˆ
+// -> seq à¹ƒà¸«à¸¡à¹ˆ (à¹€à¸›à¸´à¸”à¸—à¹ˆà¸²à¸„à¸£à¸±à¹‰à¸‡à¹ƒà¸«à¸¡à¹ˆ / à¸„à¸™à¸­à¸·à¹ˆà¸™à¹€à¸›à¸´à¸”à¸—à¹ˆà¸²à¹€à¸žà¸¥à¸‡à¹€à¸”à¸µà¸¢à¸§à¸à¸±à¸™à¸—à¸±à¸š) = à¹€à¸£à¸´à¹ˆà¸¡à¸ˆà¸²à¸à¸•à¹‰à¸™
 const musicSeq = {};
 const musicCache = {};
 function getMusic(name) {
@@ -145,31 +152,31 @@ function getMusic(name) {
   return musicCache[name];
 }
 
-// seq: identity ของการเปิดเพลงสกิล — เปิดท่าใหม่/คนใหม่ทับเพลงเดิม = seq ใหม่ -> เริ่มจากต้น
-// เพลงทั่วไป (main_home / card_prepare_turn) ไม่ส่ง seq -> เล่นต่อจากจุดเดิม (เฉพาะในแมตช์)
+// seq: identity à¸‚à¸­à¸‡à¸à¸²à¸£à¹€à¸›à¸´à¸”à¹€à¸žà¸¥à¸‡à¸ªà¸à¸´à¸¥ â€” à¹€à¸›à¸´à¸”à¸—à¹ˆà¸²à¹ƒà¸«à¸¡à¹ˆ/à¸„à¸™à¹ƒà¸«à¸¡à¹ˆà¸—à¸±à¸šà¹€à¸žà¸¥à¸‡à¹€à¸”à¸´à¸¡ = seq à¹ƒà¸«à¸¡à¹ˆ -> à¹€à¸£à¸´à¹ˆà¸¡à¸ˆà¸²à¸à¸•à¹‰à¸™
+// à¹€à¸žà¸¥à¸‡à¸—à¸±à¹ˆà¸§à¹„à¸› (main_home / card_prepare_turn) à¹„à¸¡à¹ˆà¸ªà¹ˆà¸‡ seq -> à¹€à¸¥à¹ˆà¸™à¸•à¹ˆà¸­à¸ˆà¸²à¸à¸ˆà¸¸à¸”à¹€à¸”à¸´à¸¡ (à¹€à¸‰à¸žà¸²à¸°à¹ƒà¸™à¹à¸¡à¸•à¸Šà¹Œ)
 export function playMusic(name, seq) {
   if (!FILES[name]) return;
   const a = getMusic(name);
-  // seq เดิมของเพลงนี้ (จำข้ามการพัก/สลับเพลง) — เปลี่ยนเมื่อไหร่ค่อยเริ่มเพลงใหม่จากต้น
+  // seq à¹€à¸”à¸´à¸¡à¸‚à¸­à¸‡à¹€à¸žà¸¥à¸‡à¸™à¸µà¹‰ (à¸ˆà¸³à¸‚à¹‰à¸²à¸¡à¸à¸²à¸£à¸žà¸±à¸/à¸ªà¸¥à¸±à¸šà¹€à¸žà¸¥à¸‡) â€” à¹€à¸›à¸¥à¸µà¹ˆà¸¢à¸™à¹€à¸¡à¸·à¹ˆà¸­à¹„à¸«à¸£à¹ˆà¸„à¹ˆà¸­à¸¢à¹€à¸£à¸´à¹ˆà¸¡à¹€à¸žà¸¥à¸‡à¹ƒà¸«à¸¡à¹ˆà¸ˆà¸²à¸à¸•à¹‰à¸™
   const isNewSeq = seq != null && seq !== musicSeq[name];
   if (isNewSeq) {
     musicSeq[name] = seq;
-    a.currentTime = 0; // การเปิดร่างครั้งใหม่ (กดใหม่/โดนคนอื่นทับ) -> เริ่มจากต้น
+    a.currentTime = 0; // à¸à¸²à¸£à¹€à¸›à¸´à¸”à¸£à¹ˆà¸²à¸‡à¸„à¸£à¸±à¹‰à¸‡à¹ƒà¸«à¸¡à¹ˆ (à¸à¸”à¹ƒà¸«à¸¡à¹ˆ/à¹‚à¸”à¸™à¸„à¸™à¸­à¸·à¹ˆà¸™à¸—à¸±à¸š) -> à¹€à¸£à¸´à¹ˆà¸¡à¸ˆà¸²à¸à¸•à¹‰à¸™
   }
   if (currentMusic === name) {
-    if (isNewSeq || a.paused) a.play().catch(() => {}); // ไม่ใช่ seq ใหม่ = เล่นต่อจากตำแหน่งเดิม
+    if (isNewSeq || a.paused) a.play().catch(() => {}); // à¹„à¸¡à¹ˆà¹ƒà¸Šà¹ˆ seq à¹ƒà¸«à¸¡à¹ˆ = à¹€à¸¥à¹ˆà¸™à¸•à¹ˆà¸­à¸ˆà¸²à¸à¸•à¸³à¹à¸«à¸™à¹ˆà¸‡à¹€à¸”à¸´à¸¡
     return;
   }
-  if (currentMusic) getMusic(currentMusic).pause(); // พักเพลงเดิม เก็บตำแหน่งไว้ (ในแมตช์)
+  if (currentMusic) getMusic(currentMusic).pause(); // à¸žà¸±à¸à¹€à¸žà¸¥à¸‡à¹€à¸”à¸´à¸¡ à¹€à¸à¹‡à¸šà¸•à¸³à¹à¸«à¸™à¹ˆà¸‡à¹„à¸§à¹‰ (à¹ƒà¸™à¹à¸¡à¸•à¸Šà¹Œ)
   currentMusic = name;
-  a.play().catch(() => {}); // seq เดิม (เช่น กลับมาหลัง cutscene) -> เล่นต่อจากจุดเดิม ไม่เริ่มใหม่
+  a.play().catch(() => {}); // seq à¹€à¸”à¸´à¸¡ (à¹€à¸Šà¹ˆà¸™ à¸à¸¥à¸±à¸šà¸¡à¸²à¸«à¸¥à¸±à¸‡ cutscene) -> à¹€à¸¥à¹ˆà¸™à¸•à¹ˆà¸­à¸ˆà¸²à¸à¸ˆà¸¸à¸”à¹€à¸”à¸´à¸¡ à¹„à¸¡à¹ˆà¹€à¸£à¸´à¹ˆà¸¡à¹ƒà¸«à¸¡à¹ˆ
 }
 export function stopMusic() {
   if (!currentMusic) return;
-  getMusic(currentMusic).pause(); // พักไว้ ไม่รีเซ็ต -> กลับมาเล่นต่อจากจุดเดิม (ในแมตช์)
+  getMusic(currentMusic).pause(); // à¸žà¸±à¸à¹„à¸§à¹‰ à¹„à¸¡à¹ˆà¸£à¸µà¹€à¸‹à¹‡à¸• -> à¸à¸¥à¸±à¸šà¸¡à¸²à¹€à¸¥à¹ˆà¸™à¸•à¹ˆà¸­à¸ˆà¸²à¸à¸ˆà¸¸à¸”à¹€à¸”à¸´à¸¡ (à¹ƒà¸™à¹à¸¡à¸•à¸Šà¹Œ)
   currentMusic = null;
 }
-// เริ่มเกมใหม่ / จบแมตช์: รีเซ็ตตำแหน่งเพลงทุกเพลง -> ครั้งถัดไปเริ่มจากต้นทั้งหมด
+// à¹€à¸£à¸´à¹ˆà¸¡à¹€à¸à¸¡à¹ƒà¸«à¸¡à¹ˆ / à¸ˆà¸šà¹à¸¡à¸•à¸Šà¹Œ: à¸£à¸µà¹€à¸‹à¹‡à¸•à¸•à¸³à¹à¸«à¸™à¹ˆà¸‡à¹€à¸žà¸¥à¸‡à¸—à¸¸à¸à¹€à¸žà¸¥à¸‡ -> à¸„à¸£à¸±à¹‰à¸‡à¸–à¸±à¸”à¹„à¸›à¹€à¸£à¸´à¹ˆà¸¡à¸ˆà¸²à¸à¸•à¹‰à¸™à¸—à¸±à¹‰à¸‡à¸«à¸¡à¸”
 export function resetMusicPositions() {
   for (const a of Object.values(musicCache)) {
     a.pause();
@@ -186,7 +193,7 @@ export function playSfx(name) {
 }
 export function clickSound() { playSfx("action_button"); }
 
-// DoomGuy (patch 2.2 full): อาวุธ id (ตาม server) -> ชื่อไฟล์เสียงยิง/เสียงสกิลใน FILES ด้านบน
+// DoomGuy (patch 2.2 full): à¸­à¸²à¸§à¸¸à¸˜ id (à¸•à¸²à¸¡ server) -> à¸Šà¸·à¹ˆà¸­à¹„à¸Ÿà¸¥à¹Œà¹€à¸ªà¸µà¸¢à¸‡à¸¢à¸´à¸‡/à¹€à¸ªà¸µà¸¢à¸‡à¸ªà¸à¸´à¸¥à¹ƒà¸™ FILES à¸”à¹‰à¸²à¸™à¸šà¸™
 export const DOOM_WEAPON_SOUNDS = {
   shotgun: { shoot: "doomguy_cs_shoot", skill: "doomguy_cs_skill" },
   heavy: { shoot: "doomguy_hc_shoot", skill: "doomguy_hc_skill" },

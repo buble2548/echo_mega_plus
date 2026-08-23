@@ -74,10 +74,10 @@ test('applyGearDown: no heal when already at gear 1 (no-op press)', () => {
   assert.equal(p.hp, 3, 'no heal — was already at floor');
 });
 
-test('activateBlackout: sets takumiBlackout status to 5 turns and resets the fired guard', () => {
+test('activateBlackout: sets takumiBlackout status to 3 turns and resets the fired guard', () => {
   const p = mkPlayer({ takumiBlackoutFired: true });
   takumi.activateBlackout(engine, p);
-  assert.equal(p.statuses.takumiBlackout, 5);
+  assert.equal(p.statuses.takumiBlackout, 3);
   assert.equal(p.takumiBlackoutFired, false);
 });
 
@@ -101,7 +101,7 @@ test('tryBustTrigger: no-op if nobody busted this round', () => {
   takumi.activateBlackout(engine, t);
   const other = mkPlayer({ characterId: 'tohno', cards: [{ value: 10 }] });
   takumi.tryBustTrigger(engine);
-  assert.equal(t.statuses.takumiBlackout, 5, 'blackout still active — nobody busted');
+  assert.equal(t.statuses.takumiBlackout, 3, 'blackout still active — nobody busted');
   assert.equal(other.hp, 5, 'untouched');
 });
 

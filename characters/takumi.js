@@ -67,31 +67,35 @@ module.exports = {
   // เรียกจาก afterResolve() (หลังผลแพ้/ชนะ/ดาเมจปกติของรอบเกิดก่อนแล้ว) — คนแรกที่ไพ่แตกระหว่างบัฟยังทำงาน
   //  (เรียงตามลำดับที่นั่ง — เอาแค่คนแรก) โดนดาเมจ 3 หน่วย (เจาะเกราะก่อน) + ผุพัง 3 เทิร์น แล้วจบสถานะทันที
   tryBustTrigger(engine) {
-    const takumi = engine.alivePlayers().find(
+    const takumis = engine.alivePlayers().filter(
       (p) => p.characterId === "takumi" && (p.statuses.takumiBlackout || 0) > 0 && !p.takumiBlackoutFired
     );
-    if (!takumi) return;
+    if (!takumis.length) return;
     const seated = Object.values(engine.players || {}).filter((p) => p.alive).sort((a, b) => a.position - b.position);
     const target = seated.find((p) => engine.bustedOf(p));
     if (!target) return;
-    takumi.takumiBlackoutFired = true;
-    engine.queueCutscene(takumi, "takumiBlackoutBust");
-    engine.dealMixed(target, TAKUMI_BLACKOUT_DMG, true);
-    engine.maybeBeatSave(target); engine.maybeBeatMode(target); engine.maybeEva3(target); engine.maybeWakeKotone(target);
-    target.wasAttacked = true;
-    if (target.alive && target.hp <= 0) {
-      engine.instantDeath(target);
-      if (!target.alive) engine.log(`💀 ${target.name} เลือดจริงหมด ตกรอบ!`);
-    }
-    if (target.alive) {
-      if (engine.applyDebuff(target, "decay", null, TAKUMI_BLACKOUT_DECAY_TURNS)) {
-        engine.log(`🌑💥 ${takumi.name} ถึงจะมองไม่เห็น แต่ฉันยังอยู่ — ${target.name} ไพ่แตกก่อนใคร! รับดาเมจ -${TAKUMI_BLACKOUT_DMG} (เจาะเกราะก่อน) และติดผุพัง ${TAKUMI_BLACKOUT_DECAY_TURNS} เทิร์น`);
-      } else {
-        engine.log(`🌑🛡️ ${takumi.name} ถึงจะมองไม่เห็น แต่ฉันยังอยู่ — ${target.name} รับดาเมจ -${TAKUMI_BLACKOUT_DMG} แต่ต้านสถานะผิดปกติ ไม่ติดผุพัง`);
+    for (const takumi of takumis) {
+      takumi.takumiBlackoutFired = true;
+      engine.queueCutscene(takumi, "takumiBlackoutBust");
+      if (target.alive) {
+        engine.dealMixed(target, TAKUMI_BLACKOUT_DMG, true);
+        engine.maybeBeatSave(target); engine.maybeBeatMode(target); engine.maybeEva3(target); engine.maybeWakeKotone(target);
+        target.wasAttacked = true;
+        if (target.alive && target.hp <= 0) {
+          engine.instantDeath(target);
+          if (!target.alive) engine.log(`💀 ${target.name} เลือดจริงหมด ตกรอบ!`);
+        }
+        if (target.alive) {
+          if (engine.applyDebuff(target, "decay", null, TAKUMI_BLACKOUT_DECAY_TURNS)) {
+            engine.log(`🌑💥 ${takumi.name} ถึงจะมองไม่เห็น แต่ฉันยังอยู่ — ${target.name} ไพ่แตกก่อนใคร! รับดาเมจ -${TAKUMI_BLACKOUT_DMG} (เจาะเกราะก่อน) และติดผุพัง ${TAKUMI_BLACKOUT_DECAY_TURNS} เทิร์น`);
+          } else {
+            engine.log(`🌑🛡️ ${takumi.name} ถึงจะมองไม่เห็น แต่ฉันยังอยู่ — ${target.name} รับดาเมจ -${TAKUMI_BLACKOUT_DMG} แต่ต้านสถานะผิดปกติ ไม่ติดผุพัง`);
+          }
+        }
       }
+      delete takumi.statuses.takumiBlackout;
+      if (takumi.statusAmt) delete takumi.statusAmt.takumiBlackout;
+      engine.log(`🌑 ${takumi.name} บังตากระดานสิ้นสุดลง — กลับมามองเห็นกันได้ตามปกติ`);
     }
-    delete takumi.statuses.takumiBlackout;
-    if (takumi.statusAmt) delete takumi.statusAmt.takumiBlackout;
-    engine.log(`🌑 ${takumi.name} บังตากระดานสิ้นสุดลง — กลับมามองเห็นกันได้ตามปกติ`);
   },
 };

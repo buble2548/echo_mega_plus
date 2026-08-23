@@ -40,15 +40,17 @@ module.exports = {
     if (!p || !p.alive) return;
     if (((p.statuses && p.statuses.moonmark) || 0) <= 0) return;
     if (!engine.bustedOf(p)) return;
+    const hits = Math.max(1, Object.keys(p.moonMarksBy || {}).length);
     delete p.statuses.moonmark;
-    engine.dealMixed(p, 1);
-    engine.maybeBeatSave(p); engine.maybeBeatMode(p); engine.maybeEva3(p); engine.maybeWakeKotone(p);
-    p.wasAttacked = true;
-    engine.log(`🌕💥 แสงจันทร์ส่องวิญญาณ — ${p.name} ไพ่แตก! รับความเสียหาย -1 ทันที`);
-    if (p.alive && p.hp <= 0) {
-      engine.instantDeath(p);
-      if (!p.alive) engine.log(`💀 ${p.name} เลือดจริงหมด ตกรอบ!`);
+    delete p.moonMarksBy;
+    for (let i = 0; i < hits && p.alive; i++) {
+      engine.dealMixed(p, 1);
+      engine.maybeBeatSave(p); engine.maybeBeatMode(p); engine.maybeEva3(p); engine.maybeWakeKotone(p);
+      if (p.alive && p.hp <= 0) engine.instantDeath(p);
     }
+    p.wasAttacked = true;
+    engine.log(`🌕💥 แสงจันทร์ส่องวิญญาณ — ${p.name} ไพ่แตก! ตราจันทร์ ${hits} ดวงระเบิด รับความเสียหาย -${hits} ทันที`);
+    if (!p.alive) engine.log(`💀 ${p.name} เลือดจริงหมด ตกรอบ!`);
   },
 
   // เรียกจาก dealRound() ตอนสลับเป็นกลางคืน — เสียงไพเราะที่กึกก้อง: เข้ากลางคืนพร้อมท่วงทำนองครบ 5 -> เล่นวีดีโอเปิดตัว
@@ -92,7 +94,12 @@ module.exports = {
         ? `🛡️ ${t.name} ต้านสถานะผิดปกติ — ไม่ถูกเปิดแต้มการ์ด — ${p.name} ยังได้ท่วงทำนอง +2 (สะสม ${p.statuses.melody}/${SHRADE_MELODY_MAX})`
         : `🌕 ${p.name} แสงจันทร์ส่องวิญญาณ — เปิดแต้มการ์ดของ ${t.name} ให้ทุกคนเห็น และท่วงทำนอง +2 (สะสม ${p.statuses.melody}/${SHRADE_MELODY_MAX})`);
     } else {
-      if (!resisted) t.statuses.moonmark = 1; // แตกเมื่อไหร่ เจ็บ 1 ทันที (หมดผลตอนจบเทิร์น)
+      if (!resisted) {
+        if (!((t.statuses.moonmark || 0) > 0)) t.moonMarksBy = {};
+        t.moonMarksBy = t.moonMarksBy || {};
+        t.moonMarksBy[p.id] = true;
+        t.statuses.moonmark = Object.keys(t.moonMarksBy).length;
+      }
       engine.log(resisted
         ? `🛡️ ${t.name} ต้านสถานะผิดปกติ — แสงจันทร์ส่องวิญญาณ (สปาด้า) ไม่มีผล`
         : `🌕 ${p.name} แสงจันทร์ส่องวิญญาณ (สปาด้า) — เปิดแต้มการ์ดของ ${t.name} ให้ทุกคนเห็น หากไพ่แตกในเทิร์นนี้จะรับความเสียหาย 1 หน่วยทันที`);

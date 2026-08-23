@@ -145,9 +145,12 @@ module.exports = {
 
   // เรียกจาก doAttack() ตอนเลือกเป้าหมาย — ไม่อยากให้ใครต้องเจ็บปวด: หาผู้ล่อเป้า คืน player หรือ null
   findTaunter(engine, attacker) {
-    return engine.alivePlayers().find(
+    return this.findTaunters(engine, attacker)[0] || null;
+  },
+  findTaunters(engine, attacker) {
+    return engine.alivePlayers().filter(
       (r) => r.id !== attacker.id && r.characterId === "phenex" && (r.statuses.phenexTaunt || 0) > 0 && !engine.sealActive(r)
-    ) || null;
+    );
   },
 
   // เรียกจาก doAttack() หลังคำนวณดาเมจ — ฝันไปเถอะ: สะท้อนความเสียหายทั้งหมดกลับผู้โจมตีแทนที่จะรับเอง (จบการโจมตีทันที)

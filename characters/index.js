@@ -1,10 +1,7 @@
 // ============================================================
-//  ไฟล์มัดรวม (bundle) — รวมทุกไฟล์สคริปต์ตัวละครที่แยกออกมาจาก server.js
-//  ใน server.js เรียกใช้ผ่าน CHAR_HOOKS[characterId] เท่านั้น
-//
-//  หมายเหตุ (สถานะ ณ วันที่เริ่มโปรเจกต์): ตัวละครส่วนใหญ่ยังอยู่ใน server.js
-//  ตามเดิม (useSkill()/doAttack() ยังเป็นไฟล์เดียวสำหรับตัวที่ยังไม่ได้ย้าย) —
-//  นี่คือโปรเจกต์แยกที่ทยอยย้ายทีละตัวละคร ไม่ได้ทำเสร็จในครั้งเดียว
+// Character hook bundle used by server.js as CHAR_HOOKS[characterId].
+// Most legacy character logic still lives in server.js; modules here are
+// gradually extracted per character.
 // ============================================================
 
 const tohno = require("./tohno");
@@ -37,6 +34,9 @@ const takumi = require("./takumi");
 const bat_ben = require("./bat_ben");
 const princess_shiki = require("./princess_shiki");
 const ultraman_trigger = require("./ultraman_trigger");
+const escanor = require("./escanor");
+const hisakawa_sister = require("./hisakawa_sister");
+const ignis = require("./ignis");
 
 const CHARACTER_MODULES = [
   tohno,
@@ -69,6 +69,9 @@ const CHARACTER_MODULES = [
   bat_ben,
   princess_shiki,
   ultraman_trigger,
+  escanor,
+  hisakawa_sister,
+  ignis,
 ];
 
 const CHAR_HOOKS = {};
