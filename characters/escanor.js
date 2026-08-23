@@ -49,6 +49,25 @@ function displayImg(p) {
   if (form === "night") return IMG.night;
   return IMG.morning;
 }
+function pushEscanorCutscene(engine, p, info) {
+  if (!info || (!info.video && !info.img)) return;
+  if (typeof engine?.pushCutsceneRaw !== "function") return;
+  engine.pushCutsceneRaw({
+    seconds: info.seconds || 8,
+    info: {
+      playerId: p.id,
+      name: p.name,
+      img: info.img || null,
+      color: engine.colorOf?.(p) || "#888",
+      video: info.video || null,
+      title: info.title || "",
+      label: info.label || "",
+      voice: info.voice || null,
+      music: info.music || null,
+    },
+  });
+}
+
 function setStatus(p, key, turns, amount) {
   p.statuses = p.statuses || {};
   p.statusAmt = p.statusAmt || {};
@@ -67,7 +86,7 @@ function enterForm(engine, p, form) {
   if (form === "morning") {
     setStatus(p, "escanorMorning", 999, 1);
     p.escanorForcedMorning = Math.max(0, p.escanorForcedMorning || 0);
-    if (old !== "morning") engine.triggerCutscene?.({ img: IMG.morning, video: FX.morning, title: "ESCANOR", label: "Morning Form", seconds: 8, music: null });
+    if (old !== "morning") pushEscanorCutscene(engine, p, { img: IMG.morning, video: FX.morning, title: "ESCANOR", label: "Morning Form", seconds: 8, music: null });
   } else if (form === "night") {
     setStatus(p, "escanorNight", 999, 1);
   } else if (form === "noon") {
@@ -167,7 +186,7 @@ function addWine(p, level = 1) {
   p.inventory.push({ type: "wineBarrel", name: `WineBarrel ${"I".repeat(level)}`, level, age: 0, img: "/characters/escanor/สกิลพื้นฐาน/Barrel.png" });
   return true;
 }
-function wineSellPrice(level) { return 4 + Math.max(1, Math.min(4, level || 1)); }
+function wineSellPrice(level) { return 1 + Math.max(1, Math.min(4, level || 1)); }
 
 function onRoundStartTick(engine, p, prevNight) {
   if (!p || p.characterId !== ID || !p.alive) return;
@@ -212,7 +231,7 @@ function onEndTurnSolar(engine, p) {
     p.escanorCharge = Math.max(0, (p.escanorCharge || 0) - 1);
     if (p.escanorCharge <= 0) enterForm(engine, p, isMorningTime(engine) ? "morning" : "night");
   }
-  if (isMorningTime(engine) && formOf(p) === "morning" && !p.didAttackRound && !p.isLoser && !p.busted) addSolar(p, 1);
+  if (isMorningTime(engine) && formOf(p) === "morning" && (p.isLoser || !p.didAttackRound)) addSolar(p, 1);
   if (p.statuses?.escanorSolar > 0) {
     p.escanorSolarIdle = (p.escanorSolarIdle || 0) + 1;
     if (p.escanorSolarIdle >= 3) useSolar(p, p.statuses.escanorSolar);
@@ -307,7 +326,7 @@ function tryNoonRevive(engine, p) {
   clearForms(p);
   setStatus(p, "escanorLastStand", 999, 1);
   addBurn(engine, p, 4, "Last Stand");
-  engine.triggerCutscene?.({ img: IMG.last, video: FX.last, title: "LAST STAND", label: "คืนชีพ", seconds: 10, music: null });
+  pushEscanorCutscene(engine, p, { img: IMG.last, video: FX.last, title: "LAST STAND", label: "คืนชีพ", seconds: 10, music: null });
   engine.log?.(`☀️ ${p.name} ฟื้นคืนชีพเข้าสู่ Last Stand!`);
   return true;
 }
@@ -345,7 +364,7 @@ function applySkill(engine, p, tier, targets) {
     if (form === "night") { addWine(p, 1); engine.log?.(`🍷 ${p.name} หมัก WineBarrel +1`); return; }
     if (form === "last") { setStatus(p, "escanorSpearBurst", 1, 1); return; }
     if (!t) return;
-    engine.triggerCutscene?.({ img: "/characters/escanor/สกิลพื้นฐาน/สกิลพื้นฐาน 1 บอลเพลิงสุริยะ.png.jpg", video: FX.basic1, title: "SUN FIREBALL", label: "สกิล", seconds: 8, music: null });
+    pushEscanorCutscene(engine, p, { img: "/characters/escanor/สกิลพื้นฐาน/สกิลพื้นฐาน 1 บอลเพลิงสุริยะ.png.jpg", video: FX.basic1, title: "SUN FIREBALL", label: "สกิล", seconds: 8, music: null });
     engine.dealMixed(t, 1);
     addBurn(engine, t, form === "noon" ? 2 : 1, "บอลเพลิงสุริยะ");
     return;
@@ -367,7 +386,7 @@ function applySkill(engine, p, tier, targets) {
       return;
     }
     setStatus(p, "escanorFlare", 999, 1);
-    engine.triggerCutscene?.({ img: "/characters/escanor/สกิลรอง/สกิลรอง 1 เพลิงปะทุ.jpg", video: FX.secondary1, title: "FLARE", label: "สกิลรอง", seconds: 8, music: null });
+    pushEscanorCutscene(engine, p, { img: "/characters/escanor/สกิลรอง/สกิลรอง 1 เพลิงปะทุ.jpg", video: FX.secondary1, title: "FLARE", label: "สกิลรอง", seconds: 8, music: null });
     return;
   }
   if (tier === "ultimate") {

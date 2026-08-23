@@ -2378,7 +2378,7 @@ function hasGutsGun(p) {
   return (p.inventory || []).some((it) => it.type === "gutsGun");
 }
 function hasBlackSparklence(p) {
-  return p && p.characterId === "ignis" && (p.inventory || []).some((it) => it.type === "blackSparklence");
+  return p && (p.inventory || []).some((it) => it.type === "blackSparklence");
 }
 function hasGutsWeapon(p) {
   return hasGutsGun(p) || hasBlackSparklence(p);
@@ -2392,8 +2392,8 @@ function buyShopItem(id, itemId) {
   if (!item || item.sold) return;
   if ((p.gold || 0) < item.price) return;
   p.inventory = p.inventory || [];
-  if (item.type === "gutsGun" && (hasGutsGun(p) || p.characterId === "ignis")) return;
-  if (item.type === "gutsAmmo" && item.ammo === "hyper_trigger" && p.characterId === "ignis") return;
+  if (item.type === "gutsGun" && (hasGutsGun(p) || p.characterId === "ignis" || hasBlackSparklence(p))) return;
+  if (item.type === "gutsAmmo" && item.ammo === "hyper_trigger" && (p.characterId === "ignis" || hasBlackSparklence(p))) return;
   if (item.type === "gutsAmmo" && (item.ammo === "hyper_trigger" || item.ammo === "trigger_dark_key") && p.inventory.some((it) => it.type === "gutsAmmo" && it.ammo === item.ammo)) return;
   item.sold = true;
   item.soldTo = p.id;
@@ -2457,7 +2457,7 @@ function useInventoryItem(id, uid, opts = {}) {
   } else if (item.type === "gutsAmmo") {
     if (item.ammo === "hyper_trigger") {
       const readyRound = p.hyperTriggerReadyRound || 0;
-      if (gameState !== "PLAYING" || p.locked || !hasGutsGun(p) || p.gutsShotTurn === roundNumber || p.characterId === "ultraman_trigger" || p.characterId === "ignis" || roundNumber < readyRound) return;
+      if (gameState !== "PLAYING" || p.locked || !hasGutsGun(p) || p.gutsShotTurn === roundNumber || p.characterId === "ultraman_trigger" || p.characterId === "ignis" || hasBlackSparklence(p) || roundNumber < readyRound) return;
       if (!CHAR_HOOKS.ultraman_trigger.activate(engine, p)) return;
       p.gutsShotTurn = roundNumber;
       pausePlayingForCutscene();

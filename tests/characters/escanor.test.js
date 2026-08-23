@@ -104,15 +104,41 @@ test('Last Stand basic skill resolves after reveal as a random three-target burs
   assert.equal(p.statuses.hburn, 1);
 });
 
-test('morning Solar is granted only when Escanor did not attack, did not bust, and was not lowest', () => {
-  const p = mkPlayer({ statuses: { escanorMorning: 999 }, statusAmt: { escanorMorning: 1 } });
-  const engine = mkEngine({ p1: p });
-  escanor.onEndTurnSolar(engine, p);
-  assert.equal(p.statuses.escanorSolar, 1);
+test('Morning Solar is granted when Escanor loses or does not attack', () => {
+  const idle = mkPlayer({ statuses: { escanorMorning: 999 }, statusAmt: { escanorMorning: 1 } });
+  escanor.onEndTurnSolar(mkEngine({ p1: idle }), idle);
+  assert.equal(idle.statuses.escanorSolar, 1);
 
-  const busted = mkPlayer({ busted: true, statuses: { escanorMorning: 999 }, statusAmt: { escanorMorning: 1 } });
-  escanor.onEndTurnSolar(mkEngine({ p1: busted }), busted);
-  assert.equal(busted.statuses.escanorSolar || 0, 0);
+  const loser = mkPlayer({ didAttackRound: true, isLoser: true, statuses: { escanorMorning: 999 }, statusAmt: { escanorMorning: 1 } });
+  escanor.onEndTurnSolar(mkEngine({ p1: loser }), loser);
+  assert.equal(loser.statuses.escanorSolar, 1);
+
+  const winnerWhoAttacked = mkPlayer({ didAttackRound: true, isLoser: false, statuses: { escanorMorning: 999 }, statusAmt: { escanorMorning: 1 } });
+  escanor.onEndTurnSolar(mkEngine({ p1: winnerWhoAttacked }), winnerWhoAttacked);
+  assert.equal(winnerWhoAttacked.statuses.escanorSolar || 0, 0);
+});
+
+test('Morning or Noon basic skill hits the selected target', () => {
+  const p = mkPlayer({ statuses: { escanorMorning: 999 }, statusAmt: { escanorMorning: 1 } });
+  const t1 = mkTarget('p2');
+  const t2 = mkTarget('p3');
+  const engine = mkEngine({ p1: p, p2: t1, p3: t2 });
+
+  escanor.applySkill(engine, p, 'basic', ['p3']);
+
+  assert.equal(t1.hp, 3);
+  assert.equal(t2.hp, 2);
+  assert.equal(t2.statuses.hburn, 1);
+});
+
+test('WineBarrel sell prices are level plus one', () => {
+  for (const [level, price] of [[1, 2], [2, 3], [3, 4], [4, 5]]) {
+    const p = mkPlayer({ statuses: { escanorNight: 999 }, statusAmt: { escanorNight: 1 }, inventory: [{ type: 'wineBarrel', level }] });
+    const engine = mkEngine({ p1: p });
+    escanor.applySkill(engine, p, 'secondary', []);
+    assert.equal(p.gold, price, 'level ' + level);
+    assert.equal(p.inventory.length, 0);
+  }
 });
 
 test('all Escanor media paths referenced by code exist', () => {

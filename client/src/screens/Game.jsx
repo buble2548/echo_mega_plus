@@ -52,7 +52,7 @@ function isTargetable(p, iAmAttacker, c) {
   const self = p.id === c.myId;
   const normalAttackTarget = iAmAttacker && !friendly && !p.statuses?.seal && (!c.kaiRivalId || p.id === c.kaiRivalId);
   const gunTarget = !!c.gunSel && !self && !friendly;
-  return (normalAttackTarget || !!c.anataSel || c.dawnSel || c.appleSel || c.bbSel || c.shSel || c.skSel || c.doomSel || c.saObSel || c.ignisSel || c.bgSel || c.kawaiiSel || !!c.bardPending || c.nanayaSel || c.tpSel || c.kaiCreateSel || c.kaiPunishSel || c.msMarkSel || c.msRuptureSel || c.psSealSel || gunTarget) && p.alive;
+  return (normalAttackTarget || !!c.anataSel || c.dawnSel || c.appleSel || c.bbSel || c.shSel || c.skSel || c.doomSel || c.saObSel || c.escanorSel || c.ignisSel || c.bgSel || c.kawaiiSel || !!c.bardPending || c.nanayaSel || c.tpSel || c.kaiCreateSel || c.kaiPunishSel || c.msMarkSel || c.msRuptureSel || c.psSealSel || gunTarget) && p.alive;
 }
 // แตะ/คลิกการ์ดคู่ต่อสู้แล้วต้องทำอะไร — ไล่ตามโหมดเลือกเป้าหมายที่เปิดอยู่ ไม่มีเลยก็โจมตีปกติ
 function resolveAttackPick(id, c) {
@@ -64,6 +64,7 @@ function resolveAttackPick(id, c) {
   if (c.skSel) return c.pickSk(id);
   if (c.doomSel) return c.pickDoom(id);
   if (c.saObSel) return c.pickSaOb(id);
+  if (c.escanorSel) return c.pickEscanor(id);
   if (c.ignisSel) return c.pickIgnis(id);
   if (c.bgSel) return c.pickBg(id);
   if (c.kawaiiSel) return c.pickKawaii(id);
@@ -1106,6 +1107,12 @@ function statusEntries(p, full) {
   if ((p.coins || 0) > 0) out.push({ key: "coins", v: p.coins, icon: "🐷", label: "Coin", cls: "bg-echo-gold text-gray-900", desc: "กระปุกออมสินน้องหมูน้อย: coin สะสม (สูงสุด 6) — ตอนโจมตีแปลงเป็นความเสียหาย 3 coin = +1 (ใช้แล้วเหรียญหมดไป)" });
   // เหรียญ (gold) ไม่โชว์ในรายการสถานะอีกต่อไป — ปุ่มร้านค้าที่แผงตัวเองมีบอกอยู่แล้ว และไม่ควรให้ผู้เล่นอื่นเห็นเหรียญของเรา
   // โอกูริ แคป: Energy + Stamina ชาร์จ (โชว์เสมอ — ทรัพยากรหลักของตัวละคร แยกกัน 2 อย่าง)
+  if (p.character?.id === "escanor") {
+    const formName = { morning: "Morning", noon: "Noon", night: "Night", last: "Last Stand" }[p.escanorForm] || "Morning";
+    out.push({ key: "escanorFormInfo", v: 1, icon: "\u2600\uFE0F", label: `ร่าง ${formName}`, cls: p.escanorForm === "night" ? "bg-echo-cyan text-gray-900" : p.escanorForm === "last" ? "bg-echo-hp" : "bg-echo-gold text-gray-900", desc: "ร่างปัจจุบันของเอสคานอร์ สกิลจะเปลี่ยนตาม Morning, Night, Noon และ Last Stand" });
+    out.push({ key: "escanorChargeInfo", v: 1, icon: "\u{1F305}", label: `Sun Charge ${p.escanorCharge || 0}/${p.escanorChargeMax || 12}`, cls: "bg-echo-gold text-gray-900", desc: "เมื่อ Sun Charge เต็มจะเข้าสู่ร่าง Noon และจะลดลงระหว่างอยู่ในร่าง Noon" });
+    out.push({ key: "escanorSolarInfo", v: 1, icon: "\u2600\uFE0F", label: `Solar ${(p.statuses?.escanorSolar || 0)}/4`, cls: "bg-echo-gold text-gray-900", desc: "Solar จะเพิ่มในร่าง Morning เมื่อเอสคานอร์แพ้ไพ่หรือไม่ได้โจมตี และใช้กับท่าไม้ตายตอน Night" });
+  }
   if (p.character?.id === "oguri") {
     out.push({ key: "oguriEnergy", v: 1, icon: "⚡", label: `Energy ${p.oguriEnergy || 0}/16`, cls: "bg-echo-gold text-gray-900", desc: "Energy: ทรัพยากรของ Breakfast (+4/-2 ระหว่าง Burnout) และ Training (หัก 4) — สะสมสูงสุด 16 — Energy หมด + ไม่มียุคทอง = เข้าร่างหมดแรง (Burnout)" });
     out.push({ key: "stamina", v: 1, icon: "🏇", label: `Stamina ชาร์จ ${p.stamina || 0}/${p.oguriChargeCap || 52}`, cls: "bg-echo-cyan text-gray-900", desc: "Stamina ชาร์จ: ทรัพยากรของท่าไม้ตาย — ได้รับอัตโนมัติทุกเทิร์น 8-16 หน่วย (สุ่ม) ความจุพื้นฐาน 52 (Training เพิ่มความจุได้สูงสุด +48 รวม 100) — The Beat of Victory หัก 35 / Ashen Trail หัก 75" });
@@ -1361,7 +1368,7 @@ const SHOP_ITEM_INFO = {
   wineBarrel: { icon: "🍷", img: "/characters/escanor/สกิลพื้นฐาน/Barrel.png", label: (it) => `WineBarrel Lv.${it.level || 1}`, desc: "ใช้แล้วฟื้น HP ตามระดับ ระดับสูงจะมอบเย็นชื่นใจและมึนเมา; อยู่ในกระเป๋าครบ 4 เทิร์นจะอัปเกรด 1 ระดับ สูงสุด IV" },
   // ---------- ร้านขายของลุงเท่ง: ปืนหน่วย GUTS Select + กระสุน (ใช้รูปจริงแทน emoji) ----------
   gutsGun: { icon: "🔫", img: "/item/guts_select_gun/guts_gun.webp", label: () => "ปืนหน่วย GUTS Select", desc: "ไอเทมถาวร มีได้กระบอกเดียว — กดที่ปืนเพื่อเลือกกระสุนแล้วเลือกเป้าหมาย ยิงได้ 1 นัด/เทิร์น (เฉพาะช่วงจั่วไพ่)" },
-  blackSparklence: { icon: "BS", img: "/characters/ignis/Black Sparklence.webp", label: () => "Black Sparklence", desc: "Ignis permanent weapon - choose Uncle Shop ammo, then pick an enemy target. One shot per turn during draw phase." },
+  blackSparklence: { icon: "BS", img: "/characters/ignis/Black Sparklence.webp", label: () => "Black Sparklence", desc: "ปืนถาวรของอิกนิส ใช้กระสุนจากร้านลุงเท่งได้โดยไม่ต้องมีปืน GUTS Select ยิงได้ 1 นัดต่อเทิร์นในช่วงจั่วไพ่" },
   gutsAmmo: {
     icon: "🔑",
     imgOf: (it) => GUTS_AMMO_INFO[it.ammo]?.img,
@@ -1477,9 +1484,11 @@ function InventoryModal({ me, players, gameState, roundNumber, onPickGunAmmo, on
   const ammoItems = items.filter((it) => it.type === "gutsAmmo");
   const targets = (players || []).filter((p) => p.alive && p.id !== me?.id && !(me?.teamId && p.teamId === me.teamId));
   const hyperCooldown = Math.max(0, me?.hyperTriggerCooldown || 0);
+  const hasBlackSparklence = (items || []).some((it) => it.type === "blackSparklence");
+  const isIgnisUser = me?.characterId === "ignis" || hasBlackSparklence;
   const hasTargetedAmmo = ammoItems.some((it) => it.ammo !== "hyper_trigger" && it.ammo !== "trigger_dark_key");
-  const hasReadyHyper = ammoItems.some((it) => it.ammo === "hyper_trigger") && hyperCooldown <= 0 && me?.characterId !== "ultraman_trigger" && me?.characterId !== "ignis";
-  const hasReadyDarkKey = ammoItems.some((it) => it.ammo === "trigger_dark_key") && me?.characterId === "ignis" && !(me?.statuses?.triggerDarkForm > 0);
+  const hasReadyHyper = ammoItems.some((it) => it.ammo === "hyper_trigger") && hyperCooldown <= 0 && me?.characterId !== "ultraman_trigger" && !isIgnisUser;
+  const hasReadyDarkKey = ammoItems.some((it) => it.ammo === "trigger_dark_key") && isIgnisUser && !(me?.statuses?.triggerDarkForm > 0);
   // เหตุผลที่ยิงไม่ได้ (โชว์ให้เห็นเลย ไม่ปล่อยให้กดแล้วเงียบ)
   const fireBlock =
     gameState !== "PLAYING" ? "ยิงได้เฉพาะช่วงจั่วไพ่"
@@ -1501,8 +1510,8 @@ function InventoryModal({ me, players, gameState, roundNumber, onPickGunAmmo, on
   // เลือกกระสุนแล้วเด้งไปโหมดเลือกเป้าหมายบนกระดานทันที (กดที่การ์ดผู้เล่นจริง ไม่ใช่กดชื่อในกระเป๋า)
   function pickAmmo(a) {
     clickSound();
-    if (a?.ammo === "hyper_trigger" && (hyperCooldown > 0 || me?.characterId === "ultraman_trigger" || me?.characterId === "ignis")) return;
-    if (a?.ammo === "trigger_dark_key" && (me?.characterId !== "ignis" || me?.statuses?.triggerDarkForm > 0)) return;
+    if (a?.ammo === "hyper_trigger" && (hyperCooldown > 0 || me?.characterId === "ultraman_trigger" || isIgnisUser)) return;
+    if (a?.ammo === "trigger_dark_key" && (!isIgnisUser || me?.statuses?.triggerDarkForm > 0)) return;
     setGunOpen(false);
     onPickGunAmmo(a);
   }
@@ -1555,7 +1564,7 @@ function InventoryModal({ me, players, gameState, roundNumber, onPickGunAmmo, on
                               : hyperCooldown > 0 ? "ต้องรออีก " + hyperCooldown + " เทิร์น"
                               : null
                             : a.ammo === "trigger_dark_key"
-                              ? me?.characterId !== "ignis" ? "ใช้ได้เฉพาะอิกนิส"
+                              ? !isIgnisUser ? "ต้องมี Black Sparklence"
                                 : me?.statuses?.triggerDarkForm > 0 ? "กำลังอยู่ในร่าง Trigger Dark"
                                 : null
                               : null;
@@ -2429,6 +2438,7 @@ export default function Game({ state, lowQ }) {
   const [doomSel, setDoomSel] = useState(false); // DoomGuy: โหมดเลือกเป้าหมาย Weapon (เฉพาะอาวุธที่ต้องเลือกเป้าหมาย)
   const DOOM_TARGET_WEAPONS = ["shotgun", "heavy", "supershotgun", "rocket", "ballista", "plasma"];
   const [saObSel, setSaObSel] = useState(false);
+  const [escanorSel, setEscanorSel] = useState(false);
   const [ignisSel, setIgnisSel] = useState(false);     // ซาโตรุ: โหมดเลือกเป้าหมาย Do Do Do, De Da Da Da (เลือกตัวเองไม่ได้)
   const [bardSel, setBardSel] = useState([]);        // Bard: เป้าหมายบทเพลงที่เลือกไว้ (บทเพลงต้องการ 1-2 คน)
   const [nanayaSel, setNanayaSel] = useState(false);  // นานายะ ชิกิ: โหมดเลือกเป้าหมาย อันนี้ของนายรึเปล่า (เลือกตัวเองไม่ได้)
@@ -2712,6 +2722,7 @@ export default function Game({ state, lowQ }) {
     if (tier === "basic" && ch?.id === "banagher") { setBgSel(true); setSkillOpen(false); return; }
     // ซาโตรุ อาเคฟุ: สกิลพื้นฐาน/สกิลรอง เข้าโหมดเลือกเป้าหมาย — ท่าไม้ตายทำงานอัตโนมัติ กดเองไม่ได้
     if (tier === "basic" && ch?.id === "satoru") { setSaObSel(true); setSkillOpen(false); return; }
+    if (tier === "basic" && ch?.id === "escanor" && !(me?.statuses?.escanorNight > 0) && !(me?.statuses?.escanorLastStand > 0)) { setEscanorSel(true); setSkillOpen(false); return; }
     if (tier === "basic" && ch?.id === "ignis") { setIgnisSel(true); setSkillOpen(false); return; }
     if (tier === "secondary" && ch?.id === "satoru") { socket.emit("useSkill", { tier: "secondary", targets: [me.id] }); setSkillOpen(false); return; }
     if (tier === "ultimate" && ch?.id === "satoru") { setSkillOpen(false); return; }
@@ -2743,6 +2754,10 @@ export default function Game({ state, lowQ }) {
   const pickSaOb = (id) => {
     socket.emit("useSkill", { tier: "basic", targets: [id] });
     setSaObSel(false);
+  };
+  const pickEscanor = (id) => {
+    socket.emit("useSkill", { tier: "basic", targets: [id] });
+    setEscanorSel(false);
   };
   const pickIgnis = (id) => {
     socket.emit("useSkill", { tier: "basic", targets: [id] });
@@ -2919,6 +2934,9 @@ export default function Game({ state, lowQ }) {
     if (ignisSel && (phase !== "PLAYING" || me?.skillUsed || done)) setIgnisSel(false);
   }, [ignisSel, phase, me?.skillUsed, done]);
   useEffect(() => {
+    if (escanorSel && (phase !== "PLAYING" || me?.skillUsed || done)) setEscanorSel(false);
+  }, [escanorSel, phase, me?.skillUsed, done]);
+  useEffect(() => {
     if (nanayaSel && (phase !== "PLAYING" || me?.skillUsed || done)) setNanayaSel(false);
   }, [nanayaSel, phase, me?.skillUsed, done]);
   useEffect(() => {
@@ -2983,9 +3001,9 @@ export default function Game({ state, lowQ }) {
 
   // สถานะ+handler ของทุกโหมดเลือกเป้าหมาย มัดรวมไว้ที่เดียว ใช้ร่วมกันทั้ง layout มือถือและจอใหญ่ (ดู isTargetable/resolveAttackPick)
   const targetChain = {
-    anataSel, dawnSel, appleSel, bbSel, shSel, skSel, doomSel, saObSel, ignisSel, bgSel, kawaiiSel, bardPending, nanayaSel, tpSel,
+    anataSel, dawnSel, appleSel, bbSel, shSel, skSel, doomSel, saObSel, escanorSel, ignisSel, bgSel, kawaiiSel, bardPending, nanayaSel, tpSel,
     kaiCreateSel, kaiPunishSel, msMarkSel, msRuptureSel, psSealSel, pickPsSeal, gunSel, pickGunTarget,
-    pickAnata, pickDawn, pickGive, pickBb, pickSh, pickSk, pickDoom, pickSaOb, pickIgnis, pickBg, pickKawaii, pickBard, pickNanaya, pickTp,
+    pickAnata, pickDawn, pickGive, pickBb, pickSh, pickSk, pickDoom, pickSaOb, pickEscanor, pickIgnis, pickBg, pickKawaii, pickBard, pickNanaya, pickTp,
     pickKaiCreate, pickKaiPunish, pickMsMark, pickMsRupture,
     kaiRivalId,
     myId: me?.id,
