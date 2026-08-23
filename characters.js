@@ -816,7 +816,7 @@ const CHARACTERS = [
       name: "Do Do Do, De Da Da Da",
       desc: "ทำงานก่อนเปิดไพ่: เลือกศัตรู 1 คน ส่งสิ่งแปลกปลอมไปติดเป้าหมาย — เป้าหมายรับความเสียหาย 1 หน่วยทุกๆ 2 เทิร์น เป็นเวลา 4 เทิร์น และติดสถานะ [ภาระเวท] 4 เทิร์น",
       cost: 2,
-      img: "/characters/satoru/Do_Do_Do,_De_Da_Da_Da_.png",
+      img: "/characters/satoru/Do_Do_Do,_De_Da_Da_Da.png",
       instant: true,
       effect: null,
     },
