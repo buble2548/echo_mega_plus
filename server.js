@@ -99,6 +99,14 @@ const OVERLOAD_FORCE_CHANCE = 0.30;
 const OVERLOAD_FORCE_CUTSCENE_SECONDS = 5; // overload_force_start.mp4 = 4.809s
 const YUUKI_ID = "__yuuki_boss__";
 const YUUKI_IMG = "/characters/yuuki/yuuki.jpg";
+const YUUKI_SCALE = Object.freeze({
+  1: { hp: 7, armor: 3 },
+  2: { hp: 13, armor: 2 },
+  3: { hp: 17, armor: 3 },
+  4: { hp: 23, armor: 2 },
+  5: { hp: 26, armor: 4 },
+  6: { hp: 30, armor: 5 },
+});
 const YUUKI_VIDEO = {
   spawn: "/characters/yuuki/yuuki_overload.mp4",
   attack: "/characters/yuuki/yuuki_overload_n_attack.mp4",
@@ -332,6 +340,7 @@ const UNPLUG_BUFFS = ["upg", "monster", "ginga", "gingastrium", "storium", "abso
 // เลือดจริงสูงสุดของผู้เล่น — Locacaca fruit (ซาโตรุ patch 2.0.8.2) ลด Max HP ได้ (ต่ำสุด 1)
 //  คิชินามิ ฮาคุโนะ (patch 2.2.1): เพดานเลือดจริงคงที่ตามเพศ (ไม่ใช้ MAX_HP ปกติ) — ชาย 6 / หญิง 5
 function maxHpOf(p) {
+  if (p && p.id === YUUKI_ID) return Math.max(1, p.yuukiBaseHp || YUUKI_SCALE[1].hp);
   if (p && p.characterId === "escanor") {
     const escanorHp = CHAR_HOOKS.escanor.maxHp(p);
     if (escanorHp != null) return Math.max(1, escanorHp - ((p.maxHpPenalty) || 0));
@@ -1176,6 +1185,10 @@ function createYuukiBoss() {
     name: "ยูกิ (Over Load)", position: 7, characterId: "yuuki", avatar: ch.avatar, img: ch.img,
     cards: [], locked: true, busted: false, result: null,
   };
+  const scale = yuukiStatsForPlayerCount(Object.values(players).filter((o) => !isYuuki(o)).length);
+  p.yuukiPlayerCount = scale.players;
+  p.yuukiBaseHp = scale.hp;
+  p.yuukiBaseArmor = scale.armor;
   players[YUUKI_ID] = p;
   resetCombat(p);
   p.ready = true;
@@ -1191,22 +1204,43 @@ function createYuukiBoss() {
   return p;
 }
 
+function yuukiStatsForPlayerCount(count) {
+  const playersCount = Math.max(1, Math.min(6, Math.trunc(Number(count) || 1)));
+  return { players: playersCount, ...YUUKI_SCALE[playersCount] };
+}
+
+function yuukiCanSafelyDraw(p) {
+  if (!overloadForceActive) return true;
+  const nextExtraDraw = (p.overloadExtraDraws || 0) + 1;
+  return nextExtraDraw % 5 !== 0 || p.hp > 2;
+}
+
 function autoPlayYuuki() {
   const p = yuukiBoss();
   if (!p || !p.cards || p.locked) return;
-  // AI เล่นแบบเจ้ามือระมัดระวัง: จั่วจากกองกลางเดียวกับทุกคนจนแต้มถึง 17
-  // โชคลาภใช้กติกาเดียวกับผู้เล่น (หาไพ่ที่พาไป 19-21 ก่อน)
-  while (centralDeck.length && scoreOf(p) < 17 && !bustedOf(p)) {
+  // ยูกิเห็นคะแนนจริงของผู้เล่นทุกคนตอนทุกคนล็อกแล้ว และพยายามแซงคะแนนสูงสุด 1 แต้ม
+  // ระหว่าง Overload Force ไม่มีเพดาน/ไพ่แตก แต่ AI จะไม่จั่วใบที่ 5 หากโทษ HP -2 จะทำให้ตาย
+  const humanScores = aliveHumans().map(scoreOf);
+  const bestHumanScore = humanScores.length ? Math.max(...humanScores) : 0;
+  const targetScore = overloadForceActive
+    ? Math.max(1, bestHumanScore + 1)
+    : Math.min(21, Math.max(17, bestHumanScore + 1));
+  while (p.alive && centralDeck.length && scoreOf(p) < targetScore && !bustedOf(p) && yuukiCanSafelyDraw(p)) {
     let card = null;
     if ((p.statuses.fortune || 0) > 0) {
       p.statuses.fortune--;
       if (p.statuses.fortune <= 0) delete p.statuses.fortune;
       const cur = calculateScore(p.cards);
-      for (const target of fortuneTargetList(cur)) {
-        const need = target - cur;
-        if (need < 1 || need > 10) continue;
-        card = drawFromCentralDeck((c) => !c.special && c.value === need);
-        if (card) break;
+      if (overloadForceActive) {
+        const need = targetScore - cur;
+        if (need >= 1 && need <= 10) card = drawFromCentralDeck((c) => !c.special && c.value === need);
+      } else {
+        for (const target of fortuneTargetList(cur)) {
+          const need = target - cur;
+          if (need < 1 || need > 10) continue;
+          card = drawFromCentralDeck((c) => !c.special && c.value === need);
+          if (card) break;
+        }
       }
     }
     if (!card) card = drawCardFor(p);
@@ -1255,6 +1289,15 @@ const DEBUFF_KEYS = ["discord", "sleep", "stun", "nodraw", "noskill", "sena",
 // ระหว่าง Lie Like Vortigern (โอเบรอน) เป้าหมายได้เพดานเกราะ +1
 // ระหว่างเป็นคู่สัญญาเจ้าแห่งเน็ตบ้าน (สนใจใช้บริการเราไหม) เพิ่ม +3
 function maxArmorOf(p) {
+  if (p && p.id === YUUKI_ID) {
+    const base = p.yuukiBaseArmor != null ? p.yuukiBaseArmor : YUUKI_SCALE[1].armor;
+    return base
+      + ((((p.statuses && p.statuses.vortarmor) || 0) > 0) ? 1 : 0)
+      + (oguriGoldStacks(p) >= OGURI_GOLD_ARMOR_AT ? 1 : 0)
+      + ((((p.statuses && p.statuses.absorbplus) || 0) > 0) ? RIDDHE_ABSORB_ARMOR : 0)
+      + ((((p.statuses && p.statuses.riddheguard) || 0) > 0 || ((p.statuses && p.statuses.riddheward) || 0) > 0) ? 2 : 0)
+      + (CHAR_HOOKS.broadband_man.contractBuffActive(engine, p) ? CONTRACT_ARMOR_BONUS : 0);
+  }
   // คิชินามิ ฮาคุโนะ (patch 2.2.1): เพดานเกราะคงที่ตามเพศ (แทน MAX_ARMOR ปกติ) — ชาย 2 / หญิง 3
   // เอวานเกเลี่ยน หมายเลข 13 (patch 2.2 alpha): ไม่มีเกราะเลยตามปกติ (เพดาน 0) — ได้เพดาน +1 เฉพาะช่วงสกิลติดตัว 3 ทำงาน (ด้านล่าง)
   const escanorArmor = (p && p.characterId === "escanor" && CHAR_HOOKS.escanor.maxArmor) ? CHAR_HOOKS.escanor.maxArmor(p) : null;
@@ -1304,12 +1347,13 @@ function maybeBeatSave(p) {
 function instantDeath(p) {
   if (friendlyEffectBlocked(p)) return;
   if (isYuuki(p)) {
-    const killer = players[effectSourceId];
+    const currentSource = players[effectSourceId];
+    const killer = (currentSource && !isYuuki(currentSource)) ? currentSource : players[p.lastDamageSourceId];
     p.hp = 0; p.alive = false; p.result = "dead"; p.locked = true;
     overloadForceActive = false;
     yuukiAttackTargets = [];
     queueYuukiCutscene(YUUKI_VIDEO.end, "YUUKI · DEFEATED", 7, "yuukiEnd");
-    if (killer && killer.alive && !isYuuki(killer)) {
+    if (killer && !isYuuki(killer)) {
       killer.inventory = killer.inventory || [];
       killer.inventory.push({ uid: `hero_sword_${Date.now()}`, type: "heroSword" });
       lastLog.push(`⚔️ ${killer.name} โค่นยูกิได้และได้รับ “ดาบผู้กล้า” เข้ากระเป๋า!`);
@@ -1628,6 +1672,7 @@ function loseHp(p) {
   hisakawaSyncIn(p);
   if (friendlyEffectBlocked(p)) return;
   if ((p.tempHp || 0) > 0) { p.tempHp--; hisakawaSyncOut(p); return; }
+  if (isYuuki(p) && effectSourceId && effectSourceId !== YUUKI_ID && players[effectSourceId]) p.lastDamageSourceId = effectSourceId;
   // ฉันจะไม่ยอมสูญเสียใครไปอีก (ริดดี้ patch 2.1.1): ริดดี้เองตายไม่ได้ — เลือดค้างที่ 1
   if (p.hp <= 1 && CHAR_HOOKS.riddhe.guardProtects(p)) {
     if (p.riddheSaveLoggedRound !== roundNumber) {
@@ -1673,6 +1718,7 @@ function applyOverloadOverdrawPenalty(p) {
 function loseArmor(p) {
   hisakawaSyncIn(p);
   if (friendlyEffectBlocked(p)) return;
+  if (isYuuki(p) && effectSourceId && effectSourceId !== YUUKI_ID && players[effectSourceId]) p.lastDamageSourceId = effectSourceId;
   p.armor--; p.dmgArmor++;
   hisakawaSyncOut(p);
   // MonsterLive (ฮิคารุ, characters/hikaru.js): เกราะลดลง -> ฟื้นพลังชีวิตตามเกราะที่เสียไป
@@ -2809,7 +2855,7 @@ function dealRound() {
       p.skillDrain = Math.max(p.skillDrain || 0, p.skillDrainPending);
       p.skillDrainPending = 0;
     }
-    if (!p.alive) { p.cards = []; p.locked = true; p.busted = false; continue; }
+    if (!p.alive) { p.cards = []; p.locked = true; p.busted = false; p.overloadDrawReady = false; continue; }
 
     if (isYuuki(p) && p.hp <= 4) {
       p.statuses.fortune = Math.min(BARD_FORTUNE_MAX, (p.statuses.fortune || 0) + 1);
@@ -2933,7 +2979,10 @@ function dealRound() {
     p.cardBonus = 0; // แต้มการ์ดโบนัส (Ashen Trail โอกูริ patch 2.1.1) — รีเซ็ตทุกเทิร์น
     p.colorTrigger = { red: 0, blue: 0, green: 0, yellow: 0 }; // นับจำนวนครั้งที่ทริกเกอร์สีนั้นทำงานไปแล้วในรอบนี้
     p.statusAmt.cardAtkBonus = 0; // พลังโจมตีจากการ์ดแดง — รีเซ็ตทุกรอบ
+    p.overloadExtraDraws = 0;
+    p.overloadDrawReady = false; // ไพ่ตั้งต้นไม่นับเป็นไพ่จั่วเพิ่มของ Overload Force
     { const c = drawInitialCard(p); if (c) { p.cards.push(c); onCardDrawn(p, c); } }
+    p.overloadDrawReady = overloadForceActive;
     p.locked = false;
     p.busted = false;
     p.result = null;
@@ -3002,7 +3051,6 @@ function dealRound() {
     else if (yuukiBoss()) queueYuukiCutscene(YUUKI_VIDEO.field, "OVERLOAD FIELD", 7, "yuukiField");
   }
 
-  autoPlayYuuki();
   const yuukiUltimateDue = !!yuukiBoss() && yuukiTurns > 0 && yuukiTurns % 5 === 0;
   if (yuukiUltimateDue) queueYuukiCutscene(YUUKI_VIDEO.ultimate, "STAR OF FALL", 7, "yuukiUltimate");
   gameState = "PLAYING";
@@ -4081,7 +4129,8 @@ function checkAllLocked() {
     c.some((p) => p.allyBreakAsk) ||
     c.some((p) => p.allyFinalAsk);
   // ถ้าไม่เหลือใครรอดเลย (เช่น ทาคุโตะระเบิดใส่ทุกคนตายหมดรวมถึงตัวเอง) ก็ต้องสรุปผลด้วยเช่นกัน ไม่งั้นเกมค้าง
-  if (c.every((p) => p.locked) && !pendingAnswer) resolveRound();
+  const humans = c.filter((p) => !isYuuki(p));
+  if (humans.every((p) => p.locked) && !pendingAnswer) resolveRound();
 }
 
 function beginOverloadForceDraw() {
@@ -4119,7 +4168,6 @@ function beginOverloadForceDraw() {
     p.isLoser = false;
   }
 
-  autoPlayYuuki();
   lastLog.push("⚡ Overload Force เริ่มทำงาน — แจกไพ่ใหม่ในเทิร์นเดิม ปลดเพดาน 21 แต้ม!");
   gameState = "PLAYING";
   startPhaseTimer(CARD_TIME, resolveRound);
@@ -4238,6 +4286,9 @@ function resolveRound() {
     }
     u.anataTargets = null;
   }
+
+  // รอให้ไพ่และเอฟเฟกต์บังคับจั่วของมนุษย์สรุปครบก่อน ยูกิจึงอ่านคะแนนทั้งหมดแล้วตัดสินใจจั่ว
+  autoPlayYuuki();
 
   const combatants = alivePlayers();
   roundWinnerId = null;
@@ -6185,7 +6236,15 @@ const engine = {
 
 // เผื่อ require() ไฟล์นี้จากเทสต์ (ดึง computeAttackBase ไปทดสอบตรงๆ ไม่ต้องบูตทั้งเซิร์ฟเวอร์)
 //  — ฟังก์ชันอื่นที่เหลือยังเข้าถึงไม่ได้จากภายนอกโดยตั้งใจ ต้องเพิ่มเข้า export นี้เองถ้าจะทดสอบเพิ่ม
-module.exports = { computeAttackBase, engine };
+module.exports = {
+  computeAttackBase,
+  engine,
+  maxHpOf,
+  maxArmorOf,
+  yuukiStatsForPlayerCount,
+  yuukiCanSafelyDraw,
+  autoPlayYuuki,
+};
 
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;

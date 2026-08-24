@@ -2,7 +2,15 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { CHAR_BY_ID, publicRoster, POSITION_COLORS } = require('../../characters');
 const yuuki = require('../../characters/yuuki');
-const { computeAttackBase, engine } = require('../../server');
+const {
+  computeAttackBase,
+  engine,
+  maxHpOf,
+  maxArmorOf,
+  yuukiStatsForPlayerCount,
+  yuukiCanSafelyDraw,
+  autoPlayYuuki,
+} = require('../../server');
 
 test('Yuuki is a visible but non-selectable special P7 boss', () => {
   const boss = publicRoster().find((c) => c.id === 'yuuki');
@@ -31,4 +39,70 @@ test('Hero Sword adds 2 to a normal attack while active', () => {
 test('Star of Fall describes its heal and low-HP damage upgrade', () => {
   assert.match(CHAR_BY_ID.yuuki.ultimate.desc, /ฟื้นพลังชีวิต 3/);
   assert.match(CHAR_BY_ID.yuuki.ultimate.desc, /6 หน่วย/);
+});
+
+test('Yuuki scales HP and armor with the number of human players', () => {
+  const expected = [
+    { players: 1, hp: 7, armor: 3 },
+    { players: 2, hp: 13, armor: 2 },
+    { players: 3, hp: 17, armor: 3 },
+    { players: 4, hp: 23, armor: 2 },
+    { players: 5, hp: 26, armor: 4 },
+    { players: 6, hp: 30, armor: 5 },
+  ];
+  assert.deepEqual(expected.map((_, i) => yuukiStatsForPlayerCount(i + 1)), expected);
+  for (const stats of expected) {
+    const boss = { id: '__yuuki_boss__', characterId: 'yuuki', yuukiBaseHp: stats.hp, yuukiBaseArmor: stats.armor, statuses: {}, statusAmt: {} };
+    assert.equal(maxHpOf(boss), stats.hp);
+    assert.equal(maxArmorOf(boss), stats.armor);
+  }
+});
+
+test('Yuuki remembers the last damage source and awards Hero Sword on delayed death resolution', () => {
+  const attacker = { id: 'yuuki-killer', name: 'Hero', alive: true, characterId: 'tohno', inventory: [], statuses: {}, statusAmt: {} };
+  const boss = {
+    id: '__yuuki_boss__', name: 'Yuuki', alive: true, characterId: 'yuuki', hp: 1, armor: 0,
+    cards: [], locked: false, inventory: [], statuses: {}, statusAmt: {}, dmgHp: 0, dmgArmor: 0,
+  };
+  engine.players[attacker.id] = attacker;
+  engine.players[boss.id] = boss;
+  engine.withEffectSource(attacker, () => engine.loseHp(boss));
+  assert.equal(boss.lastDamageSourceId, attacker.id);
+  engine.instantDeath(boss);
+  assert.ok(attacker.inventory.some((item) => item.type === 'heroSword'));
+  delete engine.players[attacker.id];
+  delete engine.players[boss.id];
+});
+
+test('Yuuki reads every human score and draws past the current leader during Overload Force', () => {
+  const boss = {
+    id: '__yuuki_boss__', name: 'Yuuki', alive: true, characterId: 'yuuki', hp: 7, armor: 3,
+    cards: [{ value: 5, color: 'red' }], locked: false, overloadDrawReady: true, overloadExtraDraws: 0,
+    inventory: [], statuses: {}, statusAmt: {}, colorTrigger: { red: 0, blue: 0, green: 0, yellow: 0 }, dmgHp: 0, dmgArmor: 0,
+  };
+  const human = {
+    id: 'leader', name: 'Leader', alive: true, characterId: 'tohno',
+    cards: [{ value: 10 }, { value: 10 }, { value: 10 }], locked: true, statuses: {}, statusAmt: {},
+  };
+  engine.players[boss.id] = boss;
+  engine.players[human.id] = human;
+  engine.setOverloadForceActive(true);
+  engine.setCentralDeck([{ value: 10, color: 'blue' }, { value: 10, color: 'green' }, { value: 10, color: 'yellow' }]);
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+  try { autoPlayYuuki(); } finally { Math.random = originalRandom; }
+  assert.equal(boss.locked, true);
+  assert.ok(engine.calculateScore(boss.cards) > engine.calculateScore(human.cards));
+  delete engine.players[boss.id];
+  delete engine.players[human.id];
+  engine.setCentralDeck([]);
+  engine.setOverloadForceActive(false);
+});
+
+test('Yuuki refuses an Overload fifth draw when the 2 HP penalty would kill her', () => {
+  engine.setOverloadForceActive(true);
+  assert.equal(yuukiCanSafelyDraw({ hp: 1, overloadExtraDraws: 4 }), false);
+  assert.equal(yuukiCanSafelyDraw({ hp: 3, overloadExtraDraws: 4 }), true);
+  assert.equal(yuukiCanSafelyDraw({ hp: 1, overloadExtraDraws: 3 }), true);
+  engine.setOverloadForceActive(false);
 });
