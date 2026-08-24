@@ -8,6 +8,15 @@
 // ============================================================
 module.exports = function buildTransforms(img) {
   return {
+    // Escanor: วิดีโอเต็มจอของแต่ละเหตุการณ์เล่นได้ครั้งเดียวต่อแมตช์/ต่อผู้เล่นผ่าน triggerCutscene
+    // seconds วัดจาก mvhd จริงและเผื่อเวลาตัดฉาก ~1 วินาที เพื่อไม่ให้วิดีโอถูกตัดก่อนจบ
+    escanorMorning: { img: "/characters/escanor/ร่าง เช้า Profile.png", video: "/characters/escanor/ร่าง เช้า Animation.mp4", title: "ESCANOR", label: "เข้าสู่ร่าง Morning", seconds: 19, music: null, afterReveal: false },
+    escanorLastStand: { img: "/characters/escanor/Last Stand Profile.png", video: "/characters/escanor/Last Stand.mp4", title: "LAST STAND", label: "คืนชีพ", seconds: 6, music: null, afterReveal: false },
+    escanorBasic1: { img: "/characters/escanor/สกิลพื้นฐาน/สกิลพื้นฐาน 1 บอลเพลิงสุริยะ.png.jpg", video: "/characters/escanor/สกิลพื้นฐาน/สกิลพื้นฐาน 1 บอลเพลิงสุริยะ.mp4", title: "บอลเพลิงสุริยะ", label: "ใช้สกิลพื้นฐาน", seconds: 12, music: null, afterReveal: false },
+    escanorSecondary1: { img: "/characters/escanor/สกิลรอง/สกิลรอง 1 เพลิงปะทุ.jpg", video: "/characters/escanor/สกิลรอง/สกิลรอง 1 เพลิงปะทุ.mp4", title: "เพลิงปะทุ", label: "โจมตี", seconds: 7, music: null, afterReveal: false },
+    escanorUltimate1: { img: "/characters/escanor/สกิลอัลติเมต/Rhitta.jpg", video: "/characters/escanor/สกิลอัลติเมต/สกิลอัลติเมต 1 Divin Axe Rhitta.mp4", title: "DIVIN AXE RHITTA", label: "โจมตี", seconds: 12, music: null, afterReveal: false },
+    escanorSecondary3: { img: "/characters/escanor/สกิลรอง/สกิลรอง 3 หมัดเพลิงสุริยัน.png.jpg", video: "/characters/escanor/สกิลรอง/สกิลรอง 3 หมัดเพลิงสุริยัน.mp4", title: "หมัดเพลิงสุริยัน", label: "โจมตี", seconds: 19, music: null, afterReveal: false },
+    escanorUltimate3: { img: "/characters/escanor/สกิลอัลติเมต/สกิลอัลติเมต 3 ดวงอาทิตย์จำลอง.png.jpg", video: "/characters/escanor/สกิลอัลติเมต/สกิลอัลติเมต 3 ดวงอาทิตย์จำลอง.mp4", title: "ดวงอาทิตย์จำลอง", label: "โจมตี", seconds: 12, music: null, afterReveal: false },
     // ginga (patch 2.1.3): ตอนนี้เป็นสกิลรอง 1 — ทำงานก่อนเปิดการ์ดแล้ว (ไม่ใช่ afterReveal อีกต่อไป)
     ginga:    { img: "/characters/hikaru/ginga.jpg",           video: "/characters/hikaru/ginga_final.mp4",     title: "ULTLIVE ULTRAMAN GINGA", label: "ใช้สกิลรอง",   seconds: 21, music: "ginga",   afterReveal: false },
     // gingastrium (patch 2.1.3): ท่าไม้ตายใหม่ — ทำงานก่อนเปิดการ์ด เพลง gingastrium (ginga_theme2) แทนเพลง ginga

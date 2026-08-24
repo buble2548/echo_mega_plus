@@ -2,22 +2,14 @@ const ID = "escanor";
 const ESCANOR_CHARGE_MAX = 12;
 const SOLAR_MAX = 4;
 const BURN_MAX = 6;
+const WINE_MAX = 3;
+let wineUidSeq = 0;
 
 const IMG = {
   morning: "/characters/escanor/ร่าง เช้า Profile.png",
   night: "/characters/escanor/ร่าง กลางคืน Profile.png",
   noon: "/characters/escanor/ร่าง Noon Profile.png",
   last: "/characters/escanor/Last Stand Profile.png",
-};
-
-const FX = {
-  morning: "/characters/escanor/ร่าง เช้า Animation.mp4",
-  last: "/characters/escanor/Last Stand.mp4",
-  basic1: "/characters/escanor/สกิลพื้นฐาน/สกิลพื้นฐาน 1 บอลเพลิงสุริยะ.mp4",
-  secondary1: "/characters/escanor/สกิลรอง/สกิลรอง 1 เพลิงปะทุ.mp4",
-  secondary3: "/characters/escanor/สกิลรอง/สกิลรอง 3 หมัดเพลิงสุริยัน.mp4",
-  ultimate1: "/characters/escanor/สกิลอัลติเมต/สกิลอัลติเมต 1 Divin Axe Rhitta.mp4",
-  ultimate3: "/characters/escanor/สกิลอัลติเมต/สกิลอัลติเมต 3 ดวงอาทิตย์จำลอง.mp4",
 };
 
 function alivePlayers(engine) {
@@ -49,23 +41,12 @@ function displayImg(p) {
   if (form === "night") return IMG.night;
   return IMG.morning;
 }
-function pushEscanorCutscene(engine, p, info) {
-  if (!info || (!info.video && !info.img)) return;
-  if (typeof engine?.pushCutsceneRaw !== "function") return;
-  engine.pushCutsceneRaw({
-    seconds: info.seconds || 8,
-    info: {
-      playerId: p.id,
-      name: p.name,
-      img: info.img || null,
-      color: engine.colorOf?.(p) || "#888",
-      video: info.video || null,
-      title: info.title || "",
-      label: info.label || "",
-      voice: info.voice || null,
-      music: info.music || null,
-    },
-  });
+function playCutscene(engine, p, key) {
+  if (!p || !key || typeof engine?.triggerCutscene !== "function") return false;
+  p.cutsceneShown = p.cutsceneShown || {};
+  const firstTime = !p.cutsceneShown[key];
+  engine.triggerCutscene(p, key);
+  return firstTime;
 }
 
 function setStatus(p, key, turns, amount) {
@@ -74,11 +55,15 @@ function setStatus(p, key, turns, amount) {
   p.statuses[key] = turns;
   if (amount != null) p.statusAmt[key] = amount;
 }
+function clearStatus(p, key) {
+  if (p.statuses) delete p.statuses[key];
+  if (p.statusAmt) delete p.statusAmt[key];
+}
 function clearForms(p) {
   if (!p.statuses) p.statuses = {};
-  delete p.statuses.escanorMorning;
-  delete p.statuses.escanorNight;
-  delete p.statuses.escanorNoon;
+  clearStatus(p, "escanorMorning");
+  clearStatus(p, "escanorNight");
+  clearStatus(p, "escanorNoon");
 }
 function enterForm(engine, p, form) {
   const old = formOf(p);
@@ -86,7 +71,7 @@ function enterForm(engine, p, form) {
   if (form === "morning") {
     setStatus(p, "escanorMorning", 999, 1);
     p.escanorForcedMorning = Math.max(0, p.escanorForcedMorning || 0);
-    if (old !== "morning") pushEscanorCutscene(engine, p, { img: IMG.morning, video: FX.morning, title: "ESCANOR", label: "Morning Form", seconds: 8, music: null });
+    if (old !== "morning") playCutscene(engine, p, "escanorMorning");
   } else if (form === "night") {
     setStatus(p, "escanorNight", 999, 1);
   } else if (form === "noon") {
@@ -95,6 +80,9 @@ function enterForm(engine, p, form) {
 }
 function clampCharge(p) {
   p.escanorCharge = Math.max(0, Math.min(ESCANOR_CHARGE_MAX, p.escanorCharge || 0));
+}
+function leaveNoon(engine, p) {
+  enterForm(engine, p, p.escanorForcedMorning > 0 || isMorningTime(engine) ? "morning" : "night");
 }
 function useSolar(p, n = 1) {
   p.statuses = p.statuses || {};
@@ -142,10 +130,29 @@ function forceBurnTicks(engine, target, ticks) {
     return;
   }
   for (let i = 0; i < count && target.alive; i++) {
+    // เป้าหมายอาจเพิ่งคืนชีพเป็น Last Stand จาก tick ก่อนหน้า ต้องหยุดดาเมจที่เหลือทันที
+    if (isLast(target)) {
+      engine.log?.(`🔥 ${target.name} เข้าสู่ Last Stand จึงไม่รับดาเมจลุกไหม้ที่เหลือ`);
+      break;
+    }
     target._statusDamage = true;
     engine.dealMixed(target, 1);
     target._statusDamage = false;
+    resolveDamageAftermath(engine, target);
   }
+}
+function resolveDamageAftermath(engine, target) {
+  if (!target) return;
+  if (typeof engine.resolveDamageAftermath === "function") {
+    engine.resolveDamageAftermath(target);
+  } else if (target.alive && target.hp <= 0) {
+    engine.instantDeath?.(target);
+  }
+}
+function dealSkillDamage(engine, target, amount) {
+  if (!target || !target.alive || amount <= 0) return;
+  engine.dealMixed(target, amount, false);
+  resolveDamageAftermath(engine, target);
 }
 function totalBurn(engine) {
   return alivePlayers(engine).reduce((sum, p) => sum + (p.statuses?.hburn || 0), 0);
@@ -161,18 +168,20 @@ function skillByForm(engine, p, ch, tier) {
     const base = { ...(ch[tier] || {}) };
     if (tier === "basic") base.cost = 3;
     if (tier === "secondary") base.cost = 4;
-    if (tier === "ultimate") base.cost = 7;
+    if (tier === "ultimate") base.cost = 8;
     return base;
   }
   return ch[tier];
 }
 function chooseTargets(engine, p, targetIds, count) {
-  const byId = (targetIds || []).map((id) => engine.players[id]).filter((t) => t && t.alive && t.id !== p.id);
-  if (byId.length) return byId.slice(0, count);
-  return enemies(engine, p).slice(0, count);
+  const requested = Array.isArray(targetIds) && targetIds.length > 0;
+  const allowed = (t) => t && t.alive && t.id !== p.id && !engine.friendlyEffectBlocked?.(t);
+  const byId = (targetIds || []).map((id) => engine.players[id]).filter(allowed);
+  if (requested) return byId.slice(0, count);
+  return enemies(engine, p).filter(allowed).slice(0, count);
 }
 function randomTargets(engine, p, count) {
-  const pool = enemies(engine, p);
+  const pool = enemies(engine, p).filter((target) => !engine.friendlyEffectBlocked?.(target));
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
@@ -182,14 +191,38 @@ function randomTargets(engine, p, count) {
 function addWine(p, level = 1) {
   p.inventory = p.inventory || [];
   const wines = p.inventory.filter((it) => it.type === "wineBarrel");
-  if (wines.length >= 3) return false;
-  p.inventory.push({ type: "wineBarrel", name: `WineBarrel ${"I".repeat(level)}`, level, age: 0, img: "/characters/escanor/สกิลพื้นฐาน/Barrel.png" });
+  if (wines.length >= WINE_MAX) return false;
+  const safeLevel = Math.max(1, Math.min(4, level || 1));
+  const roman = ["", "I", "II", "III", "IV"][safeLevel];
+  p.inventory.push({ uid: `wine_${p.id || "player"}_${Date.now()}_${++wineUidSeq}`, type: "wineBarrel", name: `WineBarrel ${roman}`, level: safeLevel, age: 0, img: "/characters/escanor/สกิลพื้นฐาน/Barrel.png" });
   return true;
 }
 function wineSellPrice(level) { return 1 + Math.max(1, Math.min(4, level || 1)); }
 
+function tickWineBarrels(engine, p) {
+  p.inventory = p.inventory || [];
+  for (const it of p.inventory) {
+    if (it.type !== "wineBarrel") continue;
+    it.age = (it.age || 0) + 1;
+    if (it.age >= 4 && (it.level || 1) < 4) {
+      it.level += 1;
+      it.age = 0;
+      it.name = `WineBarrel ${["", "I", "II", "III", "IV"][it.level]}`;
+    }
+  }
+  const pending = Math.max(0, p.escanorPendingWine || 0);
+  if (pending > 0) p.escanorPendingWine = 0;
+  for (let i = 0; i < pending; i++) {
+    if (addWine(p, 1)) engine.log?.(`🍷 ${p.name} ได้รับ WineBarrel I ที่หมักไว้`);
+    else engine.log?.(`🍷 ${p.name} ไม่ได้รับ WineBarrel เพราะกระเป๋าไวน์เต็ม ${WINE_MAX} ชิ้น`);
+  }
+}
+
 function onRoundStartTick(engine, p, prevNight) {
-  if (!p || p.characterId !== ID || !p.alive) return;
+  if (!p || !p.alive) return;
+  // WineBarrel ยังต้องบ่มต่อเมื่อถูกขโมยไปอยู่ในกระเป๋าของตัวละครอื่น
+  tickWineBarrels(engine, p);
+  if (p.characterId !== ID) return;
   p.statuses = p.statuses || {};
   p.statusAmt = p.statusAmt || {};
   clampCharge(p);
@@ -202,12 +235,14 @@ function onRoundStartTick(engine, p, prevNight) {
     return;
   }
 
-  if (p.escanorForcedMorning > 0) {
-    p.escanorForcedMorning -= 1;
-    enterForm(engine, p, "morning");
+  // เมื่อเข้า Noon แล้ว ห้ามเวลา/Forced Morning แทรกเปลี่ยนร่างจนกว่าชาร์จจะหมดจริง
+  if (isNoon(p)) {
+    enterForm(engine, p, "noon");
   } else if (p.escanorCharge >= ESCANOR_CHARGE_MAX) {
     p.escanorCharge = ESCANOR_CHARGE_MAX;
     enterForm(engine, p, "noon");
+  } else if (p.escanorForcedMorning > 0) {
+    enterForm(engine, p, "morning");
   } else if (isMorningTime(engine)) {
     enterForm(engine, p, "morning");
     p.escanorCharge = Math.min(ESCANOR_CHARGE_MAX, (p.escanorCharge || 0) + 1);
@@ -217,32 +252,34 @@ function onRoundStartTick(engine, p, prevNight) {
     engine.addSkill(p, 1);
   }
 
-  if (p.inventory) {
-    for (const it of p.inventory) {
-      if (it.type !== "wineBarrel") continue;
-      it.age = (it.age || 0) + 1;
-      if (it.age >= 4 && (it.level || 1) < 4) { it.level += 1; it.age = 0; it.name = `WineBarrel ${"I".repeat(it.level)}`; }
-    }
-  }
 }
 function onEndTurnSolar(engine, p) {
   if (!p || p.characterId !== ID || !p.alive) return;
   if (isNoon(p)) {
     p.escanorCharge = Math.max(0, (p.escanorCharge || 0) - 1);
-    if (p.escanorCharge <= 0) enterForm(engine, p, isMorningTime(engine) ? "morning" : "night");
+    if (p.escanorCharge <= 0) leaveNoon(engine, p);
   }
-  if (isMorningTime(engine) && formOf(p) === "morning" && (p.isLoser || !p.didAttackRound)) addSolar(p, 1);
-  if (p.statuses?.escanorSolar > 0) {
+  const receivedSolar = !isLast(p) && (p.isLoser || !p.didAttackRound);
+  if (receivedSolar) addSolar(p, 1);
+  if (p.escanorForcedMorning > 0) {
+    // Noon มีลำดับความสำคัญสูงกว่า จึงพักการใช้ Solar จนกว่าจะกลับมาเป็น Morning จริง
+    if (isNoon(p) || isLast(p)) return;
+    const spent = useSolar(p, 1);
+    if (spent) engine.log?.(`☀️ ${p.name} ใช้ Solar 1 หน่วยเพื่อคงร่าง Morning`);
+    if (!spent || !(p.statuses?.escanorSolar > 0)) {
+      p.escanorForcedMorning = 0;
+      if (!isNoon(p) && !isLast(p)) {
+        enterForm(engine, p, isMorningTime(engine) ? "morning" : "night");
+      }
+    }
+    return;
+  }
+  if (!receivedSolar && p.statuses?.escanorSolar > 0) {
     p.escanorSolarIdle = (p.escanorSolarIdle || 0) + 1;
-    if (p.escanorSolarIdle >= 3) useSolar(p, p.statuses.escanorSolar);
-  }
-  if (p.statuses?.drunk > 0) {
-    p.statuses.drunk -= 1;
-    if (p.statuses.drunk <= 0) delete p.statuses.drunk;
-  }
-  if (p.statuses?.escanorCool > 0) {
-    p.statuses.escanorCool -= 1;
-    if (p.statuses.escanorCool <= 0) { delete p.statuses.escanorCool; delete p.statusAmt.escanorCool; }
+    if (p.escanorSolarIdle >= 3) {
+      useSolar(p, 1);
+      engine.log?.(`☀️ ${p.name} ไม่ได้รับ Solar เพิ่มครบ 3 เทิร์น — Solar ลดลง 1 หน่วย`);
+    }
   }
 }
 function armorBonus(p) { return p && p.characterId === "escanor" && ["morning", "noon"].includes(formOf(p)) ? 1 : 0; }
@@ -257,15 +294,16 @@ function adjustOutgoingDamage(engine, attacker, target, dmg) {
   if (f === "morning" || f === "noon") dmg += 1;
   if (f === "last") dmg += Math.floor(totalBurn(engine) / 5);
   if (attacker.statuses?.escanorSpear > 0) dmg += 1;
-  if (attacker.statuses?.escanorFlareNoon > 0 || attacker.statuses?.escanorPunch > 0 || attacker.statuses?.escanorRhitta > 0) dmg += 1;
+  if (attacker.statuses?.escanorPunch > 0) dmg += 1;
   return Math.max(0, dmg);
 }
 function adjustIncomingDamage(engine, p, n, isNormalAttack) {
   if (!p || p.characterId !== ID || n <= 0 || p._statusDamage) return n;
-  if (p.statuses?.escanorCool > 0) n = Math.max(0, n - (p.statusAmt?.escanorCool || 1));
-  if (isNoon(p) && !isNormalAttack && cooldownSkillLoss(p) !== engine.roundNumber) {
+  if (!isNormalAttack && p.statuses?.escanorCool > 0) n = Math.max(0, n - (p.statusAmt?.escanorCool || 1));
+  if (n > 0 && isNoon(p) && !isNormalAttack && cooldownSkillLoss(p) !== engine.roundNumber) {
     p.escanorCharge = Math.max(0, (p.escanorCharge || 0) - 1);
     p.escanorNoonSkillLossRound = engine.roundNumber;
+    if (p.escanorCharge <= 0) leaveNoon(engine, p);
   }
   if (isLast(p)) n = Math.min(1, n);
   return n;
@@ -277,24 +315,44 @@ function tryNightDodge(engine, attacker, target) {
   return true;
 }
 function onAttackLanded(engine, attacker, target) {
-  if (!attacker || attacker.characterId !== ID || !target || !target.alive) return;
+  if (!attacker || attacker.characterId !== ID || !target) return false;
   const f = formOf(attacker);
+  let videoQueued = false;
+  if (attacker.statuses?.escanorFlare > 0 || attacker.statuses?.escanorFlareNoon > 0) {
+    videoQueued = playCutscene(engine, attacker, "escanorSecondary1") || videoQueued;
+  }
+  if (attacker.statuses?.escanorRhitta > 0 || attacker.statuses?.escanorRhittaNoon > 0) {
+    videoQueued = playCutscene(engine, attacker, "escanorUltimate1") || videoQueued;
+  }
+  if (attacker.statuses?.escanorPunch > 0) {
+    videoQueued = playCutscene(engine, attacker, "escanorSecondary3") || videoQueued;
+  }
+  if (attacker.statuses?.escanorSun > 0) {
+    videoQueued = playCutscene(engine, attacker, "escanorUltimate3") || videoQueued;
+  }
   if (f === "morning" || f === "noon") addBurn(engine, target, 1, "Escanor");
   if (f === "last") addBurn(engine, target, 2, "Last Stand");
-  if (attacker.statuses?.escanorSpear > 0) { addBurn(engine, target, 1, "หอกเพลิงสุริยะ"); delete attacker.statuses.escanorSpear; }
-  if (attacker.statuses?.escanorFlare > 0) { addBurn(engine, target, 1, "เพลิงปะทุ"); delete attacker.statuses.escanorFlare; }
-  if (attacker.statuses?.escanorFlareNoon > 0) { addBurn(engine, target, 1, "เพลิงปะทุ Noon"); engine.applyDebuff(target, "nohealing", 2, 1); engine.addSkill(attacker, 1); delete attacker.statuses.escanorFlareNoon; }
-  if (attacker.statuses?.escanorPunch > 0) { addBurn(engine, target, 2, "หมัดเพลิงสุริยัน"); delete attacker.statuses.escanorPunch; }
-  if (attacker.statuses?.escanorRhitta > 0) { addBurn(engine, target, 1, "Divine Axe Rhitta"); delete attacker.statuses.escanorRhitta; }
-  if (attacker.statuses?.escanorRhittaNoon > 0) { forceBurnTicks(engine, target, 2); delete attacker.statuses.escanorRhittaNoon; }
+  if (attacker.statuses?.escanorSpear > 0) { addBurn(engine, target, 1, "หอกเพลิงสุริยะ"); clearStatus(attacker, "escanorSpear"); }
+  if (attacker.statuses?.escanorFlare > 0) { addBurn(engine, target, 1, "เพลิงปะทุ"); clearStatus(attacker, "escanorFlare"); }
+  if (attacker.statuses?.escanorFlareNoon > 0) { addBurn(engine, target, 2, "เพลิงปะทุ Noon"); engine.applyDebuff(target, "nohealing", 2, 1); clearStatus(attacker, "escanorFlareNoon"); }
+  if (attacker.statuses?.escanorPunch > 0) { addBurn(engine, target, 2, "หมัดเพลิงสุริยัน"); clearStatus(attacker, "escanorPunch"); }
+  if (attacker.statuses?.escanorRhitta > 0) { addBurn(engine, target, 2, "Divin Axe Rhitta"); clearStatus(attacker, "escanorRhitta"); }
+  if (attacker.statuses?.escanorRhittaNoon > 0) { forceBurnTicks(engine, target, 2); clearStatus(attacker, "escanorRhittaNoon"); }
   if (attacker.statuses?.escanorSun > 0) {
-    for (const o of enemies(engine, attacker)) if (o.id !== target.id) engine.dealMixed(o, 1, true);
+    for (const o of enemies(engine, attacker)) if (o.id !== target.id) dealSkillDamage(engine, o, 1);
     forceBurnTicks(engine, target, target.statuses?.hburn || 0);
-    delete attacker.statuses.escanorSun;
+    clearStatus(attacker, "escanorSun");
   }
   if (isLast(attacker)) {
     delete attacker.statuses.hburn;
     engine.healHp(attacker, 1);
+  }
+  return videoQueued;
+}
+function onNormalAttackReceived(engine, attacker, target, formBeforeHit) {
+  if (!target || target.characterId !== ID || !attacker?.alive) return;
+  if (formBeforeHit === "noon" || formBeforeHit === "last") {
+    addBurn(engine, attacker, 1, formBeforeHit === "last" ? "Last Stand" : "Noon");
   }
 }
 function onAfterResolve(engine) {
@@ -304,20 +362,23 @@ function onAfterResolve(engine) {
       delete p.statuses.escanorSpearBurst;
       if (p.statusAmt) delete p.statusAmt.escanorSpearBurst;
       if (isLast(p)) {
-        const targets = randomTargets(engine, p, 3);
-        for (const target of targets) engine.dealMixed(target, 1, true);
-        addBurn(engine, p, 1, "Escanor Spear");
-        engine.log?.("Escanor Spear Burst - hit " + targets.length + " targets");
+        const resolveBurst = () => {
+          const targets = randomTargets(engine, p, 3);
+          for (const target of targets) dealSkillDamage(engine, target, 1);
+          addBurn(engine, p, 1, "Escanor Spear");
+          engine.log?.("Escanor Spear Burst - hit " + targets.length + " targets");
+        };
+        if (typeof engine.withEffectSource === "function") engine.withEffectSource(p, resolveBurst);
+        else resolveBurst();
       }
     }
-    if (!isNoon(p) && !isLast(p)) continue;
-    const lastAttacker = p.lastHitBy ? engine.players[p.lastHitBy] : null;
-    if (lastAttacker && lastAttacker.alive) addBurn(engine, lastAttacker, 1, formOf(p) === "last" ? "Last Stand" : "Noon");
   }
 }
 function tryNoonRevive(engine, p) {
   if (!p || p.characterId !== ID || !isNoon(p) || p.escanorLastStandUsed) return false;
   p.escanorLastStandUsed = true;
+  p.escanorCharge = 0;
+  p.escanorForcedMorning = 0;
   p.alive = true;
   p.hp = 6;
   p.armor = 0;
@@ -326,7 +387,7 @@ function tryNoonRevive(engine, p) {
   clearForms(p);
   setStatus(p, "escanorLastStand", 999, 1);
   addBurn(engine, p, 4, "Last Stand");
-  pushEscanorCutscene(engine, p, { img: IMG.last, video: FX.last, title: "LAST STAND", label: "คืนชีพ", seconds: 10, music: null });
+  playCutscene(engine, p, "escanorLastStand");
   engine.log?.(`☀️ ${p.name} ฟื้นคืนชีพเข้าสู่ Last Stand!`);
   return true;
 }
@@ -348,11 +409,25 @@ function prepareSkill(engine, p, tier, targets) {
   const ch = engine.CHAR_BY_ID[ID];
   const skill = skillByForm(engine, p, ch, tier);
   if (!skill) return null;
-  if (["basic", "secondary"].includes(tier) && chooseTargets(engine, p, targets, 1).length === 0 && tier !== "basic") return null;
+  const form = formOf(p);
+  if (tier === "basic" && (form === "morning" || form === "noon") &&
+      (!(Array.isArray(targets) && targets.length > 0) || chooseTargets(engine, p, targets, 1).length === 0)) {
+    engine.log?.(`${p.name} ต้องเลือกผู้เล่นเป้าหมายของบอลเพลิงสุริยะ`);
+    return null;
+  }
   if (skill.needSolar && !(p.statuses?.escanorSolar > 0)) { engine.log?.(`${p.name} ต้องมี Solar ก่อนใช้สกิลนี้`); return null; }
-  if (tier === "secondary" && formOf(p) === "night") {
+  if (tier === "basic" && form === "night") {
+    const wineCount = (p.inventory || []).filter((it) => it.type === "wineBarrel").length + (p.escanorPendingWine || 0);
+    if (wineCount >= WINE_MAX) { engine.log?.(`${p.name} มี WineBarrel เต็ม ${WINE_MAX} ชิ้นแล้ว`); return null; }
+  }
+  if (tier === "secondary" && form === "night") {
     const wines = (p.inventory || []).filter((it) => it.type === "wineBarrel");
     if (!wines.length) { engine.log?.(`${p.name} ไม่มี WineBarrel สำหรับ Sell`); return null; }
+  }
+  const pendingSecondary = form === "noon" ? "escanorFlareNoon" : form === "last" ? "escanorPunch" : form === "morning" ? "escanorFlare" : null;
+  if (tier === "secondary" && pendingSecondary && (p.statuses?.[pendingSecondary] || 0) > 0) {
+    engine.log?.(`${p.name} มีผลของสกิลรองรอการโจมตีอยู่แล้ว`);
+    return null;
   }
   return skill;
 }
@@ -361,11 +436,16 @@ function applySkill(engine, p, tier, targets) {
   const targets1 = chooseTargets(engine, p, targets, 3);
   const t = targets1[0];
   if (tier === "basic") {
-    if (form === "night") { addWine(p, 1); engine.log?.(`🍷 ${p.name} หมัก WineBarrel +1`); return; }
+    if (form === "night") { p.escanorPendingWine = (p.escanorPendingWine || 0) + 1; engine.log?.(`🍷 ${p.name} เริ่มหมัก WineBarrel I ซึ่งจะได้รับต้นเทิร์นถัดไป`); return; }
     if (form === "last") { setStatus(p, "escanorSpearBurst", 1, 1); return; }
     if (!t) return;
-    pushEscanorCutscene(engine, p, { img: "/characters/escanor/สกิลพื้นฐาน/สกิลพื้นฐาน 1 บอลเพลิงสุริยะ.png.jpg", video: FX.basic1, title: "SUN FIREBALL", label: "สกิล", seconds: 8, music: null });
-    engine.dealMixed(t, 1);
+    if (form === "noon") {
+      engine.loseHp(p);
+      if (p.hp <= 0) engine.instantDeath(p);
+      if (!p.alive || !isNoon(p)) return;
+    }
+    playCutscene(engine, p, "escanorBasic1");
+    dealSkillDamage(engine, t, 1);
     addBurn(engine, t, form === "noon" ? 2 : 1, "บอลเพลิงสุริยะ");
     return;
   }
@@ -386,27 +466,26 @@ function applySkill(engine, p, tier, targets) {
       return;
     }
     setStatus(p, "escanorFlare", 999, 1);
-    pushEscanorCutscene(engine, p, { img: "/characters/escanor/สกิลรอง/สกิลรอง 1 เพลิงปะทุ.jpg", video: FX.secondary1, title: "FLARE", label: "สกิลรอง", seconds: 8, music: null });
     return;
   }
   if (tier === "ultimate") {
     if (form === "night") {
       const amt = p.statuses?.escanorSolar || 0;
       if (!amt) return;
-      useSolar(p, amt);
-      p.escanorForcedMorning = amt;
+      p.escanorForcedMorning = 1;
+      p.escanorSolarIdle = 0;
       enterForm(engine, p, "morning");
       return;
     }
     if (form === "last") { setStatus(p, "escanorSun", 999, 1); return; }
-    if (form === "noon") { setStatus(p, "escanorRhittaNoon", 999, 1); return; }
     setStatus(p, "escanorRhitta", 999, 1);
+    if (form === "noon") setStatus(p, "escanorRhittaNoon", 999, 1);
   }
 }
 function useWineBarrel(engine, p, item) {
   if (!item || item.type !== "wineBarrel") return false;
   const level = Math.max(1, Math.min(4, item.level || 1));
-  engine.healHp(p, level >= 3 ? 2 : 1);
+  engine.healHp(p, level >= 4 ? 3 : level >= 3 ? 2 : 1);
   if (level >= 2) setStatus(p, "escanorCool", 2, level >= 4 ? 2 : 1);
   if (level >= 3) setStatus(p, "drunk", (p.statuses?.drunk || 0) + (level >= 4 ? 2 : 1), (p.statusAmt?.drunk || 0) + (level >= 4 ? 2 : 1));
   return true;
@@ -431,6 +510,7 @@ module.exports = {
   adjustIncomingDamage,
   tryNightDodge,
   onAttackLanded,
+  onNormalAttackReceived,
   onAfterResolve,
   tryNoonRevive,
   hburnImmune,

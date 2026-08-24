@@ -15,7 +15,7 @@ const DIFFICULTY_GROUPS = [
   { key: "fun", label: "เอาฮา", color: "#9B4F96", order: ["gambler", "appleguy", "broadband_man"] },
   { key: "extreme", label: "ยากสุดขีด", color: "#111827", order: ["satoru"] },
   { key: "impossible", label: "ทักษิณ จะโปรหาบิดาท่านหรือ?", color: "#450a0a", order: ["tohno", "nanaya", "princess_shiki"] },
-  { key: "special", label: "พิเศษ", color: "#0e7490", order: ["ultraman_trigger"] },
+  { key: "special", label: "พิเศษ", color: "#0e7490", order: ["ultraman_trigger", "yuuki"] },
 ];
 // ตัวละครในกลุ่มความยากนั้น เรียงตาม order ที่กำหนด
 function charsInGroup(roster, g) {
@@ -316,8 +316,8 @@ export default function CharacterSelect({ roster, position, name, onConfirm, onB
         ← กลับ
       </button>
 
-      {/* ---------- ปุ่มยืนยัน มุมขวาล่าง (โผล่เมื่อเลือกตัวละครแล้ว) ---------- */}
-      <button
+      {/* ตัวละครระบบ/บอสเปิดดูข้อมูลได้ แต่ไม่มีปุ่มยืนยันให้เลือกเล่น */}
+      {!sel?.locked && <button
         onClick={confirm}
         disabled={!sel || sel.locked}
         className={`fixed bottom-0 right-0 w-56 h-24 sm:h-28 group z-20 transition-all duration-300 ${
@@ -331,7 +331,7 @@ export default function CharacterSelect({ roster, position, name, onConfirm, onB
         >
           ยืนยัน →
         </span>
-      </button>
+      </button>}
     </div>
   );
 }

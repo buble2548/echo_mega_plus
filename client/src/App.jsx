@@ -148,6 +148,7 @@ export default function App() {
   const cycle = stage === "connected" && state ? state.cycle : null;
   const skillMusic = stage === "connected" && state ? state.skillMusic : null;
   const skillMusicSeq = stage === "connected" && state ? state.skillMusicSeq : 0;
+  const mandatoryCutscene = phase === "CUTSCENE" && (state?.cutscene?.kind === "overloadForce" || state?.cutscene?.kind?.startsWith("yuuki"));
   useEffect(() => {
     // CUTSCENE: หยุดเพลงพื้นหลัง ปล่อยให้เสียงในวีดีโอเล่น (เพลงสกิลมาหลังวีดีโอ)
     // ร่างแปลง (Ginga/Unicorn): เพลงสกิลทับ | ช่วงต่อสู้: เพลงกลางวัน/กลางคืน | อื่นๆ: main_home
@@ -168,7 +169,7 @@ export default function App() {
     if (!inMatch) prevCycle.current = null;
 
     // โหมดประหยัด (patch 2.0.6): ข้ามวีดีโอคัตซีน — ระหว่างรอคนอื่นดูวีดีโอ เพลงเล่นต่อตามปกติ
-    if (phase === "CUTSCENE" && !lowQ) stopMusic();
+    if (phase === "CUTSCENE" && (!lowQ || mandatoryCutscene)) stopMusic();
     else if (skillMusic) playMusic(skillMusic, skillMusicSeq); // seq เปลี่ยน = การเปิดร่างใหม่ -> เริ่มเพลงใหม่
     else if (battle || phase === "CUTSCENE") playMusic(cycle === "night" ? "new_night" : "new_morning", cycleSeq.current);
     else playMusic("main_home");
@@ -185,7 +186,7 @@ export default function App() {
       playSfx(doomShoot || attackSound || "attack");
     }
     prevPhase.current = phase;
-  }, [stage, phase, cycle, skillMusic, skillMusicSeq, lowQ]);
+  }, [stage, phase, cycle, skillMusic, skillMusicSeq, lowQ, mandatoryCutscene]);
 
   const goCharacter = (n, pos) => {
     setName(n);

@@ -1,6 +1,6 @@
 const BASE = "/characters/ignis";
 const DARK_TURNS = 5;
-const WAIL_MAX = 3;
+const WAIL_MAX = 5;
 
 function darkOn(p) {
   return !!(p && p.statuses && (p.statuses.triggerDarkForm || 0) > 0);
@@ -68,8 +68,6 @@ module.exports = {
   restoreFromTriggerDark(engine, p) {
     if (!p || p.characterId !== "ignis") return;
     delete p.statuses.triggerDarkForm;
-    delete p.statuses.triggerDarkCry;
-    delete p.statuses.triggerDarkImpact;
     if (engine.log) engine.log(`${p.name} คืนร่างจาก Trigger Dark — ต้องซื้อ Trigger Dark Key ใหม่เพื่อใช้ซ้ำ`);
     syncWail(p);
   },
@@ -81,12 +79,15 @@ module.exports = {
   },
 
   canUseSkill(engine, p, tier) {
-    if (tier === "secondary") return darkOn(p) && !((p.statuses.triggerDarkCry || 0) > 0);
-    if (tier === "ultimate") return darkOn(p) && !((p.statuses.triggerDarkImpact || 0) > 0);
+    if (tier === "secondary" || tier === "ultimate") return darkOn(p);
     return true;
   },
 
   prepareStealTarget(engine, p, targets) {
+    return selectedTarget(engine, p, targets);
+  },
+
+  prepareImpactTarget(engine, p, targets) {
     return selectedTarget(engine, p, targets);
   },
 
@@ -114,51 +115,52 @@ module.exports = {
   },
 
   applySkill(engine, p, tier) {
-    p.statuses = p.statuses || {};
     if (tier === "secondary") {
-      p.statuses.triggerDarkCry = 3;
-      if (engine.log) engine.log(`${p.name} ได้รับบัฟ เสียงร่ำไห้ 3 เทิร์น`);
+      const affected = engine.alivePlayers ? engine.alivePlayers() : Object.values(engine.players || {}).filter((o) => o.alive);
+      for (const target of affected) {
+        target.triggerDarkWail = Math.min(WAIL_MAX, (target.triggerDarkWail || 0) + 2);
+        syncWail(target);
+      }
+      const healed = engine.healHp ? engine.healHp(p, 1) : 0;
+      if (engine.log) engine.log(`${p.name} ใช้เสียงร้องไห้ — ทุกคนได้รับ อวดครวญ +2 (สูงสุด ${WAIL_MAX}) และ ${p.name} ฟื้นพลังชีวิต +${healed}`);
     }
-    if (tier === "ultimate") {
-      p.statuses.triggerDarkImpact = 999;
-      if (engine.log) engine.log(`${p.name} เตรียม Impact — การโจมตีปกติครั้งถัดไปบวกอวดครวญ`);
-    }
-    syncWail(p);
     return "";
+  },
+
+  applyImpact(engine, p, target) {
+    const damage = target ? Math.min(WAIL_MAX, target.triggerDarkWail || 0) : 0;
+    if (target && target.alive && damage > 0 && engine.dealMixed) engine.dealMixed(target, damage);
+
+    for (const player of Object.values(engine.players || {})) {
+      player.triggerDarkWail = 0;
+      syncWail(player);
+    }
+
+    if (!target || !target.alive) {
+      if (engine.log) engine.log(`💨 Impact ของ ${p.name} พลาดเป้า — เป้าหมายตกรอบไปก่อนวีดีโอจบ และล้าง อวดครวญ ทั้งหมดบนสนาม`);
+      return 0;
+    }
+
+    if (engine.log) engine.log(`💥 ${p.name} ใช้ Impact ใส่ ${target.name} — อวดครวญ ${damage} หน่วย สร้างความเสียหาย ${damage} หน่วย และล้าง อวดครวญ ทั้งหมดบนสนาม`);
+    if (engine.maybeBeatSave) engine.maybeBeatSave(target);
+    if (engine.maybeBeatMode) engine.maybeBeatMode(target);
+    if (engine.maybeEva3) engine.maybeEva3(target);
+    if (engine.maybeWakeKotone) engine.maybeWakeKotone(target);
+    if (target.alive && target.hp <= 0 && engine.instantDeath) {
+      engine.instantDeath(target);
+      if (!target.alive && engine.log) engine.log(`💀 ${target.name} เลือดจริงหมด ตกรอบ!`);
+    }
+    return damage;
   },
 
   damageBonus(engine, attacker, target, ctx) {
     if (!darkOn(attacker)) return 0;
-    const nightBonus = engine.isNightRound && engine.isNightRound(engine.roundNumber) ? 2 : 0;
-    const impact = (attacker.statuses.triggerDarkImpact || 0) > 0;
-    const wailBonus = impact ? Math.min(WAIL_MAX, attacker.triggerDarkWail || 0) : 0;
-    if (ctx) {
-      ctx.triggerDarkNightAtk = nightBonus;
-      ctx.triggerDarkImpactAtk = impact;
-      ctx.triggerDarkCryAtk = (attacker.statuses.triggerDarkCry || 0) > 0;
-      ctx.triggerDarkWailBonus = wailBonus;
-    }
-    return nightBonus + wailBonus;
+    const bonus = engine.isNightRound && engine.isNightRound(engine.roundNumber) ? 2 : 1;
+    if (ctx) ctx.triggerDarkAtk = bonus;
+    return bonus;
   },
 
-  onAttackLanded(engine, attacker, target, ctx = {}) {
-    if (!attacker || attacker.characterId !== "ignis") return [];
-    const fx = [];
-    if (ctx.triggerDarkCryAtk) {
-      attacker.triggerDarkWail = Math.min(WAIL_MAX, (attacker.triggerDarkWail || 0) + 1);
-      syncWail(attacker);
-      if (engine.log) engine.log(`${attacker.name} สะสม อวดครวญ ${attacker.triggerDarkWail}/${WAIL_MAX}`);
-      fx.push({ name: `เสียงร่ำไห้: อวดครวญ ${attacker.triggerDarkWail}/${WAIL_MAX}`, img: `${BASE}/dark_skill2/trigger_dark_skill2.jpg`, by: attacker.name, color: engine.colorOf ? engine.colorOf(attacker) : undefined, side: "atk" });
-    }
-    if (ctx.triggerDarkImpactAtk) {
-      delete attacker.statuses.triggerDarkImpact;
-      if (engine.triggerCutscene) engine.triggerCutscene(attacker, "triggerDarkImpact");
-      const bonus = Math.min(WAIL_MAX, attacker.triggerDarkWail || 0);
-      if (engine.log) engine.log(`${attacker.name} ปลดปล่อย Impact (+${bonus})`);
-      fx.push({ name: `Impact +${bonus}`, img: `${BASE}/dark_skill3/trigger_dark_skill3.png`, by: attacker.name, color: engine.colorOf ? engine.colorOf(attacker) : undefined, side: "atk" });
-    }
-    return fx;
-  },
+  onAttackLanded() { return []; },
 
   extraSkillRegen(engine, p) {
     if (!darkOn(p)) return 0;

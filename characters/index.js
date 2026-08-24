@@ -37,6 +37,7 @@ const ultraman_trigger = require("./ultraman_trigger");
 const escanor = require("./escanor");
 const hisakawa_sister = require("./hisakawa_sister");
 const ignis = require("./ignis");
+const yuuki = require("./yuuki");
 
 const CHARACTER_MODULES = [
   tohno,
@@ -72,6 +73,7 @@ const CHARACTER_MODULES = [
   escanor,
   hisakawa_sister,
   ignis,
+  yuuki,
 ];
 
 const CHAR_HOOKS = {};

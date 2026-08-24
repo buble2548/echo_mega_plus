@@ -72,6 +72,7 @@ if (ASSET_BASE_URL) {
   app.get("/characters/*", (req, res) => res.redirect(302, ASSET_BASE_URL + req.path));
   // ไฟล์ไอเทม (ปืนหน่วย GUTS Select + คีย์/วีดีโอกระสุน) เก็บที่เดียวกัน — /item/... บน R2
   app.get("/item/*", (req, res) => res.redirect(302, ASSET_BASE_URL + req.path));
+  app.get("/overload_force/*", (req, res) => res.redirect(302, ASSET_BASE_URL + req.path));
 }
 
 app.use(express.static(staticDir, {
@@ -94,6 +95,19 @@ app.get(/^\/(?!socket\.io).*/, (req, res) => res.sendFile(path.join(staticDir, "
 // ---------- ค่าคงที่ ----------
 const MAX_PLAYERS = 6;
 const CARD_TIME = 60;
+const OVERLOAD_FORCE_CHANCE = 0.30;
+const OVERLOAD_FORCE_CUTSCENE_SECONDS = 5; // overload_force_start.mp4 = 4.809s
+const YUUKI_ID = "__yuuki_boss__";
+const YUUKI_IMG = "/characters/yuuki/yuuki.jpg";
+const YUUKI_VIDEO = {
+  spawn: "/characters/yuuki/yuuki_overload.mp4",
+  attack: "/characters/yuuki/yuuki_overload_n_attack.mp4",
+  ultimate: "/characters/yuuki/yuuki_overload_ultimate.mp4",
+  low: "/characters/yuuki/yuuki_overload_low.mp4",
+  field: "/characters/yuuki/yuuki_overload_fill.mp4",
+  end: "/characters/yuuki/yuuki_overload_end.mp4",
+  win: "/characters/yuuki/yuuki_overload_win.mp4",
+};
 const SUMMARY_TIME = 5;
 const ATTACK_TIME = 15;
 const TRANSITION_TIME = 3;
@@ -133,6 +147,7 @@ const GUTS_GUN_PRICE = 15;
 const GUTS_GUN_CHANCE = 0.30;     // 30% ออกปืน / 70% ออกกระสุน (เฉลี่ยเท่ากันทุกแบบ = 17.5% ต่อแบบ)
 const GUTS_CHAA_TURNS = 2;       // Thunder Bullet: สภาพชาคงอยู่ 2 เทิร์น
 const GUTS_NURSE_DMG = 4;         // Nursedessei Cannon: ดาเมจ (ลดเกราะก่อน)
+const BLACK_SPARKLENCE_NURSE_COOLDOWN = 3; // Black Sparklence: หลังยิง Nursedessei ใช้ปืนไม่ได้ 3 เทิร์นถัดไป
 const GUTS_AMMO = {
   shockwave: { id: "shockwave", name: "Shockwave Bullet",   price: 5,  img: `${ITEM_BASE}/guts_key/gomora_key.webp`,    cut: "gutsShockwave" },
   gargorgon: { id: "gargorgon", name: "Gargorgon Ray",      price: 5,  img: `${ITEM_BASE}/guts_key/gargorgon_key.webp`, cut: "gutsGargorgon" },
@@ -463,6 +478,7 @@ const BARD_SONGS = {
 };
 // พลังงานสูงสุดของผู้เล่น (Bard = 9)
 function maxSkillOf(p) {
+  if (isYuuki(p)) return 0;
   return (p && p.characterId === "bard") ? BARD_MAX_SKILL : MAX_SKILL;
 }
 // มิติมายาบรรเลงที่เปิดอยู่บนสนาม: "day" (โลหิต) | "night" (วิญญาณ) | null — ย้าย body ไป characters/bard.js
@@ -765,6 +781,14 @@ let attackerId = null;
 let roundWinnerId = null;
 let roundTiedWin = false;  // ผู้ชนะได้จากการเสมอแต้ม -> ไม่มีเทิร์นโจมตีรอบนี้
 let doomTieAttack = false; // DoomGuy สกิลติดตัว: เสมอแต้มแล้วโรลติด -> ได้เป็นผู้ชนะและได้โจมตีรอบนี้
+let overloadForceActive = false; // สนามพิเศษมีผลเฉพาะเทิร์นที่สุ่มติด
+let overloadForceSeq = 0;        // เริ่มวิดีโอและเพลงใหม่ทุกครั้งที่เกิด
+let overloadForceCount = 0;      // ครั้งที่เกิดในแมตช์ — ครั้งที่ 3 ถูกแทนด้วยบอสยูกิ
+let yuukiSpawned = false;         // ยูกิเกิดได้เพียงครั้งเดียวต่อเกม
+let yuukiTurns = 0;               // นับเทิร์นบนสนามสำหรับ Star of Fall ทุก 5 เทิร์น
+let yuukiAttackTargets = [];      // คิวโจมตี 2 เป้าหมายแบบไม่ซ้ำเมื่อยูกิชนะ
+let yuukiLowShown = false;
+let yuukiWinShown = false;
 let roundNumber = 0;
 let centralDeck = []; // กองกลาง 43 ใบ (สับใหม่ทุกรอบใน dealRound())
 let lastLog = [];
@@ -980,6 +1004,7 @@ function aliveTeamIds(list = alivePlayers()) {
 }
 function remainingTeamWinInfo(stillAlive = alivePlayers(), total = Object.keys(players).length) {
   if (!teamModeActive() || total < 2) return { over: false, teamId: null };
+  if (yuukiBoss()) return aliveHumans().length ? { over: false, teamId: null } : { over: true, teamId: null };
   const aliveTeams = aliveTeamIds(stillAlive);
   return aliveTeams.length <= 1 ? { over: true, teamId: aliveTeams[0] || null } : { over: false, teamId: null };
 }
@@ -1014,6 +1039,7 @@ function drawFromCentralDeck(predicate) {
   return centralDeck.splice(idx, 1)[0];
 }
 function drawCardFor(p) {
+  if (!p || !p.alive) return null;
   // ข้าขอบัญชา (หญิง คิชินามิ ฮาคุโนะ patch 2.2.1): จั่วเพิ่มระหว่างนี้ได้แค่ 2 หรือ 3 แต้มเท่านั้น (ถ้ายังเหลือในกองกลาง)
   if (p.hakunoLowDraw) {
     const c = drawFromCentralDeck((card) => !card.special && HAKUNO_DRAW_LOW_VALUES.includes(card.value));
@@ -1044,7 +1070,7 @@ function calculateScore(cards) {
     if (c.special) continue; // King/Queen ไม่เพิ่มแต้ม
     base += c.value;
   }
-  if (hasJoker) base += Math.min(12, Math.max(0, 21 - base)); // โจ๊กเกอร์: ดันแต้มไปให้ใกล้ 21 ที่สุด (สูงสุด +12)
+  if (hasJoker) base += overloadForceActive ? 12 : Math.min(12, Math.max(0, 21 - base)); // Overload: Joker +12 ตายตัว
   return base;
 }
 const YELLOW_CARD_SKILL_BONUS = 2; // ไพ่เหลืองครบ 3 ใบ 1 ชุด = แต้มสกิล +2 (เดิม +1)
@@ -1073,6 +1099,7 @@ function applySpecialCardEffect(p, card) {
 function onCardDrawn(p, card) {
   checkBlueTrigger(p);
   applySpecialCardEffect(p, card);
+  applyOverloadOverdrawPenalty(p);
 }
 // แดง/เขียว/เหลือง ครบ 3 ใบ: ประเมินครั้งเดียวตอนเปิดไพ่ (lock) จากมือสุดท้ายทั้งหมด
 function applyLockColorTriggers(p) {
@@ -1105,6 +1132,7 @@ function fortuneTargetList(currentScore) {
 }
 // เพดานแต้มขณะ UPG! (ฮิคารุ, characters/hikaru.js) — wrapper รอบ CHAR_HOOKS.hikaru.upgCap
 function scoreCap(p) {
+  if (overloadForceActive) return Infinity;
   // แต้มสูงสุดที่รับได้ก่อนล็อกไพ่อัตโนมัติ (UPG! = เพดานของมัน, เสือนอนกิน (fiber) = 19, ปกติ = 21)
   if (p.statuses && p.statuses.upg) return CHAR_HOOKS.hikaru.upgCap(p);
   if (p.statuses && p.statuses.fiber) return FIBER_CAP;
@@ -1117,6 +1145,7 @@ function scoreOf(p) {
   return raw;
 }
 function bustedOf(p) {
+  if (overloadForceActive) return false;
   if (p.statuses && (p.statuses.upg || p.statuses.fiber)) return false;
   return calculateScore(p.cards) + (p.cardBonus || 0) > 21;
 }
@@ -1126,6 +1155,89 @@ function bustedOf(p) {
 //  ต่อสู้ + เอฟเฟกต์สกิล
 // ============================================================
 function alivePlayers() { return Object.values(players).filter((p) => p.alive); }
+function isYuuki(p) { return !!p && p.id === YUUKI_ID; }
+function yuukiBoss() { const p = players[YUUKI_ID]; return p && p.alive ? p : null; }
+function aliveHumans() { return alivePlayers().filter((p) => !isYuuki(p)); }
+
+function queueYuukiCutscene(video, title, seconds = 8, kind = "yuuki") {
+  cutsceneQueue.push({
+    seconds,
+    info: { kind, playerId: YUUKI_ID, name: "ยูกิ (Over Load)", img: YUUKI_IMG,
+      color: POSITION_COLORS[7], video, title, label: "BOSS · P7" },
+  });
+}
+
+function createYuukiBoss() {
+  if (yuukiSpawned) return players[YUUKI_ID] || null;
+  const ch = CHAR_BY_ID.yuuki;
+  const p = {
+    id: YUUKI_ID, socketId: null, connected: true, ready: true, isBoss: true,
+    teamId: null, teamConfirmed: true, modeVote: null,
+    name: "ยูกิ (Over Load)", position: 7, characterId: "yuuki", avatar: ch.avatar, img: ch.img,
+    cards: [], locked: true, busted: false, result: null,
+  };
+  players[YUUKI_ID] = p;
+  resetCombat(p);
+  p.ready = true;
+  p.connected = true;
+  p.isBoss = true;
+  p.skillPoints = 0;
+  p.gold = 0;
+  p.inventory = [];
+  yuukiSpawned = true;
+  yuukiTurns = 0;
+  yuukiLowShown = false;
+  yuukiWinShown = false;
+  return p;
+}
+
+function autoPlayYuuki() {
+  const p = yuukiBoss();
+  if (!p || !p.cards || p.locked) return;
+  // AI เล่นแบบเจ้ามือระมัดระวัง: จั่วจากกองกลางเดียวกับทุกคนจนแต้มถึง 17
+  // โชคลาภใช้กติกาเดียวกับผู้เล่น (หาไพ่ที่พาไป 19-21 ก่อน)
+  while (centralDeck.length && scoreOf(p) < 17 && !bustedOf(p)) {
+    let card = null;
+    if ((p.statuses.fortune || 0) > 0) {
+      p.statuses.fortune--;
+      if (p.statuses.fortune <= 0) delete p.statuses.fortune;
+      const cur = calculateScore(p.cards);
+      for (const target of fortuneTargetList(cur)) {
+        const need = target - cur;
+        if (need < 1 || need > 10) continue;
+        card = drawFromCentralDeck((c) => !c.special && c.value === need);
+        if (card) break;
+      }
+    }
+    if (!card) card = drawCardFor(p);
+    if (!card) break;
+    p.cards.push(card);
+    onCardDrawn(p, card);
+    p.busted = bustedOf(p);
+  }
+  applyLockColorTriggers(p);
+  p.locked = true;
+}
+
+function applyYuukiUltimate() {
+  const boss = yuukiBoss();
+  if (!boss) return;
+  const damage = boss.hp <= 4 ? 6 : 4;
+  const healed = healHp(boss, 3);
+  const hits = [];
+  withEffectSource(boss, () => {
+    for (let i = 0; i < damage; i++) {
+      const pool = aliveHumans();
+      if (!pool.length) break;
+      const target = pool[Math.floor(Math.random() * pool.length)];
+      damageSoft(target);
+      resolveDamageAftermath(target);
+      target.wasAttacked = true;
+      hits.push(target.name);
+    }
+  });
+  lastLog.push(`🌠 ${boss.name} ใช้ Star of Fall — ฟื้นพลังชีวิต +${healed} และเปิดฝนดาบ ${damage} หน่วย (${hits.join(", ") || "ไม่มีเป้าหมาย"})`);
+}
 
 // Song for you (เทมาริ patch 2.0.6): บัฟพลังขิงที่ล็อกไว้ตอนใช้สกิล (2 ชาม = +1)
 function songActive(p) {
@@ -1191,8 +1303,23 @@ function maybeBeatSave(p) {
 // ตายกลางเทิร์น (เลือดหมดจากสกิล/ผลสถานะ): ตกรอบทันที
 function instantDeath(p) {
   if (friendlyEffectBlocked(p)) return;
+  if (isYuuki(p)) {
+    const killer = players[effectSourceId];
+    p.hp = 0; p.alive = false; p.result = "dead"; p.locked = true;
+    overloadForceActive = false;
+    yuukiAttackTargets = [];
+    queueYuukiCutscene(YUUKI_VIDEO.end, "YUUKI · DEFEATED", 7, "yuukiEnd");
+    if (killer && killer.alive && !isYuuki(killer)) {
+      killer.inventory = killer.inventory || [];
+      killer.inventory.push({ uid: `hero_sword_${Date.now()}`, type: "heroSword" });
+      lastLog.push(`⚔️ ${killer.name} โค่นยูกิได้และได้รับ “ดาบผู้กล้า” เข้ากระเป๋า!`);
+    } else {
+      lastLog.push("💀 ยูกิถูกโค่นลง แต่ไม่มีผู้เล่นที่ถูกนับเป็นผู้สังหารคนสุดท้าย");
+    }
+    return;
+  }
   if (p.characterId === "escanor" && CHAR_HOOKS.escanor.tryNoonRevive(engine, p)) return;
-  if (p.characterId === "hisakawa_sister" && CHAR_HOOKS.hisakawa_sister.tryTwinDeath(engine, p)) return;
+  if (p.characterId === "hisakawa_sister" && resolveHisakawaTwinDeath(p)) return;
   // Ultraman Trigger: ตายในร่างพิเศษถือว่าตายจริง ไม่คืนร่างแทน
   // ริต้า เบอร์นัล (สกิลติดตัว 1 patch 2.1.6, characters/phenex.js): ตายครั้งแรก -> เกิดใหม่แทนที่จะตกรอบ (ครั้งเดียวต่อเกม)
   if (p.characterId === "phenex" && CHAR_HOOKS.phenex.tryRebirth(engine, p)) return;
@@ -1218,6 +1345,16 @@ function instantDeath(p) {
 function maybeEva3(p) {
   if (!p || !p.alive || p.characterId !== "eva13") return;
   CHAR_HOOKS.eva13.maybeEnterEva3(engine, p);
+}
+
+// สรุปผลหลังดาเมจจากสกิลของโมดูลตัวละคร: เรียกกันตาย/เปลี่ยนร่าง/ปลุก และตกรอบทันทีเมื่อ HP หมด
+function resolveDamageAftermath(p) {
+  if (!p || !p.alive) return;
+  maybeBeatSave(p);
+  maybeBeatMode(p);
+  maybeEva3(p);
+  maybeWakeKotone(p);
+  if (p.alive && p.hp <= 0) instantDeath(p);
 }
 
 // ฮีลพร้อมล้น: เลือดจริง -> เกราะ -> เลือดชั่วคราว (หายเองใน 2 เทิร์น / หมดเมื่อรับดาเมจ)
@@ -1501,6 +1638,11 @@ function loseHp(p) {
   }
   p.hp--; p.dmgHp++;
   hisakawaSyncOut(p);
+  if (isYuuki(p) && p.hp > 0 && p.hp <= 4 && !yuukiLowShown) {
+    yuukiLowShown = true;
+    queueYuukiCutscene(YUUKI_VIDEO.low, "OVERLOAD · LIMIT BREAK", 3, "yuukiLow");
+    lastLog.push(`🌌 ${p.name} พลังชีวิตเหลือ ${p.hp} — Star of Fall เพิ่มเป็น 6 ดาเมจ และจะได้รับโชคลาภทุกเทิร์น!`);
+  }
   // ไม่อยากให้ใครต้องเจ็บปวด (ริต้า เบอร์นัล, characters/phenex.js): ระหว่างล่อเป้า สะสม "ความเจ็บปวด" +1 ทุกๆ 1 หน่วยเลือดจริงที่เสียไป
   CHAR_HOOKS.phenex.onHpLost(p);
   if (!linkMirror) {
@@ -1509,6 +1651,23 @@ function loseHp(p) {
     for (const b of buddies) if (!sealActive(b)) loseHp(b);
     linkMirror = false;
   }
+}
+
+// Overload Force: ใบแรกเป็นไพ่ตั้งต้น หลังจากนั้นทุกใบที่ 5 ที่จั่วเพิ่มจะเสีย HP จริง 2 หน่วย
+// ใช้ loseHp เพื่อให้ระบบกันตาย/เชื่อมผล/ร่างพิเศษยังทำงานตามกติกาหลักของเกม
+function applyOverloadOverdrawPenalty(p) {
+  if (!overloadForceActive || !p || !p.alive || !p.overloadDrawReady) return;
+  p.overloadExtraDraws = (p.overloadExtraDraws || 0) + 1;
+  if (p.overloadExtraDraws % 5 !== 0) return;
+  const before = p.hp;
+  loseHp(p);
+  loseHp(p);
+  maybeBeatSave(p);
+  maybeBeatMode(p);
+  maybeEva3(p);
+  if (p.alive && p.hp <= 0) instantDeath(p);
+  const lost = Math.max(0, before - p.hp);
+  lastLog.push(`⚡ ${p.name} จั่วเพิ่มครบ ${p.overloadExtraDraws} ใบใน Overload Force — HP -${lost}${p.alive ? "" : " และหมดสภาพต่อสู้!"}`);
 }
 // เชื่อมผล (patch 2.1.1): เกราะที่เสียจริงถูกแชร์ให้คู่เชื่อมเท่ากันด้วย (คนละช่องกับ HP)
 function loseArmor(p) {
@@ -1553,6 +1712,18 @@ function adjustIncomingDamage(p, n, isNormalAttack) {
   const hook = CHAR_HOOKS[p && p.characterId];
   return hook && hook.adjustIncomingDamage ? hook.adjustIncomingDamage(engine, p, n, isNormalAttack) : n;
 }
+function tryYunaLongingForTwin(p) {
+  if (!p || p.characterId !== "hisakawa_sister" || yunaLongingUsed || roundNumber < 1 || roundNumber > 10) return false;
+  if (!CHAR_HOOKS.hisakawa_sister.anyTwinDead(p)) return false;
+  yunaLongingUsed = true;
+  return YunaMod.reviveWithLonging(engine, p);
+}
+function resolveHisakawaTwinDeath(p) {
+  if (!p || !p.alive || p.hp > 0 || p.characterId !== "hisakawa_sister") return false;
+  const survived = CHAR_HOOKS.hisakawa_sister.tryTwinDeath(engine, p);
+  if (survived) tryYunaLongingForTwin(p);
+  return survived;
+}
 function dealDirect(p, n, isNormalAttack) {
   if (sealActive(p) || friendlyEffectBlocked(p)) return;
   n = adjustIncomingDamage(p, n, isNormalAttack);
@@ -1564,6 +1735,7 @@ function dealDirect(p, n, isNormalAttack) {
     if (p.shield > 0) { p.shield--; continue; }
     loseHp(p);
   }
+  resolveHisakawaTwinDeath(p);
 }
 function dealArmorOnly(p, n, isNormalAttack) {
   if (sealActive(p) || friendlyEffectBlocked(p)) return;
@@ -1586,8 +1758,10 @@ function dealMixed(p, n, isNormalAttack) { // เกราะก่อนแล�
     if (p.armor > 0) loseArmor(p);
     else loseHp(p);
   }
+  resolveHisakawaTwinDeath(p);
 }
 function addSkill(p, n) {
+  if (isYuuki(p)) return;
   // ชะงัก (โอกูริ Rework): ฟื้นฟูแต้มสกิลไม่ได้ทุกช่องทาง ระหว่างติดสถานะนี้
   if (((p.statuses && p.statuses.stagger) || 0) > 0) return;
   if (((p.statuses && p.statuses.manaSeal) || 0) > 0) return; // ผนึกพลังงาน (Universal): ฟื้นฟูแต้มสกิลไม่ได้ทุกช่องทาง
@@ -1708,8 +1882,10 @@ function resetCombat(p) {
   // ---------- ร้านค้ามายา + เศรษฐกิจเหรียญ (patch 2.2 full) ----------
   p.gold = 0;        // เหรียญสะสม (เพดาน 30)
   p.inventory = [];  // ของที่ซื้อจากร้านค้า รอใช้ (รวมปืนหน่วย GUTS Select — หายทุกแมตช์ใหม่)
+  p.triggerDarkWail = 0;           // อวดครวญ: สะสมบนผู้เล่นทุกคนจากเสียงร้องไห้ สูงสุด 5
   if (p.characterId === "ignis") CHAR_HOOKS.ignis.ensureBlackSparklence(p);
   p.gutsShotTurn = 0;              // ปืนหน่วย GUTS Select: เทิร์นล่าสุดที่ยิงไป (1 นัด/เทิร์น)
+  p.blackSparklenceReadyRound = 0; // หลังยิง Nursedessei: รอบที่ Black Sparklence กลับมาใช้ได้
   p.hyperTriggerReadyRound = 0;    // Hyper Key Trigger: หลังคืนร่างรอ 5 เทิร์นก่อนใช้ซ้ำ
   p.triggerRecoveryTargetHp = 0;   // Ultraman Trigger: คืนร่างแล้วฟื้นเลือด +1/เทิร์นจนถึง HP ก่อนแปลงร่าง ถ้าโดนตีจะหยุด
   p.gutsGargorgonPending = false;  // Gargorgon Ray: รอแปลงเป็นสตั้นตอนต้นเทิร์นถัดไป
@@ -1718,6 +1894,7 @@ function resetCombat(p) {
   p.escanorPendingWine = 0;
   p.escanorLastStandUsed = false;
   p.escanorNoonSkillLossRound = 0;
+  p.escanorSolarIdle = 0;
   // ---------- DoomGuy (patch 2.2 full) ----------
   if (p.characterId === "doomguy") p.doomWeapon = DOOM_STARTING_WEAPON; // เริ่มเกมได้ Combat Shotgun เสมอ
   p.doomQuickSwapUsed = false; // Quick Swap: 1 ครั้งต่อเทิร์น
@@ -1860,7 +2037,10 @@ function resetCombat(p) {
 // ============================================================
 // สถานะที่ผู้เล่นคนอื่นเห็นได้ระหว่างช่วงจั่วการ์ด (patch 1.7.1): โชว์ให้ดูของกันและกันได้
 //  ยกเว้นสกิลหลังเปิดไพ่ที่เพิ่งกดรอไว้ในเทิร์นนี้ — เปิดเผยเมื่อทำงานแล้วเท่านั้น (กันสปอยล์)
-const HIDDEN_UNTIL_REVEAL = ["beam", "ohger", "absorb", "spear", "nightmare", "beamplus", "unibeam2"];
+const HIDDEN_UNTIL_REVEAL = [
+  "beam", "ohger", "absorb", "spear", "nightmare", "beamplus", "unibeam2",
+  "escanorSpearBurst", "escanorFlare", "escanorFlareNoon", "escanorPunch", "escanorRhitta", "escanorRhittaNoon",
+];
 function publicStatuses(p) {
   const out = {};
   for (const [k, v] of Object.entries(p.statuses || {})) {
@@ -1901,7 +2081,9 @@ function buildStateFor(viewerId) {
   const bardBg = bardCycleNow === "day" ? "blood" : bardCycleNow === "night" ? "soul" : null;
   // ยูนะ: เพลงล็อกทั้งสนาม ชนะทุกอย่างรวมถึง ANATA WAAAAAAAA ตลอด "ทุกเฟส" ของรอบ (จั่วไพ่/สรุปคะแนน/โจมตี) จนกว่าจะหมดเวลา
   //  ไม่ผูกกับ gameState==="PLAYING" เหมือน anata เพราะเอฟเฟกต์ยูนะไม่ได้จำกัดแค่ช่วงจั่วไพ่ — ตอน CUTSCENE ฝั่ง client เงียบเพลงเองอยู่แล้วไม่ต้องกันซ้ำที่นี่
-  let sm = (yunaEffect && roundNumber <= yunaWindowEnd)
+  let sm = (overloadForceActive && gameState !== "CUTSCENE")
+    ? { music: "overload_force", at: overloadForceSeq }
+    : (yunaEffect && roundNumber <= yunaWindowEnd)
     ? { music: YunaMod.YUNA_MUSIC[yunaEffect], at: yunaMusicSeq }
     : (gameState === "PLAYING" && anataMusicSeq)
       ? { music: "temari_final_theme", at: anataMusicSeq }
@@ -1973,6 +2155,10 @@ function buildStateFor(viewerId) {
     winningTeamId,
     timeLeft,
     roundNumber,
+    overloadForce: overloadForceActive,
+    yuukiAlive: !!yuukiBoss(),
+    yuukiVictory: !!yuukiBoss() && yuukiWinShown,
+    deckEmpty: centralDeck.length === 0,
     cycle: nightNow ? "night" : "day", // กลางวัน/กลางคืน (สลับทุก 3 เทิร์น)
     oberonBg,
     shradeBg, // ราตรีของชเรด เอลัน (ฉากหลัง change_fill.jpg — ทุกค่ำคืนที่ยังอยู่ในร่างสปาด้า)
@@ -2097,6 +2283,7 @@ function buildStateFor(viewerId) {
       if (p.nightTaxTier === "secondary" && secondaryPub && secondaryPub.cost < 8) secondaryPub.cost += 1;
       return {
         id: p.id,
+        isBoss: isYuuki(p),
         name: p.name,
         avatar: p.avatar,
         img: displayImg(p),
@@ -2130,6 +2317,7 @@ function buildStateFor(viewerId) {
         gold: p.gold || 0, // ร้านค้ามายา (patch 2.2 full): เหรียญสะสม — ทุกคนเห็นของกันและกันได้
         inventory: mine ? (p.inventory || []) : null, // ของในคลัง — เห็นแค่ของตัวเอง
         gutsShotTurn: mine ? (p.gutsShotTurn || 0) : undefined, // ปืน GUTS Select: ยิงไปแล้วเทิร์นไหน (เทียบกับ roundNumber = ยิงครบโควตาแล้ว)
+        blackSparklenceCooldown: mine ? Math.max(0, (p.blackSparklenceReadyRound || 0) - roundNumber) : undefined,
         hyperTriggerCooldown: mine ? Math.max(0, (p.hyperTriggerReadyRound || 0) - roundNumber) : undefined,
         doomWeapon: p.doomWeapon || null, // DoomGuy: อาวุธที่ถืออยู่
         doomCharge: p.characterId === "doomguy" ? (p.doomCharge || 0) : undefined, // DoomGuy: ชาร์จ Crucible (เต็ม 5)
@@ -2297,6 +2485,7 @@ function checkLobbyReady() {
   if (list.length >= 2 && list.every((p) => p.ready)) enterModeSelect();
 }
 function startMatch() {
+  delete players[YUUKI_ID];
   if (!teamModeActive()) resetTeamAssignments(true);
   winningTeamId = null;
   for (const p of Object.values(players)) resetCombat(p);
@@ -2306,6 +2495,9 @@ function startMatch() {
   oberonDevour = 0;
   dayForceUntil = 0;
   yunaLongingUsed = false; yunaWindowEnd = 0; yunaEffect = null; yunaTargetId = null; yunaMusicSeq = 0; yunaLongingPendingId = null; yunaPity = 0;
+  overloadForceActive = false;
+  overloadForceCount = 0; yuukiSpawned = false; yuukiTurns = 0; yuukiAttackTargets = [];
+  yuukiLowShown = false; yuukiWinShown = false;
   allyWinFlag = false;
   shopItems = []; uncleShopItems = []; // ล้างสต็อกร้านค้าเก่าค้างจากแมตช์ก่อน (รอเปิดใหม่ตอนเทิร์นที่ 5)
   kaiOverhaulSlots = []; // ไค ชิซากิ: ล้าง tracker Overhaul ทุกครั้งที่เริ่มแมตช์ใหม่
@@ -2447,6 +2639,10 @@ function useInventoryItem(id, uid, opts = {}) {
   } else if (item.type === "armor") {
     const healed = healArmor(p, item.value);
     lastLog.push(`🔧 ${p.name} ใช้ยาฟื้นเกราะ +${healed} จากคลัง`);
+  } else if (item.type === "heroSword") {
+    if (gameState !== "PLAYING" || p.locked) return;
+    p.statuses.heroSword = 2;
+    lastLog.push(`⚔️ ${p.name} ใช้ “ดาบผู้กล้า” — พลังโจมตีปกติ +2 เป็นเวลา 2 เทิร์น`);
   } else if (item.type === "wineBarrel") {
     if (!CHAR_HOOKS.escanor.useWineBarrel(engine, p, item)) return;
   } else if (item.type === "tepeuMeal") {
@@ -2464,7 +2660,7 @@ function useInventoryItem(id, uid, opts = {}) {
       return;
     }
     if (item.ammo === "trigger_dark_key") {
-      if (gameState !== "PLAYING" || p.locked || !hasBlackSparklence(p) || p.gutsShotTurn === roundNumber) return;
+      if (gameState !== "PLAYING" || p.locked || !hasBlackSparklence(p) || p.gutsShotTurn === roundNumber || roundNumber < (p.blackSparklenceReadyRound || 0)) return;
       if (!CHAR_HOOKS.ignis.activateTriggerDark(engine, p)) return;
       p.inventory.splice(idx, 1);
       p.gutsShotTurn = roundNumber;
@@ -2499,6 +2695,7 @@ function useInventoryItem(id, uid, opts = {}) {
 function gutsFireTargetOf(p, item, targetId) {
   if (gameState !== "PLAYING" || p.locked) return null;
   if (!hasGutsWeapon(p)) return null;
+  if (hasBlackSparklence(p) && roundNumber < (p.blackSparklenceReadyRound || 0)) return null;
   if (p.gutsShotTurn === roundNumber) return null;
   if (!GUTS_AMMO[item.ammo]) return null;
   const target = players[targetId];
@@ -2511,6 +2708,7 @@ function applyGutsBullet(p, item, target) {
   if (GUTS_AMMO[item.ammo].breaksGun) {
     const gunIdx = (p.inventory || []).findIndex((it) => it.type === "gutsGun");
     if (gunIdx >= 0) p.inventory.splice(gunIdx, 1);
+    else if (hasBlackSparklence(p)) p.blackSparklenceReadyRound = roundNumber + BLACK_SPARKLENCE_NURSE_COOLDOWN + 1;
   }
   if (!target || !target.alive) { // เป้าหมายตกรอบระหว่างวีดีโอเล่น — กระสุนสูญเปล่า
     lastLog.push(`💨 ${GUTS_AMMO[item.ammo].name} พลาดเป้า — ${target ? target.name : "เป้าหมาย"} ตกรอบไปก่อนแล้ว`);
@@ -2530,7 +2728,9 @@ function applyGutsBullet(p, item, target) {
     else lastLog.push(`🛡️ Thunder Bullet — ${target.name} ต้านสถานะผิดปกติไว้ได้ ไม่ติด [สภาพชา]`);
   } else if (item.ammo === "nurse") {
     dealMixed(target, GUTS_NURSE_DMG);
-    lastLog.push(`☄️ Nursedessei Cannon — ${target.name} เสียหาย -${GUTS_NURSE_DMG} (ลดเกราะก่อน) และปืนของ ${p.name} พังหายไป!`);
+    lastLog.push(hasBlackSparklence(p)
+      ? `☄️ Nursedessei Cannon — ${target.name} เสียหาย -${GUTS_NURSE_DMG} (ลดเกราะก่อน) และ Black Sparklence ของ ${p.name} ใช้งานไม่ได้ ${BLACK_SPARKLENCE_NURSE_COOLDOWN} เทิร์น!`
+      : `☄️ Nursedessei Cannon — ${target.name} เสียหาย -${GUTS_NURSE_DMG} (ลดเกราะก่อน) และปืนของ ${p.name} พังหายไป!`);
     maybeBeatSave(target);
     maybeBeatMode(target);
     maybeEva3(target);
@@ -2545,6 +2745,8 @@ function applyGutsBullet(p, item, target) {
 function dealRound() {
   clearPhaseTimer();
   roundNumber++;
+  overloadForceActive = !!yuukiBoss(); // หลังยูกิเกิด Overload Force คงอยู่จนกว่าบอสจะตาย
+  if (yuukiBoss()) yuukiTurns++;
   centralDeck = buildCentralDeck(); // กองกลาง 43 ใบ สับใหม่ทุกรอบ
   lastLog = [];
   attackerId = null;
@@ -2608,6 +2810,11 @@ function dealRound() {
       p.skillDrainPending = 0;
     }
     if (!p.alive) { p.cards = []; p.locked = true; p.busted = false; continue; }
+
+    if (isYuuki(p) && p.hp <= 4) {
+      p.statuses.fortune = Math.min(BARD_FORTUNE_MAX, (p.statuses.fortune || 0) + 1);
+      lastLog.push(`🍀 ${p.name} อยู่ในช่วงพลังชีวิตต่ำ — ได้โชคลาภ +1`);
+    }
 
     // กลางคืน (patch 2.1.7): สุ่มใหม่ทุกเทิร์นว่าสกิลพื้นฐานหรือสกิลรอง (อย่างใดอย่างหนึ่ง) จะใช้แต้มมากขึ้น — ไม่มีผลกับท่าไม้ตาย
     if (isNightRound(roundNumber)) {
@@ -2713,7 +2920,7 @@ function dealRound() {
 
     // ---------- โอกูริ แคป (Rework): Stamina ชาร์จ / ยุคทอง / Zone (GrayBeast) / หมดแรง (Burnout) / Sunny Day — เช็คตอนเริ่มเทิร์น ----------
     CHAR_HOOKS.oguri.onRoundStartTick(engine, p);
-    CHAR_HOOKS.escanor.onRoundStartTick(engine, p, prevNight);
+    withEffectSource(p, () => CHAR_HOOKS.escanor.onRoundStartTick(engine, p, prevNight));
     CHAR_HOOKS.hisakawa_sister.onRoundStartTick(engine, p);
 
     // ---------- ลุกไหม้ (hburn, สถานะ Universal): ดาเมจ 1/เทิร์น สะสมสูงสุด 6 — ย้าย body ไป characters/_universal_status.js แล้ว ----------
@@ -2792,11 +2999,15 @@ function dealRound() {
     lastLog.push(night ? "🌙 ราตรีมาเยือน — สุ่มสกิลพื้นฐาน/สกิลรองแพงขึ้น +1 ทุกเทิร์น" : "☀️ ฟ้าสางแล้ว — จบเทิร์นได้แต้มสกิลเพิ่ม +1");
     // เสียงไพเราะที่กึกก้อง (ชเรด เอลัน, characters/shrade_elan.js): เข้ากลางคืนพร้อมท่วงทำนองครบ 5 -> เล่นวีดีโอเปิดตัว
     if (night) CHAR_HOOKS.shrade_elan.onNightStart(engine);
+    else if (yuukiBoss()) queueYuukiCutscene(YUUKI_VIDEO.field, "OVERLOAD FIELD", 7, "yuukiField");
   }
 
+  autoPlayYuuki();
+  const yuukiUltimateDue = !!yuukiBoss() && yuukiTurns > 0 && yuukiTurns % 5 === 0;
+  if (yuukiUltimateDue) queueYuukiCutscene(YUUKI_VIDEO.ultimate, "STAR OF FALL", 7, "yuukiUltimate");
   gameState = "PLAYING";
   startPhaseTimer(CARD_TIME, resolveRound);
-  if (cutsceneQueue.length) { pausePlayingForCutscene(); return; } // วีดีโอสลับร่างโอเบรอนตอนเข้ากลางคืน
+  if (cutsceneQueue.length) { pausePlayingForCutscene(yuukiUltimateDue ? applyYuukiUltimate : undefined); return; } // วีดีโอทำงานก่อนผล Star of Fall
   broadcastState();
   checkAllLocked();
 }
@@ -2804,6 +3015,7 @@ function dealRound() {
 function hit(id) {
   const p = players[id];
   if (gameState !== "PLAYING" || !p || !p.alive || p.locked) return;
+  if (centralDeck.length === 0) return; // กองร่วมหมดแล้ว ทุกคนจั่วเพิ่มไม่ได้
   if ((p.statuses.nodraw || 0) > 0) return; // อิ่มทงคัสสึเกิน: เทิร์นนี้จั่วเพิ่มไม่ได้
   if (CHAR_HOOKS.shrade_elan.charging(p)) return; // แด่เพื่อนรักของฉัน: ระหว่างชาร์จจั่วการ์ดเพิ่มไม่ได้
   if ((p.statuses.riddheguard || 0) > 0) return; // ฉันจะไม่ยอมสูญเสียใครไปอีก (ริดดี้): จั่วการ์ดเพิ่มไม่ได้
@@ -2814,7 +3026,7 @@ function hit(id) {
   //  ปรับไพ่ที่จั่วให้แต้มรวมตกอยู่ 19-21 (สุ่มถ่วงน้ำหนัก มีเคสพิเศษถ้าแต้มปัจจุบันเป็น 19/20 อยู่แล้ว)
   //  ถ้าเป้าที่สุ่มได้ไม่มีไพ่ให้จั่วพอดี จะลองเป้าที่เหลือก่อน — ไม่มีไพ่ให้ตรงเป้าไหนเลยจริงๆ ค่อยจั่วแบบสุ่มตามปกติ (แตกได้ตามปกติ)
   let drawn = null;
-  if ((p.statuses.fortune || 0) > 0) {
+  if (!overloadForceActive && (p.statuses.fortune || 0) > 0) {
     p.statuses.fortune--;
     p.fortuneIdle = 0;
     if (p.statuses.fortune <= 0) delete p.statuses.fortune;
@@ -3045,6 +3257,12 @@ function useSkill(id, tier, targets, item) {
     ignisStealTarget = CHAR_HOOKS.ignis.prepareStealTarget(engine, p, targets);
     if (!ignisStealTarget) return;
   }
+  const isIgnisImpact = isIgnisSkill && tier === "ultimate";
+  let ignisImpactTarget = null;
+  if (isIgnisImpact) {
+    ignisImpactTarget = CHAR_HOOKS.ignis.prepareImpactTarget(engine, p, targets);
+    if (!ignisImpactTarget) return;
+  }
   // กระแสเวท / ภาระเวท (สถานะพื้นฐาน patch 2.0.8): ใช้พลังงานลดลง/เพิ่มขึ้นตามจำนวนที่ระบุ
   cost = Math.max(0, cost - statusAmtOf(p, "spellflow"));
   cost += Math.min(SPELLBURDEN_MAX, statusAmtOf(p, "spellburden"));
@@ -3054,6 +3272,7 @@ function useSkill(id, tier, targets, item) {
   if (p.skillPoints < cost) return;
 
   const st = skill.effect && !Array.isArray(skill.effect) && skill.effect.type === "status" ? skill.effect.status : null;
+  const isHisakawaFreeAction = isHisakawaSkill && (st === "hisakawaSwitch" || st === "hisakawaRevive");
 
   // เวลาทอง (แกมเบลอร์): กดสกิลพื้นฐานซ้ำในเทิร์นเดียวได้ จนกว่าจำนวนใช้/แต้มจะหมด
   const isGamble = isGambler && tier === "basic";
@@ -3307,7 +3526,7 @@ function useSkill(id, tier, targets, item) {
     if (p.statuses.freecast <= 0) delete p.statuses.freecast;
     lastLog.push(`👸 ${p.name} การ์ดราชินี — ใช้สกิลนี้โดยไม่เสียแต้มสกิล`);
   }
-  if (!isApplePick && !isTohnoPick && !isHakunoGender && !isDoomguyPick && !isKaiPick && !isTakumiPick) p.skillUsedRound = true; // เอาแบบนี้ได้ไหม / มีดพับประจำตระกูล / เธอ/นาย คือฉันหรอ? / Quick Swap-Weapon (DoomGuy) / รังสรรค์-ลงทัณฑ์ (ไค) / ขึ้น-ลงเกียร์+ท่าไม้ตาย (ทาคุมิ)
+  if (!isApplePick && !isTohnoPick && !isHakunoGender && !isDoomguyPick && !isKaiPick && !isTakumiPick && !isHisakawaFreeAction) p.skillUsedRound = true; // สลับ/ชุบแฝด, เอาแบบนี้ได้ไหม, มีดพับ, สลับเพศ, Quick Swap-Weapon, รังสรรค์-ลงทัณฑ์ และขึ้น-ลงเกียร์ ไม่นับโควตาสกิลหลัก
   if (isKaiPick) p.kaiSkillUsesRound = (p.kaiSkillUsesRound || 0) + 1;
   if (isTakumiPick) p.takumiSkillUsesRound = (p.takumiSkillUsesRound || 0) + 1;
 
@@ -3392,7 +3611,8 @@ function useSkill(id, tier, targets, item) {
   if (isTriggerSkill) CHAR_HOOKS.ultraman_trigger.applySkill(engine, p, tier);
   if (isHisakawaSkill) flashSuffix = CHAR_HOOKS.hisakawa_sister.applySkill(engine, p, tier, skill) || flashSuffix;
   if (isIgnisSteal && ignisStealTarget) flashSuffix = CHAR_HOOKS.ignis.applySteal(engine, p, ignisStealTarget) || flashSuffix;
-  if (isIgnisSkill && !isIgnisSteal) flashSuffix = CHAR_HOOKS.ignis.applySkill(engine, p, tier, skill) || flashSuffix;
+  if (isIgnisSkill && !isIgnisSteal && !isIgnisImpact) flashSuffix = CHAR_HOOKS.ignis.applySkill(engine, p, tier, skill) || flashSuffix;
+  if (isIgnisImpact) queueCutscene(p, "triggerDarkImpact");
   if (isMsWitchMark && msWitchMarkTarget) flashSuffix = CHAR_HOOKS.mageslayer.applyWitchMark(engine, p, msWitchMarkTarget);
   if (isMsRupture && msRuptureTarget) flashSuffix = CHAR_HOOKS.mageslayer.applyRuptureEffect(engine, p, msRuptureTarget, skill.name);
   if (isMsBurden) {
@@ -3551,7 +3771,10 @@ function useSkill(id, tier, targets, item) {
   // ไพ่แตก/ถึงเพดานพอดี: ไม่ล็อกอัตโนมัติ — ยังกดสกิล/ใช้ไอเทมได้ต่อไป จนกว่าจะกดเปิดไพ่เอง หรือทุกคนเปิดไพ่ครบ
 
   // วีดีโอสวนกลับที่ค้างคิว (Wonder of U ซาโตรุ) — เล่นทันทีช่วงจั่วการ์ด
-  if (gameState === "PLAYING" && cutsceneQueue.length) pausePlayingForCutscene();
+  if (gameState === "PLAYING" && cutsceneQueue.length) {
+    if (isIgnisImpact) pausePlayingForCutscene(() => CHAR_HOOKS.ignis.applyImpact(engine, p, ignisImpactTarget));
+    else pausePlayingForCutscene();
+  }
   broadcastState();
   checkAllLocked();
 }
@@ -3861,6 +4084,74 @@ function checkAllLocked() {
   if (c.every((p) => p.locked) && !pendingAnswer) resolveRound();
 }
 
+function beginOverloadForceDraw() {
+  centralDeck = buildCentralDeck();
+  roundWinnerId = null;
+  roundTiedWin = false;
+  doomTieAttack = false;
+  anataMusicSeq = 0;
+
+  for (const p of Object.values(players)) {
+    if (!p.alive) {
+      p.cards = [];
+      p.locked = true;
+      p.busted = false;
+      p.overloadDrawReady = false;
+      continue;
+    }
+    p.cards = [];
+    p.cardBonus = 0;
+    p.colorTrigger = { red: 0, blue: 0, green: 0, yellow: 0 };
+    p.statusAmt.cardAtkBonus = 0;
+    delete p.statuses.freecast; // ไพ่ Queen จากมือเดิมถูกย้อนทิ้งไปพร้อมไพ่
+    p.overloadExtraDraws = 0;
+    p.overloadDrawReady = false;
+    const initial = drawInitialCard(p);
+    if (initial) {
+      p.cards.push(initial);
+      onCardDrawn(p, initial);
+    }
+    p.overloadDrawReady = true;
+    p.locked = (p.statuses.sleep || 0) > 0 || (p.statuses.stun || 0) > 0;
+    p.busted = false;
+    p.result = null;
+    p.isWinner = false;
+    p.isLoser = false;
+  }
+
+  autoPlayYuuki();
+  lastLog.push("⚡ Overload Force เริ่มทำงาน — แจกไพ่ใหม่ในเทิร์นเดิม ปลดเพดาน 21 แต้ม!");
+  gameState = "PLAYING";
+  startPhaseTimer(CARD_TIME, resolveRound);
+  broadcastState();
+  checkAllLocked();
+}
+
+function triggerOverloadForce() {
+  overloadForceCount++;
+  overloadForceActive = true;
+  overloadForceSeq++;
+  if (overloadForceCount === 3 && !yuukiSpawned) {
+    createYuukiBoss();
+    yuukiTurns = 1;
+    cutsceneQueue = [];
+    queueYuukiCutscene(YUUKI_VIDEO.spawn, "YUUKI · OVER LOAD", 9, "yuukiSpawn");
+    lastLog.push("⚡ Overload Force ครั้งที่ 3 ถูกแทนที่ — ยูกิ (Over Load) ปรากฏตัวในฐานะ P7!");
+    runCutsceneQueue(beginOverloadForceDraw);
+    return;
+  }
+  cutsceneQueue = [{
+    info: {
+      kind: "overloadForce",
+      video: "/overload_force/overload_force_start.mp4",
+      title: "OVERLOAD FORCE",
+    },
+    seconds: OVERLOAD_FORCE_CUTSCENE_SECONDS,
+  }];
+  lastLog.push(`⚡ คะแนนสูงสุดเสมอกัน — Overload Force ทำงาน (${Math.round(OVERLOAD_FORCE_CHANCE * 100)}%)!`);
+  runCutsceneQueue(beginOverloadForceDraw);
+}
+
 // ---- สรุปผล ----
 function resolveRound() {
   clearPhaseTimer();
@@ -3963,6 +4254,11 @@ function resolveRound() {
 
   if (best >= 0) {
     const tied = combatants.filter((p) => val(p) === best);
+    // สนาม Overload ต้องสุ่มก่อน Rip and Tear ของ DoomGuy เสมอ และเกิดได้เฉพาะตอนแต้มสูงสุดเสมอกันจริง
+    if (!overloadForceActive && tied.length >= 2 && Math.random() < OVERLOAD_FORCE_CHANCE) {
+      triggerOverloadForce();
+      return;
+    }
     // DoomGuy (characters/doomguy.js) สกิลติดตัว: เสมอแต้มกับผู้เล่นอื่น -> โรล DOOM_TIE_ATTACK_CHANCE
     //  "ก่อน" สุ่มผู้ชนะ ติดแล้วได้เป็นผู้ชนะและได้เทิร์นโจมตีทันที
     //  บั๊กเดิม (แก้ที่นี่): โรลนี้เคยอยู่ใน afterSummary() ซึ่งทำงานหลังสุ่มผู้ชนะไปแล้ว และเช็คเฉพาะคนที่
@@ -3982,7 +4278,7 @@ function resolveRound() {
     // เทเปา (characters/tepeu.js): รีเซ็ตเคาน์เตอร์แพ้ติดกัน + สมองอันชาญฉลาด
     CHAR_HOOKS.tepeu.onRoundWin(engine, w, combatants);
     // ระบบเหรียญ (patch 2.2 full): ชนะการจั่วได้เหรียญเพิ่ม +1 (เพดาน 30)
-    if ((w.gold || 0) < GOLD_MAX) w.gold = Math.min(GOLD_MAX, (w.gold || 0) + GOLD_WIN_BONUS);
+    if (!isYuuki(w) && (w.gold || 0) < GOLD_MAX) w.gold = Math.min(GOLD_MAX, (w.gold || 0) + GOLD_WIN_BONUS);
     // patch 2.1.3.5: ชนะจั่วการ์ดไม่ได้แต้มสกิลอีกต่อไป
     firePassive(w, "win");
     if (tied.length > 1) {
@@ -4196,6 +4492,24 @@ function afterSummary() {
     endTurn();
     return;
   }
+  if (isYuuki(winner) && !roundTiedWin) {
+    const targets = attackableTargets(winner.id).filter((p) => !isYuuki(p));
+    for (let i = targets.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [targets[i], targets[j]] = [targets[j], targets[i]];
+    }
+    yuukiAttackTargets = targets.slice(0, 2).map((p) => p.id);
+    winner.yuukiAttacksThisTurn = 0;
+    const first = yuukiAttackTargets.shift();
+    if (first) {
+      attackerId = winner.id;
+      gameState = "ATTACK";
+      doAttack(winner.id, first);
+      return;
+    }
+    endTurn();
+    return;
+  }
   // DoomGuy (characters/doomguy.js) สกิลติดตัว: ปกติเสมอแต้มจะไม่มีเทิร์นโจมตี — โรลไปแล้วตอนตัดสิน
   //  ผู้ชนะใน resolveRound() (ห้ามโรลซ้ำที่นี่ ไม่งั้นโอกาสจริงจะถูกคูณซ้ำ)
   const doomTieOverride = doomTieAttack && !!winner && winner.alive && winner.characterId === "doomguy";
@@ -4220,6 +4534,18 @@ function afterSummary() {
 //  (เปลี่ยนเป้าหมายได้ ไม่ต้องรอเทิร์นถัดไป — กดยกเลิกได้ผ่าน nanayaCancelReattack)
 // เพลงหมัด อาริมะ (อาริมะ มิยาโกะ สกิลรอง patch 2.2.0): โจมตีต่อได้อีกหลายครั้ง โอกาสลดลงเป็นขั้น (100/75/50/25% สูงสุด 4 ครั้ง)
 function postAttackFollowup(attacker) {
+  if (isYuuki(attacker)) {
+    const next = yuukiAttackTargets.shift();
+    if (next && attacker.alive && players[next]?.alive) {
+      attackerId = attacker.id;
+      gameState = "ATTACK";
+      doAttack(attacker.id, next);
+      return;
+    }
+    yuukiAttackTargets = [];
+    endTurn();
+    return;
+  }
   if (attacker && attacker.alive && attacker.characterId === "nanaya") {
     if (CHAR_HOOKS.nanaya.startReattack(engine, attacker)) return;
   }
@@ -4281,11 +4607,12 @@ function computeAttackBase(engine, attacker, target) {
   const hakunoInvertAtk = attacker.characterId === "hakuno" && (attacker.statuses.hakunoInvertReady || 0) > 0;
   const hakunoNoRegenAtk = attacker.characterId === "hakuno" && (attacker.statuses.hakunoNoRegenReady || 0) > 0;
   const cardAtkBonus = triggerForm ? 0 : (attacker.statusAmt.cardAtkBonus || 0); // Trigger เสริมพลังตัวเองไม่ได้
+  const heroSwordAtk = triggerForm ? 0 : (((attacker.statuses.heroSword || 0) > 0) ? 2 : 0);
 
-  const base = baseHook + hookBonus + (veilAtk ? 1 : 0) + (empowerAtk ? 1 : 0) + (partnerAtk ? 1 : 0) + cardAtkBonus;
+  const base = baseHook + hookBonus + (veilAtk ? 1 : 0) + (empowerAtk ? 1 : 0) + (partnerAtk ? 1 : 0) + cardAtkBonus + heroSwordAtk;
   return {
     base,
-    storiumAtk, paradiseAtk, isRevenge, isRival, ntdBonus, veilAtk, empowerAtk, partnerAtk, cardAtkBonus,
+    storiumAtk, paradiseAtk, isRevenge, isRival, ntdBonus, veilAtk, empowerAtk, partnerAtk, cardAtkBonus, heroSwordAtk,
     oberonDayAtk, shradeDayOff, phenexPurgeAtk, hakunoInvertAtk, hakunoNoRegenAtk,
     ...hookCtx,
   };
@@ -4303,6 +4630,14 @@ function doAttack(byId, targetId) {
   // ไค ชิซากิ: โทสะระงับด้วยโทสะ — มีคู่ปรับ (kaiRival1/kaiRival2 ยังไม่หมด) บังคับเป้าหมายมีแค่คู่ปรับเท่านั้น
   if (attacker.kaiRivalId && ((attacker.statuses.kaiRival1 || 0) > 0 || (attacker.statuses.kaiRival2 || 0) > 0) && target.id !== attacker.kaiRivalId) return;
   clearPhaseTimer();
+  let yuukiAttackVideoQueued = false;
+  if (isYuuki(attacker)) {
+    attacker.yuukiAttacksThisTurn = (attacker.yuukiAttacksThisTurn || 0) + 1;
+    if (attacker.yuukiAttacksThisTurn === 1) {
+      queueYuukiCutscene(YUUKI_VIDEO.attack, "OVERLOAD · ATTACK", 4, "yuukiAttack");
+      yuukiAttackVideoQueued = true;
+    }
+  }
   attacker.didAttackRound = true;
   attacker.nanayaReattackReady = false; // หัวใจฆาตกร (นานายะ ชิกิ): กำลังใช้โอกาสโจมตีซ้ำนี้อยู่ (หรือไม่เกี่ยวข้องกับตัวละครนี้)
 
@@ -4481,9 +4816,9 @@ function doAttack(byId, targetId) {
     oberonDayAtk, appleAtk, tigerAtk, partnerAtk, pigDmg, kotoneExhausted, kotoneAtk, shradeAtk,
     shradeDayOff, oguriGoldAtk, victoryAtk, beamPlusAtk, riddheNtdOn, riddheUltBonus, riddheP1Atk,
     riddheAvAtk, phenexPurgeAtk, miyakoUltAtk, hakunoInvertAtk, hakunoNoRegenAtk,
-    rachanAtk, fourthAtk, doomLockonAtk, cardAtkBonus,
+    rachanAtk, fourthAtk, doomLockonAtk, cardAtkBonus, heroSwordAtk,
     triggerCircleAtk, triggerMultiAtk, triggerZeperionAtk, triggerLightBonus, triggerMultiHighestHp, triggerMultiLowHpPenalty,
-    triggerDarkCryAtk, triggerDarkImpactAtk,
+    triggerDarkAtk,
   } = computeAttackBase(engine, attacker, target);
   // ผกผัน (สถานะ Universal patch 2.2.1): โบนัสพลังโจมตีที่ควรได้ กลับกลายเป็นลดพลังโจมตีแทน (คำนวณรอบเพดานฐาน 1 หน่วย)
   if (invertActive(attacker)) base = Math.max(0, 1 - (base - 1));
@@ -4582,6 +4917,7 @@ function doAttack(byId, targetId) {
   const hpBefore = target.hp;
   const armorBefore = target.armor;
   const shieldBefore = target.shield;
+  const escanorFormBeforeHit = target.characterId === "escanor" ? CHAR_HOOKS.escanor.formOf(target) : null;
   // เชื่อมผล (patch 2.0.8): HP ที่เป้าหมายเสียจริงจะแชร์ให้คู่เชื่อมเท่ากันผ่าน loseHp — เก็บค่าก่อนตีไว้โชว์ผล
   const linkedBuddy = linkedBuddyOf(target);
   const buddyHpBefore = linkedBuddy ? linkedBuddy.hp : 0;
@@ -4593,6 +4929,7 @@ function doAttack(byId, targetId) {
     !!(DOOM_WEAPONS[attacker.doomWeapon] || DOOM_WEAPONS.shotgun).pierce;
   if (attackerBeat || profitAtk > 0 || phenexPurgeAtk || doomPierceAtk) dealDirect(target, dmg, true); // ประกายเขี้ยวปฏิปักษ์ / กำไรเท่าตัวโว้ย / อย่าอยู่เลย แกน่ะ!: ทะลุเกราะเข้าเลือดจริง
   else dealMixed(target, dmg, true);               // กฎปกติ: ลดเกราะก่อน ถ้าไม่มีเกราะจึงเข้าเลือดจริง
+  CHAR_HOOKS.escanor.onNormalAttackReceived(engine, attacker, target, escanorFormBeforeHit);
   // ผู้สังหารจอมมหาเวทย์ (characters/mageslayer.js): ขโมยพลังงาน (min1/max4) / ผนึกพลังงานถ้าเป้าหมายพลังงาน 0 / เคลียร์ Fury stack
   CHAR_HOOKS.mageslayer.onAttackPostDamage(engine, attacker, target, dmg);
   CHAR_HOOKS.ultraman_trigger.onAttackLanded(engine, attacker, target, {
@@ -4602,10 +4939,10 @@ function doAttack(byId, targetId) {
   CHAR_HOOKS.kotone.onAttackConsumeDanceBuff(engine, attacker);
   // Ginga Strium (ฮิคารุ, characters/hikaru.js): โจมตีโดนเป้าหมาย -> ติดลุกไหม้ให้เป้าหมาย / ถูกโจมตีขณะอยู่ในร่างนี้ -> ผู้โจมตีติดลุกไหม้สวนกลับ
   CHAR_HOOKS.hikaru.onAttackBurnApply(engine, attacker, target);
-  CHAR_HOOKS.escanor.onAttackLanded(engine, attacker, target);
+  const escanorAttackVideoQueued = CHAR_HOOKS.escanor.onAttackLanded(engine, attacker, target);
   CHAR_HOOKS.satoru.applyPassiveAttack(engine, attacker, target);
   const hisakawaAttackFx = CHAR_HOOKS.hisakawa_sister.onAttackLanded(engine, attacker, target);
-  const ignisAttackFx = CHAR_HOOKS.ignis.onAttackLanded(engine, attacker, target, { triggerDarkCryAtk, triggerDarkImpactAtk });
+  const ignisAttackFx = CHAR_HOOKS.ignis.onAttackLanded(engine, attacker, target);
   const hisakawaDreamFx = CHAR_HOOKS.hisakawa_sister.maybeDreamFollowup(engine, attacker, target);
   // ริต้า เบอร์นัล: อย่าอยู่เลย แกน่ะ! — เล่นวีดีโอก่อนสรุปผล + ลบ/แบนท่าไม้ตายเป้าหมาย (นับมิติมายาบรรเลงของคีตกวีด้วย)
   if (phenexPurgeAtk) {
@@ -4847,6 +5184,7 @@ function doAttack(byId, targetId) {
   if (fullBelly) addFx({ name: "เต็มอิ่ม (ดาเมจ -1)", img: displayImg(target), by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
   // การ์ดแดงครบ 3 ใบตอนเปิดไพ่ (ระบบกองการ์ดกลาง)
   if (cardAtkBonus > 0) addFx({ name: `การ์ดแดงครบ 3 ใบ +${cardAtkBonus}`, img: displayImg(attacker), by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
+  if (heroSwordAtk > 0) addFx({ name: "ดาบผู้กล้า +2", img: YUUKI_IMG, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
   // สถานะพื้นฐาน patch 2.0.8
   if (mightAtk > 0) addFx({ name: `เสริมพลัง +${mightAtk}`, img: displayImg(attacker), by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
   if (weakAtk > 0) addFx({ name: `อ่อนแอ -${weakAtk}`, img: displayImg(attacker), by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
@@ -4872,6 +5210,7 @@ function doAttack(byId, targetId) {
     addFx({ name: multiText, img: "/characters/ultraman_trigger/skill2/trigger_skill2.png", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
   }
   if (triggerZeperionAtk) addFx({ name: `ลำแสง Zeperion +${triggerLightBonus} จากแสงสว่าง`, img: "/characters/ultraman_trigger/skill3/trigger_skill3.jpg", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
+  if (triggerDarkAtk) addFx({ name: `ความมืดที่ย้อมอนาคต +${triggerDarkAtk}`, img: "/characters/ignis/trigger_dark.jpg", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
   if (phenexTaunted) addFx({ name: "ไม่อยากให้ใครต้องเจ็บปวด (ล่อเป้ามาที่ตัวเอง)", img: PHENEX_NTD_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
   if (batTaunted) addFx({ name: "เข้ามาเลย (ล่อเป้ามาที่ตัวเอง)", img: BAT_SKILL3_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
   if (batReflectDmg > 0) addFx({ name: `เข้ามาเลย — ความเสียหายเกิดกับผู้โจมตีด้วย -${batReflectDmg}`, img: BAT_SKILL3_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
@@ -4898,7 +5237,7 @@ function doAttack(byId, targetId) {
   //  / อย่าอยู่เลย แกน่ะ! (ริต้า เบอร์นัล patch 2.1.6) / ฉันยัง...มองเห็นอยู่!!! กันตาย + อย่างนายน่ะ จะไปเข้าใจอะไร (สึงาชิ ทาคุโตะ patch 2.2.4):
   //  เล่นวีดีโอที่ค้างคิวก่อน แล้วค่อยขึ้นสรุปความเสียหาย
   //  (ปกติทุกท่าอื่นจะขึ้นสรุปความเสียหายก่อนแล้วค่อยเล่นวีดีโอค้างคิวตอนจบ — ท่าเหล่านี้กลับลำดับเฉพาะตัว)
-  if ((beamPlusAtk || (beam && attacker.characterId === "banagher") || unibeam2Atk || storiumAtk || phenexPurgeAtk || miyakoUltAtk || triggerMultiAtk || triggerZeperionAtk || (beatSaveFired && target.characterId === "takuto") || takutoUlt2VideoQueued) && cutsceneQueue.length) runCutsceneQueue(showAttackFx);
+  if ((yuukiAttackVideoQueued || isYuuki(target) || beamPlusAtk || (beam && attacker.characterId === "banagher") || unibeam2Atk || storiumAtk || phenexPurgeAtk || miyakoUltAtk || triggerMultiAtk || triggerZeperionAtk || escanorAttackVideoQueued || (beatSaveFired && target.characterId === "takuto") || takutoUlt2VideoQueued) && cutsceneQueue.length) runCutsceneQueue(showAttackFx);
   else showAttackFx();
 }
 
@@ -4977,8 +5316,8 @@ function endTurn() {
       if (k === "triggerZeperion") continue; // ลำแสง Zeperion คงอยู่จนกว่าจะโจมตีสำเร็จ 1 ครั้ง
       if (k === "triggerLight") continue; // แสงสว่างคงอยู่จนเจ้าของ Trigger คืนร่างหรือโดน Zeperion ล้าง
       if (k === "hisakawaTempo") continue;
-      if (k === "triggerDarkImpact" || k === "triggerDarkWail") continue; // จังหวะนี้แหละ: คงอยู่จนกว่าจะได้ใช้ 1 ครั้ง
-      if (k === "escanorMorning" || k === "escanorNight" || k === "escanorNoon" || k === "escanorLastStand" || k === "escanorSpear" || k === "escanorFlare" || k === "escanorFlareNoon" || k === "escanorPunch" || k === "escanorRhitta" || k === "escanorRhittaNoon" || k === "escanorSun") continue;
+      if (k === "triggerDarkWail") continue; // อวดครวญ: สแตคถาวรจนกว่า Impact จะล้างทั้งสนาม
+      if (k === "escanorMorning" || k === "escanorNight" || k === "escanorNoon" || k === "escanorLastStand" || k === "escanorSolar" || k === "escanorSpear" || k === "escanorFlare" || k === "escanorFlareNoon" || k === "escanorPunch" || k === "escanorRhitta" || k === "escanorRhittaNoon" || k === "escanorSun") continue;
       // ---------- โอกูริ แคป (patch 2.0.8.1) ----------
       if (k === "graybeast") continue;  // ร่าง Zone: ถาวรจนกว่าจะเข้าร่างหมดแรง
       // burnout (ร่างหมดแรง): เดิมถูกยกเว้นไม่ลดเทิร์นตรงนี้ แต่ไม่มีจุดไหนในโค้ดเคลียร์ทิ้งเองเลย (ไม่มี delete p.statuses.burnout ที่ไหนทั้งไฟล์)
@@ -5089,6 +5428,7 @@ function endTurn() {
   // จบเทิร์นรอบนั้น +1 — ช่วงกลางวันได้แต้มสกิลเพิ่มอีก +1 (ระบบกลางวัน/กลางคืน)
   const dayBonus = morningBonusActive(roundNumber); // patch 2.1.7: แจกเฉพาะเช้าที่ 2, 4, 6, ...
   for (const p of alivePlayers()) {
+    if (isYuuki(p)) { p.skillPoints = 0; continue; }
     let gain = dayBonus ? 2 : 1;
     // ซาโตรุ อาเคฟุ (patch 2.0.8.2): สกิลติดตัว — รีเจนแต้มสกิลเพิ่ม +1 ทุกเทิร์น (ปิดได้ เช่น MOON*CELL)
     if (p.characterId === "satoru" && !passiveSealed(p)) gain += 1;
@@ -5104,11 +5444,17 @@ function endTurn() {
       p.skillDrain--;
       lastLog.push(`📵 ${p.name} ค่าปรับปฏิเสธข้อเสนอ — แต้มสกิลจบเทิร์นลด 1${p.skillDrain > 0 ? ` (เหลืออีก ${p.skillDrain} เทิร์น)` : ""}`);
     }
+    if (yuukiBoss() && !isNightRound(roundNumber)) {
+      gain = 0;
+      p.skillPoints = Math.max(0, (p.skillPoints || 0) - 1);
+      lastLog.push(`⚡ เอฟเฟกต์สนามยูกิ — แต้มสกิลของ ${p.name} ไม่ฟื้นและลดลง 1 หน่วย`);
+    }
     addSkill(p, gain);
   }
-  if (dayBonus) lastLog.push("☀️ จบเทิร์นช่วงกลางวัน — ทุกคนได้แต้มสกิลเพิ่ม +1");
+  if (dayBonus && !yuukiBoss()) lastLog.push("☀️ จบเทิร์นช่วงกลางวัน — ทุกคนได้แต้มสกิลเพิ่ม +1");
   // ระบบเหรียญ (patch 2.2 full): จบเทิร์น +1 เหรียญให้ทุกคน (เพดาน 30 — เต็มแล้วไม่ได้เพิ่มจน spending ลดลง)
   for (const p of alivePlayers()) {
+    if (isYuuki(p)) { p.gold = 0; continue; }
     const goldGain = GOLD_PER_TURN + (p.characterId === "hisakawa_sister" ? CHAR_HOOKS.hisakawa_sister.extraGoldRegen(p) : 0) + (p.characterId === "ignis" ? CHAR_HOOKS.ignis.extraGoldRegen(engine, p) : 0);
     if ((p.gold || 0) < GOLD_MAX) p.gold = Math.min(GOLD_MAX, (p.gold || 0) + goldGain);
   }
@@ -5234,7 +5580,12 @@ function endTurn() {
     p.statuses.triggerForm = Math.max(0, (p.statuses.triggerForm || 0) - 1);
     if (p.statuses.triggerForm <= 0) CHAR_HOOKS.ultraman_trigger.restore(engine, p, false);
   }
-  // เล่นฉากระเบิด/ยูนะ (ถ้ามี) ให้จบก่อน แล้วค่อยสรุปจบเกม/ขึ้นรอบถัดไป
+  if (yuukiBoss() && aliveHumans().length === 0 && !yuukiWinShown) {
+    yuukiWinShown = true;
+    queueYuukiCutscene(YUUKI_VIDEO.win, "YUUKI · OVERLOAD VICTORY", 6, "yuukiWin");
+    lastLog.push("☠️ ยูกิเอาชนะผู้เล่นทุกคน — ผู้เล่นทั้งหมดพ่ายแพ้!");
+  }
+  // เล่นฉากระเบิด/ยูนะ/ชัยชนะยูกิ (ถ้ามี) ให้จบก่อน แล้วค่อยสรุปจบเกม/ขึ้นรอบถัดไป
   runCutsceneQueue(() => {
     const stillAlive = alivePlayers();
     const total = Object.keys(players).length;
@@ -5270,6 +5621,7 @@ function endTurn() {
 }
 
 function backToLobby() {
+  delete players[YUUKI_ID];
   gameState = "LOBBY";
   resetTeamAssignments(true);
   clearPhaseTimer();
@@ -5283,6 +5635,9 @@ function backToLobby() {
   oberonDevour = 0;
   dayForceUntil = 0;
   yunaLongingUsed = false; yunaWindowEnd = 0; yunaEffect = null; yunaTargetId = null; yunaMusicSeq = 0; yunaLongingPendingId = null; yunaPity = 0;
+  overloadForceActive = false;
+  overloadForceCount = 0; yuukiSpawned = false; yuukiTurns = 0; yuukiAttackTargets = [];
+  yuukiLowShown = false; yuukiWinShown = false;
   kaiOverhaulSlots = []; // ไค ชิซากิ: ล้าง tracker Overhaul เมื่อกลับล็อบบี้
   lastLog = [];
   cutsceneQueue = [];
@@ -5448,7 +5803,7 @@ io.on('connection', (socket) => {
       seen: {}, ntdTarget: null, transformAt: 0, cutsceneShown: {},
       armorLocked: false, beatSaved: false, skillUsedRound: false,
       beamAmmo: BEAM_AMMO, puddingCount: 0, rsHopperRegenTimer: 0,
-      gold: 0, inventory: [],
+      gold: 0, inventory: [], triggerDarkWail: 0, blackSparklenceReadyRound: 0,
       doomWeapon: ch.id === "doomguy" ? DOOM_STARTING_WEAPON : null, doomQuickSwapUsed: false, doomCharge: 0,
       doomChaingunShieldUsed: false,
       takumiGear: 1, takumiSkillUsesRound: 0, takumiBlackoutFired: false,
@@ -5667,6 +6022,7 @@ const engine = {
   DOOM_HEAL_ON_ATK,
   DOOM_CHARGE_CHANCE,
   DOOM_TIE_ATTACK_CHANCE,
+  OVERLOAD_FORCE_CHANCE,
   DOOM_CRUCIBLE_BUST_DMG,
   DOOM_CRUCIBLE_BUST_DRAWS,
   DOOM_CRUCIBLE_BUST_BONUS,
@@ -5734,12 +6090,14 @@ const engine = {
   get yunaPity() { return yunaPity; },
   setYunaPity(v) { yunaPity = v; },
   setYunaTrigger({ effect, targetId, windowEnd }) { yunaEffect = effect; yunaTargetId = targetId; yunaWindowEnd = windowEnd; yunaMusicSeq++; },
+  tryYunaLongingForTwin,
   pushCutsceneRaw(entry) { cutsceneQueue.push(entry); },
   log(msg) { lastLog.push(msg); },
   colorOf(p) { return POSITION_COLORS[p.position] || "#888"; },
   nextTransformCounter() { return ++transformCounter; },
   endTurn,
   doAttack,
+  useSkill,
   alivePlayers,
   isNightRound,
   nightCycleIndex,
@@ -5750,6 +6108,7 @@ const engine = {
   GUTS_GUN_PRICE,
   GUTS_CHAA_TURNS,
   GUTS_NURSE_DMG,
+  BLACK_SPARKLENCE_NURSE_COOLDOWN,
   rollShopItem,
   rollUncleShopItem,
   openShop,
@@ -5769,6 +6128,10 @@ const engine = {
   netramanaActive,
   statusAmtOf,
   calculateScore,
+  scoreCap,
+  get overloadForceActive() { return overloadForceActive; },
+  setOverloadForceActive(v) { overloadForceActive = !!v; },
+  applyOverloadOverdrawPenalty,
   applyBuff: rawApplyBuff,
   applyDebuff,
   cleanseDebuffs,
@@ -5798,6 +6161,7 @@ const engine = {
   maybeBeatSave,
   maybeBeatMode,
   maybeEva3,
+  resolveDamageAftermath,
   bustedOf,
   scoreOf,
   shikiGiveLifeline,

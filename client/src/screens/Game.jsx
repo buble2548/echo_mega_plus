@@ -52,7 +52,8 @@ function isTargetable(p, iAmAttacker, c) {
   const self = p.id === c.myId;
   const normalAttackTarget = iAmAttacker && !friendly && !p.statuses?.seal && (!c.kaiRivalId || p.id === c.kaiRivalId);
   const gunTarget = !!c.gunSel && !self && !friendly;
-  return (normalAttackTarget || !!c.anataSel || c.dawnSel || c.appleSel || c.bbSel || c.shSel || c.skSel || c.doomSel || c.saObSel || c.escanorSel || c.ignisSel || c.bgSel || c.kawaiiSel || !!c.bardPending || c.nanayaSel || c.tpSel || c.kaiCreateSel || c.kaiPunishSel || c.msMarkSel || c.msRuptureSel || c.psSealSel || gunTarget) && p.alive;
+  const escanorSkillTarget = c.escanorSel && !self && !friendly;
+  return (normalAttackTarget || !!c.anataSel || c.dawnSel || c.appleSel || c.bbSel || c.shSel || c.skSel || c.doomSel || c.saObSel || escanorSkillTarget || c.ignisSel || c.ignisImpactSel || c.bgSel || c.kawaiiSel || !!c.bardPending || c.nanayaSel || c.tpSel || c.kaiCreateSel || c.kaiPunishSel || c.msMarkSel || c.msRuptureSel || c.psSealSel || gunTarget) && p.alive;
 }
 // แตะ/คลิกการ์ดคู่ต่อสู้แล้วต้องทำอะไร — ไล่ตามโหมดเลือกเป้าหมายที่เปิดอยู่ ไม่มีเลยก็โจมตีปกติ
 function resolveAttackPick(id, c) {
@@ -66,6 +67,7 @@ function resolveAttackPick(id, c) {
   if (c.saObSel) return c.pickSaOb(id);
   if (c.escanorSel) return c.pickEscanor(id);
   if (c.ignisSel) return c.pickIgnis(id);
+  if (c.ignisImpactSel) return c.pickIgnisImpact(id);
   if (c.bgSel) return c.pickBg(id);
   if (c.kawaiiSel) return c.pickKawaii(id);
   if (c.bardPending) return c.pickBard(id);
@@ -201,6 +203,24 @@ function YunaCutscene({ cs }) {
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// Overload Force: วิดีโอเต็มจอโดยไม่มีโปรไฟล์หรือการ์ดตัวละครซ้อน
+function OverloadForceCutscene({ cs }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const v = ref.current;
+    if (!v) return;
+    v.volume = videoVolume();
+    v.currentTime = 0;
+    v.play().catch(() => { v.muted = true; v.play().catch(() => {}); });
+    return onVolumeChange(() => { if (ref.current) ref.current.volume = videoVolume(); });
+  }, [cs.id]);
+  return (
+    <div className="fixed inset-0 z-50 bg-black overflow-hidden">
+      <video ref={ref} src={cs.video} preload="auto" autoPlay playsInline className="absolute inset-0 w-full h-full object-cover" />
     </div>
   );
 }
@@ -419,11 +439,21 @@ function TransformNotice({ n }) {
   );
 }
 
+function OverloadForceBadge() {
+  return (
+    <div className="fixed top-[calc(58%+5.5rem)] left-1/2 -translate-x-1/2 z-40 pointer-events-none">
+      <div className="pop-in whitespace-nowrap text-sm font-black text-cyan-200 bg-black/75 px-4 py-1 rounded-full border border-cyan-300/60 text-hard">
+        ⚡ Overload Force
+      </div>
+    </div>
+  );
+}
+
 // ---------- ฉากหลังกลางวัน/กลางคืน (patch 1.7) ----------
 //  กลางวัน = background_morning.jpg | กลางคืน = background_night.jpg
 //  เปลี่ยนช่วงเวลาแบบ crossfade ช้าๆ (ไม่ตัดปุ๊บปั๊บ) — ซ้อนทั้ง 2 ภาพแล้วเฟดสลับกัน
 //  ระหว่าง Lie Like Vortigern (โอเบรอน) ฉากหลังกลางคืนกลายเป็นวีดีโอ oberon_background.mp4 (เฟดเข้า)
-function GameBackground({ cycle, oberonBg, shradeBg, bardBg, shikiBg, hakunoBg, hisakawaBg, lowQ }) {
+function GameBackground({ cycle, oberonBg, shradeBg, bardBg, shikiBg, hakunoBg, hisakawaBg, overloadForce, lowQ }) {
   const night = cycle === "night";
   return (
     <div className="absolute inset-0 -z-10 pointer-events-none overflow-hidden">
@@ -497,6 +527,13 @@ function GameBackground({ cycle, oberonBg, shradeBg, bardBg, shikiBg, hakunoBg, 
       {hisakawaBg && (
         <img
           src="/characters/hisakawa_sister/skill3/hisakawa_skill3_background.webp"
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover bg-fade-in"
+        />
+      )}
+      {overloadForce && (
+        <img
+          src="/overload_force/back_cyber.gif"
           alt=""
           className="absolute inset-0 w-full h-full object-cover bg-fade-in"
         />
@@ -618,7 +655,7 @@ function SummaryTiers({ winners, losers, compact }) {
 }
 
 // overlay ที่ใช้ร่วมกันทั้ง layout มือถือและจอใหญ่ (อนิเมชันตีกัน/ประกาศเปลี่ยนร่าง/แจ้งเตือนคัตซีน/สกิลแฟลช/แบนเนอร์กลางวันคืน)
-function OverlayLayer({ phase, attack, csAnnounce, csSkipped, timeLeft, flash, notice, cycleFx }) {
+function OverlayLayer({ phase, attack, csAnnounce, csSkipped, timeLeft, flash, notice, cycleFx, overloadForce }) {
   return (
     <>
       {phase === "ATTACKING" && attack && <AttackFx key={attack.id} a={attack} />}
@@ -626,6 +663,7 @@ function OverlayLayer({ phase, attack, csAnnounce, csSkipped, timeLeft, flash, n
       {csSkipped && <CutsceneSkipNotice key={csSkipped.id} cs={csSkipped} timeLeft={timeLeft} />}
       {flash && <SkillFlash key={flash.id} f={flash} />}
       {notice && <TransformNotice key={notice.id} n={notice} />}
+      {overloadForce && <OverloadForceBadge />}
       {cycleFx && <CycleBanner key={cycleFx.id} c={cycleFx} />}
     </>
   );
@@ -785,25 +823,19 @@ function TwinPortraitCards({ p, size = "md", className = "" }) {
   if (!twins.length) return <Portrait p={p} className={className} />;
 
   const cfg = {
-    mini: { wrap: "gap-1", card: "w-10 h-14", name: "text-[8px]", stat: "text-[8px]", shield: 8 },
-    sm: { wrap: "gap-1.5", card: "w-14 h-16", name: "text-[9px]", stat: "text-[9px]", shield: 9 },
-    table: { wrap: "gap-1.5", card: "w-[4.25rem] h-24 sm:w-[4.75rem] sm:h-28", name: "text-[9px]", stat: "text-[9px]", shield: 9 },
-    md: { wrap: "gap-2", card: "w-16 h-[5.5rem] sm:w-20 sm:h-28", name: "text-[10px]", stat: "text-[10px]", shield: 10 },
+    mini: { wrap: "gap-1", card: "w-10 h-14", name: "text-[8px]" },
+    sm: { wrap: "gap-1.5", card: "w-14 h-16", name: "text-[9px]" },
+    table: { wrap: "gap-2", card: "w-20 h-28 sm:w-24 sm:h-32", name: "text-[10px] sm:text-xs" },
+    md: { wrap: "gap-2", card: "w-16 h-[5.5rem] sm:w-20 sm:h-28", name: "text-[10px]" },
   }[size] || {
     wrap: "gap-2",
     card: "w-[4.8rem] h-28 sm:w-[5.6rem] sm:h-36",
     name: "text-[10px]",
-    stat: "text-[10px]",
-    shield: 10,
   };
 
   return (
     <div className={`inline-flex items-center justify-center ${cfg.wrap} ${className}`} style={{ "--p-frame-color": p.color }}>
       {twins.map((t) => {
-        const maxHp = Math.max(1, t.maxHp || 3);
-        const hp = Math.max(0, t.hp || 0);
-        const hpPct = `${Math.min(100, (hp / maxHp) * 100)}%`;
-        const hearts = Array.from({ length: maxHp }, (_, i) => (i < hp ? "\u2764\uFE0F" : "\uD83D\uDDA4")).join("");
         return (
           <div
             key={t.key}
@@ -816,16 +848,7 @@ function TwinPortraitCards({ p, size = "md", className = "" }) {
             {t.active && <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full border border-white/80" style={{ background: p.color }} />}
             <div className="absolute inset-x-0 bottom-0 px-1 py-1 bg-gradient-to-t from-black/95 via-black/70 to-transparent">
               <div className={`font-black text-white leading-tight truncate ${cfg.name}`} style={{ fontFamily: P_DISPLAY }}>
-                {t.key === "nagi" ? "Nagi" : "Hayate"}
-              </div>
-              <div className="mt-0.5 h-1.5 rounded-full bg-white/15 overflow-hidden">
-                <span className="block h-full rounded-full" style={{ width: hpPct, background: "var(--color-echo-hp)" }} />
-              </div>
-              <div className={`flex items-center justify-between gap-1 mt-0.5 leading-none text-white ${cfg.stat}`}>
-                <span className="font-black tracking-normal whitespace-nowrap">{hearts}</span>
-                <span className="inline-flex gap-0.5 shrink-0">
-                  {Array.from({ length: t.maxArmor || 2 }, (_, i) => <Shield key={i} on={t.alive && i < t.armor} size={cfg.shield} />)}
-                </span>
+                {t.key === "nagi" ? "นากิ" : "ฮายาเตะ"}
               </div>
             </div>
             {!t.alive && <span className="absolute inset-0 grid place-items-center text-xs font-black bg-black/45 text-white">KO</span>}
@@ -884,10 +907,10 @@ function LifeBar({ p, sm, className = "" }) {
 }
 
 // แถวพลังชีวิต + หลอดสกิล
-function Stats({ p, center }) {
+function Stats({ p, center, hideLife = false }) {
   return (
     <div className={center ? "flex flex-col items-center gap-1" : ""}>
-      {!p.hisakawa && <LifeBar p={p} />}
+      {!hideLife && !p.hisakawa && <LifeBar p={p} />}
       {p.skillPoints < 0 ? (
         // ซาโตรุ (patch 2.0.8.2): แต้มสกิลถูกซ่อนจากผู้เล่นอื่น / ทาคุมิ: บังตาแต้มสกิลของทุกคนยกเว้นตัวเอง
         <div className="mt-1 text-xs font-black text-echo-gold opacity-90" title="แต้มสกิลถูกซ่อน">🌩️ ???</div>
@@ -986,21 +1009,19 @@ const STATUS_INFO = {
   manaRupture: { icon: "💥", label: "ระเบิดมานา", cls: "bg-echo-hp", desc: "ระเบิดมานา: มาร์กเป้าหมายก่อนเปิดการ์ด ไม่โดนต้านสถานะผิดปกติ คำนวณดาเมจจากพลังงานตอนถูกมาร์ก และระเบิดตอนเริ่มเทิร์นถัดไป (7-8 = 1 / 2-6 = 3 / 0-1 = 5)" },
   // ---------- Ultraman Trigger ----------
   triggerDarkForm: { icon: "🌑", label: "Trigger Dark", cls: "bg-echo-magenta", desc: "ร่าง Trigger Dark คงอยู่ 5 เทิร์น หากตายในร่างนี้จะตายจริง และเมื่อคืนร่างต้องซื้อ Trigger Dark Key ใหม่" },
-  triggerDarkCry: { icon: "💧", label: "เสียงร่ำไห้", cls: "bg-echo-cyan text-gray-900", desc: "โจมตีปกติโดนแล้วสะสม อวดครวญ +1 สูงสุด 3" },
-  triggerDarkImpact: { icon: "💥", label: "Impact", cls: "bg-echo-hp", desc: "การโจมตีปกติครั้งถัดไปบวกดาเมจตามจำนวน อวดครวญ ที่สะสม" },
-  triggerDarkWail: { icon: "🌘", label: "อวดครวญ", cls: "bg-echo-gold text-gray-900", desc: "แต้มสะสมของ Trigger Dark สูงสุด 3 ใช้เพิ่มความแรงให้ Impact" },
+  triggerDarkWail: { icon: "🌘", label: "อวดครวญ", cls: "bg-echo-gold text-gray-900", desc: "สะสมได้สูงสุด 5 หน่วยและยังคงอยู่แม้ Trigger Dark คืนร่าง — Impact สร้างความเสียหายตามจำนวนนี้ แล้วล้างทั้งสนาม" },
   triggerForm: { icon: "🔴", label: "Ultraman Trigger", cls: "bg-echo-magenta", desc: "ร่าง Ultraman Trigger คงอยู่ 10 เทิร์น หากตายในร่างนี้จะตายจริง เมื่อครบเวลาจะคืนร่างเดิมด้วย HP 1 เกราะเต็ม และคีย์ติดคูลดาวน์ 5 เทิร์น" },
   escanorMorning: { icon: "☀️", label: "Morning", cls: "bg-echo-gold text-gray-900", desc: "เอสคานอร์ร่างเช้า: ชาร์จประกายแสงสุริยัน +1/เทิร์น โจมตี +1 เกราะ +1 และโจมตีติดลุกไหม้ +1" },
   escanorNight: { icon: "🌙", label: "Night", cls: "bg-echo-cyan text-gray-900", desc: "เอสคานอร์ร่างกลางคืน: หลบหลีก 50%, ได้แต้มสกิล +1 ทุกเทิร์น และพลังโจมตีพื้นฐานเป็น 0" },
   escanorNoon: { icon: "☀️", label: "Noon", cls: "bg-echo-hp", desc: "เอสคานอร์ร่าง Noon: ชาร์จลดลงทุกเทิร์นหรือเมื่อรับความเสียหายจากสกิล, โจมตี +1 เกราะ +1, ตี/ถูกตีทำให้เกิดลุกไหม้ และเมื่อตายจะเข้าสู่ Last Stand" },
   escanorLastStand: { icon: "🔥", label: "Last Stand", cls: "bg-echo-hp", desc: "Last Stand: MaxHP 6 เกราะ 0, HP ลด 1/เทิร์น, ไม่รับดาเมจจากดีบัฟ, ดาเมจจากโจมตี/สกิลที่ได้รับเหลือ 1 และโจมตีสำเร็จจะล้างลุกไหม้ตัวเองพร้อมฮีล 1" },
-  escanorSolar: { icon: "☀️", label: "Solar", cls: "bg-echo-gold text-gray-900", desc: "Solar: สะสมได้สูงสุด 4 หน่วย ได้เมื่อร่าง Morning ไม่ได้โจมตี และใช้กับสุริยาไม่สิ้นแสง" },
+  escanorSolar: { icon: "☀️", label: "Solar", cls: "bg-echo-gold text-gray-900", desc: "Solar: สะสมได้สูงสุด 4 หน่วย ได้เมื่อเปิดไพ่แพ้หรือไม่ได้โจมตี หากไม่ได้รับเพิ่มครบ 3 เทิร์นจะลดลงครั้งละ 1 หน่วย ระหว่างสุริยาไม่สิ้นแสงจะใช้ 1 หน่วยต่อเทิร์นเพื่อคงร่าง Morning" },
   escanorCool: { icon: "💪", label: "เย็นชื่นใจ", cls: "bg-echo-cyan text-gray-900", desc: "เย็นชื่นใจ: ลดความเสียหายจากสกิลตามจำนวนสแตค และหมดเมื่อครบ 2 เทิร์น" },
   drunk: { icon: "🍷", label: "มึนเมา", cls: "bg-echo-magenta", desc: "มึนเมา: ลดลงทีละ 1 ทุกเทิร์น และเมื่อกดสกิลหรือจั่วไพ่มีโอกาสสุ่มติดห้ามจั่ว ห้ามสกิล หรือสตัน" },
   escanorFlare: { icon: "🔥", label: "เพลิงปะทุ", cls: "bg-echo-hp", desc: "การโจมตีครั้งถัดไปจะมอบลุกไหม้เพิ่ม +1" },
-  escanorFlareNoon: { icon: "🔥", label: "เพลิงปะทุ Noon", cls: "bg-echo-hp", desc: "การโจมตีครั้งถัดไปพลังโจมตี +1, ฟื้นแต้มสกิล 1 และมอบไร้ทางเยียวยา 2 เทิร์น" },
+  escanorFlareNoon: { icon: "🔥", label: "เพลิงปะทุ Noon", cls: "bg-echo-hp", desc: "การโจมตีครั้งถัดไปจะมอบลุกไหม้เพิ่ม +2 และมอบไร้ทางเยียวยา 2 เทิร์น" },
   escanorPunch: { icon: "👊", label: "หมัดสุริยัน", cls: "bg-echo-hp", desc: "การโจมตีครั้งถัดไปพลังโจมตี +1 และมอบลุกไหม้เพิ่ม +2" },
-  escanorRhitta: { icon: "🪓", label: "Rhitta", cls: "bg-echo-gold text-gray-900", desc: "การโจมตีครั้งถัดไปพลังโจมตี +1 และมอบลุกไหม้เพิ่ม +1" },
+  escanorRhitta: { icon: "🪓", label: "Rhitta", cls: "bg-echo-gold text-gray-900", desc: "การโจมตีครั้งถัดไปมอบลุกไหม้เพิ่ม +2" },
   escanorRhittaNoon: { icon: "🪓", label: "Rhitta Noon", cls: "bg-echo-gold text-gray-900", desc: "เมื่อโจมตีโดน จะบังคับลุกไหม้ 2 หน่วยของเป้าหมายทำงานทันทีในเทิร์นนั้น" },
   escanorSun: { icon: "☀️", label: "ดวงอาทิตย์จำลอง", cls: "bg-echo-hp", desc: "การโจมตีครั้งถัดไปเป็นโจมตีหมู่ และพลังโจมตีพื้นฐานถูกตั้งเป็น 0" },
   triggerCircle: { icon: "⚔️", label: "ดาบวงจักร", cls: "bg-echo-cyan text-gray-900", desc: "Circle Arms: การโจมตีมอบแสงสว่าง 2 และฟื้นพลังชีวิต 2 หน่วย" },
@@ -1015,6 +1036,7 @@ const STATUS_INFO = {
   yunaDelete: { icon: "💜", label: "Delete", cls: "bg-echo-magenta", desc: "Delete (ยูนะ): ดาเมจที่ได้รับเพิ่มขึ้น +1 ตามจำนวนเทิร์นที่เหลือ — ต้าน/ลบไม่ได้ ซ้อนกับเปราะบางได้" },
   yunaSmile: { icon: "💚", label: "Smile for You", cls: "bg-echo-cyan text-gray-900", desc: "Smile for You (ยูนะ): ดาเมจที่ได้รับลดลง -1 ตามจำนวนเทิร์นที่เหลือ — ต้าน/ลบไม่ได้" },
   yunaLonging: { icon: "✨", label: "Longing", cls: "bg-echo-gold text-gray-900", desc: "Longing (ยูนะ): พลังโจมตี +1 ตามจำนวนเทิร์นที่เหลือ (ได้รับตอนฟื้นคืนชีพ)" },
+  heroSword: { icon: "⚔️", label: "ดาบผู้กล้า", cls: "bg-echo-gold text-gray-900", desc: "ดาบผู้กล้า: พลังโจมตีปกติ +2 ตามจำนวนเทิร์นที่เหลือ" },
   // ---------- Bard : คีตกวี (patch 2.2) ----------
   resist:    { icon: "🛡️", label: "ต้านผิดปกติ", cls: "bg-echo-gold text-gray-900", desc: "ต้านสถานะผิดปกติ: ล้างและต้านทานดีบัฟพื้นฐาน (ขัดแย้ง/หลับไหล/สตั้น/ห้ามจั่ว/ห้ามใช้สกิล/พิษ/อ่อนแอ/เปราะบาง/ภาระเวท) ตามจำนวนเทิร์นที่เหลือ — ดีบัฟที่ยังไม่เกิดผลทันที (ยามฟ้าสาง/เส้นชีวิต) ถูกล้างจะลดลงทีละ 1 หน่วย" },
   guard:     { icon: "💗", label: "คุ้มครอง", cls: "bg-echo-armor", desc: "คุ้มครอง: ความเสียหายจากการถูกโจมตีลดลงตามจำนวนที่ระบุ (ไม่ระบุ = 1) ตามจำนวนเทิร์นที่เหลือ" },
@@ -1085,17 +1107,19 @@ const STATUS_INFO = {
   hakunoInvertReady:   { icon: "🌓", label: "ข้าขอบัญชา", cls: "bg-echo-cyan text-gray-900", desc: "ข้าขอบัญชา: การโจมตีปกติครั้งถัดไปทำให้เป้าหมายติดผกผัน 3 เทิร์น — คงอยู่จนกว่าจะได้โจมตี" },
   hakunoNoRegenReady:  { icon: "🌕", label: "ข้าขอบัญชา", cls: "bg-echo-magenta", desc: "ข้าขอบัญชา: การโจมตีปกติครั้งถัดไปทำให้เป้าหมายเกราะไม่ฟื้น + ไร้ทางเยียวยา — คงอยู่จนกว่าจะได้โจมตี" },
   moonCell:   { icon: "🌙", label: "MOON*CELL", cls: "bg-echo-magenta", desc: "คำสาปแห่งดวงจันทร์ MOON*CELL: ล้าง/ปิดใช้งานบัฟ ดีบัฟ สกิล และสกิลติดตัวของทุกคน (ยกเว้นเจ้าของท่า) ตามจำนวนเทิร์นที่เหลือ" },
-  hisakawaLimit: { icon: "H", label: "เท่าที่ไหว", cls: "bg-echo-armor", desc: "ดาเมจที่ได้รับลดลง 1 และเมื่อนากิโจมตีโดนจะมอบผกผัน 3 เทิร์น" },
-  hisakawaTempo: { icon: "H", label: "จังหวะนี้แหละ", cls: "bg-echo-cyan text-gray-900", desc: "ฮายาเตะจะได้โจมตีหลังผู้ชนะ หากแต้มตัวเองต่ำที่สุดแบบไม่เสมอและไม่ไพ่แตก คงอยู่จนกว่าจะใช้" },
-  hisakawaStage: { icon: "H", label: "เวทีของพวกเรา", cls: "bg-echo-magenta", desc: "แต้มสกิลฟื้นเพิ่ม +1 ทุกเทิร์น" },
-  hisakawaTalent: { icon: "H", label: "พรสวรรค์ของพวกเรา", cls: "bg-echo-gold text-gray-900", desc: "พลังโจมตี +2" },
-  hisakawaDream: { icon: "H", label: "ฝันของเหล่าฝาแฝด", cls: "bg-echo-gold text-gray-900", desc: "แต้มสกิล +1, โจมตี +2, โชคลาภ +1 ทุกเทิร์น และมีโอกาสให้แฝดอีกคนโจมตีเสริม" },
+  hisakawaLimit: { icon: "🛡️", label: "เท่าที่ไหว", cls: "bg-echo-armor", desc: "ดาเมจที่ได้รับลดลง 1 และเมื่อนากิโจมตีโดนจะมอบผกผัน 3 เทิร์น" },
+  hisakawaTempo: { icon: "💨", label: "จังหวะนี้แหละ", cls: "bg-echo-cyan text-gray-900", desc: "ฮายาเตะจะได้โจมตีหลังผู้ชนะ หากแต้มตัวเองต่ำที่สุดแบบไม่เสมอและไม่ไพ่แตก คงอยู่จนกว่าจะใช้" },
+  hisakawaStage: { icon: "🎤", label: "เวทีของพวกเรา", cls: "bg-echo-magenta", desc: "แต้มสกิลฟื้นเพิ่ม +1 ทุกเทิร์น" },
+  hisakawaTalent: { icon: "✨", label: "พรสวรรค์ของพวกเรา", cls: "bg-echo-gold text-gray-900", desc: "พลังโจมตี +2" },
+  hisakawaDream: { icon: "🎁", label: "ฝันของเหล่าฝาแฝด", cls: "bg-echo-gold text-gray-900", desc: "แต้มสกิล +1, โจมตี +2, โชคลาภ +1 ทุกเทิร์น และมีโอกาสให้แฝดอีกคนโจมตีเสริม" },
 };
 // รวมสถานะทั้งหมดของผู้เล่นเป็นรายการเดียว — full = รวมของที่โชว์แยกที่อื่นด้วย (โล่/เลือดชั่วคราว)
 function statusEntries(p, full) {
   const out = [];
   for (const [k, v] of Object.entries(p.statuses || {})) {
     if (!(v > 0)) continue;
+    // รูปโปรไฟล์แสดงร่าง Morning/Night และ Solar มีตัวนับเฉพาะด้านล่างอยู่แล้ว จึงไม่ต้องแสดงป้ายซ้ำ
+    if (k === "escanorMorning" || k === "escanorNight" || k === "escanorSolar") continue;
     const info = STATUS_INFO[k] || { icon: "✦", label: k, cls: "bg-white/20", desc: "" };
     const amt = (p.statusAmt || {})[k] || 0; // จำนวน (amount) ของบัฟ/ดีบัฟพื้นฐาน (patch 2.0.8)
     out.push({ key: k, v, amt, ...info });
@@ -1108,10 +1132,8 @@ function statusEntries(p, full) {
   // เหรียญ (gold) ไม่โชว์ในรายการสถานะอีกต่อไป — ปุ่มร้านค้าที่แผงตัวเองมีบอกอยู่แล้ว และไม่ควรให้ผู้เล่นอื่นเห็นเหรียญของเรา
   // โอกูริ แคป: Energy + Stamina ชาร์จ (โชว์เสมอ — ทรัพยากรหลักของตัวละคร แยกกัน 2 อย่าง)
   if (p.character?.id === "escanor") {
-    const formName = { morning: "Morning", noon: "Noon", night: "Night", last: "Last Stand" }[p.escanorForm] || "Morning";
-    out.push({ key: "escanorFormInfo", v: 1, icon: "\u2600\uFE0F", label: `ร่าง ${formName}`, cls: p.escanorForm === "night" ? "bg-echo-cyan text-gray-900" : p.escanorForm === "last" ? "bg-echo-hp" : "bg-echo-gold text-gray-900", desc: "ร่างปัจจุบันของเอสคานอร์ สกิลจะเปลี่ยนตาม Morning, Night, Noon และ Last Stand" });
     out.push({ key: "escanorChargeInfo", v: 1, icon: "\u{1F305}", label: `Sun Charge ${p.escanorCharge || 0}/${p.escanorChargeMax || 12}`, cls: "bg-echo-gold text-gray-900", desc: "เมื่อ Sun Charge เต็มจะเข้าสู่ร่าง Noon และจะลดลงระหว่างอยู่ในร่าง Noon" });
-    out.push({ key: "escanorSolarInfo", v: 1, icon: "\u2600\uFE0F", label: `Solar ${(p.statuses?.escanorSolar || 0)}/4`, cls: "bg-echo-gold text-gray-900", desc: "Solar จะเพิ่มในร่าง Morning เมื่อเอสคานอร์แพ้ไพ่หรือไม่ได้โจมตี และใช้กับท่าไม้ตายตอน Night" });
+    out.push({ key: "escanorSolarInfo", v: 1, icon: "\u2600\uFE0F", label: `Solar ${(p.statuses?.escanorSolar || 0)}/4`, cls: "bg-echo-gold text-gray-900", desc: "Solar จะเพิ่มเมื่อเอสคานอร์เปิดไพ่แพ้หรือไม่ได้โจมตี หากไม่ได้รับเพิ่มครบ 3 เทิร์นจะลดลงครั้งละ 1 หน่วย ระหว่างสุริยาไม่สิ้นแสงจะใช้ 1 หน่วยต่อเทิร์นเพื่อคงร่าง Morning และเมื่อหมดจะกลับ Night หากยังเป็นกลางคืน" });
   }
   if (p.character?.id === "oguri") {
     out.push({ key: "oguriEnergy", v: 1, icon: "⚡", label: `Energy ${p.oguriEnergy || 0}/16`, cls: "bg-echo-gold text-gray-900", desc: "Energy: ทรัพยากรของ Breakfast (+4/-2 ระหว่าง Burnout) และ Training (หัก 4) — สะสมสูงสุด 16 — Energy หมด + ไม่มียุคทอง = เข้าร่างหมดแรง (Burnout)" });
@@ -1155,7 +1177,7 @@ function StatusChips({ p, left, compact, max = 5 }) {
             className={
               compact
                 ? `relative w-5 h-5 grid place-items-center text-[11px] rounded-[4px] font-bold border border-black/25 shadow shrink-0 ${it.cls}`
-                : `text-xs px-1.5 py-0.5 rounded-md font-bold border border-black/25 shadow ${it.cls}`
+                : `inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-md font-bold border border-black/25 shadow ${it.cls}`
             }
           >
             {compact ? (
@@ -1168,7 +1190,7 @@ function StatusChips({ p, left, compact, max = 5 }) {
                 )}
               </>
             ) : (
-              <>{it.icon}{it.label}{it.amt > 0 ? ` +${it.amt}` : ""}{showStatusValue(it) ? ` ${it.v}` : ""}</>
+              <><span>{it.icon}</span><span>{it.label}{it.amt > 0 ? ` +${it.amt}` : ""}{showStatusValue(it) ? ` ${it.v}` : ""}</span></>
             )}
           </span>
         );
@@ -1223,13 +1245,7 @@ function TwinVitals({ p, compact = false }) {
             className={`min-w-0 rounded-lg border bg-black/35 px-2 py-1.5 ${!t.alive ? "opacity-55 grayscale" : ""}`}
             style={{ borderColor: t.active ? p.color : "rgba(255,255,255,.18)" }}
           >
-            <div className="flex items-center justify-between gap-1">
-              <span className="text-[10px] sm:text-xs font-black truncate text-hard" style={{ fontFamily: P_DISPLAY }}>
-                {t.key === "nagi" ? "Nagi" : "Hayate"}
-              </span>
-              {t.active && <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} />}
-            </div>
-            <LifeBar p={twinP} sm className="mt-1" />
+            <LifeBar p={twinP} sm />
             <div className="max-h-[24px] overflow-hidden">
               <StatusChips p={twinP} left compact max={max} />
             </div>
@@ -1272,7 +1288,7 @@ function StatusModal({ p, onClose, statusOnly }) {
           <div className="flex flex-col gap-2">
             {items.map((it) => (
               <div key={it.key} className="flex items-start gap-2 rounded-xl bg-white/5 border border-white/10 px-3 py-2">
-                <span className={`text-xs px-1.5 py-0.5 rounded-md font-bold shrink-0 ${it.cls}`}>{it.icon}{it.label}{it.amt > 0 ? ` +${it.amt}` : ""}</span>
+                <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-md font-bold shrink-0 ${it.cls}`}><span>{it.icon}</span><span>{it.label}{it.amt > 0 ? ` +${it.amt}` : ""}</span></span>
                 <div className="min-w-0">
                   <span className="text-sm opacity-90 leading-snug">{it.desc}</span>
                   <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
@@ -1364,11 +1380,12 @@ const SHOP_ITEM_INFO = {
   cardRemove: { icon: "✂️", label: () => "ยาลดไพ่", desc: "ลดไพ่ใบล่าสุดของตัวเองออก 1 ใบทันที — ใช้กันไพ่แตกได้ (ใช้ได้เฉพาะช่วงกำลังจั่วไพ่และยังไม่ล็อก)" },
   skillPoint: { icon: "⚡", label: (it) => `ยาฟื้นแต้มสกิล +${it.value}`, desc: "ฟื้นแต้มสกิลทันที (เกินเพดานจะหายทิ้งส่วนที่เกิน)" },
   armor: { icon: "🔧", label: (it) => `ยาฟื้นเกราะ +${it.value}`, desc: "ฟื้นเกราะทันที" },
+  heroSword: { icon: "⚔️", img: "/characters/yuuki/yuuki.jpg", label: () => "ดาบผู้กล้า", desc: "ไอเทมเฉพาะจากการโค่นยูกิ — ใช้แล้วพลังโจมตีปกติ +2 เป็นเวลา 2 เทิร์น (หาซื้อไม่ได้)" },
   tepeuMeal: { icon: "🍲", label: (it) => `มื้อที่สุข (ฟื้นเลือด +${it.value})`, desc: "ฟื้นพลังชีวิตทันที — ผลิตได้จากเทเปาเท่านั้น (วันนี้อากาศดีจัง)" },
-  wineBarrel: { icon: "🍷", img: "/characters/escanor/สกิลพื้นฐาน/Barrel.png", label: (it) => `WineBarrel Lv.${it.level || 1}`, desc: "ใช้แล้วฟื้น HP ตามระดับ ระดับสูงจะมอบเย็นชื่นใจและมึนเมา; อยู่ในกระเป๋าครบ 4 เทิร์นจะอัปเกรด 1 ระดับ สูงสุด IV" },
+  wineBarrel: { icon: "🍷", img: "/characters/escanor/สกิลพื้นฐาน/Barrel.png", label: (it) => `WineBarrel Lv.${it.level || 1}`, desc: "ใช้แล้วฟื้น HP ตามระดับ; ระดับ IV ฟื้น HP 3 หน่วย และมอบมึนเมา 2 หน่วยกับเย็นชื่นใจ 2 หน่วย; อยู่ในกระเป๋าครบ 4 เทิร์นจะอัปเกรด 1 ระดับ สูงสุด IV" },
   // ---------- ร้านขายของลุงเท่ง: ปืนหน่วย GUTS Select + กระสุน (ใช้รูปจริงแทน emoji) ----------
   gutsGun: { icon: "🔫", img: "/item/guts_select_gun/guts_gun.webp", label: () => "ปืนหน่วย GUTS Select", desc: "ไอเทมถาวร มีได้กระบอกเดียว — กดที่ปืนเพื่อเลือกกระสุนแล้วเลือกเป้าหมาย ยิงได้ 1 นัด/เทิร์น (เฉพาะช่วงจั่วไพ่)" },
-  blackSparklence: { icon: "BS", img: "/characters/ignis/Black Sparklence.webp", label: () => "Black Sparklence", desc: "ปืนถาวรของอิกนิส ใช้กระสุนจากร้านลุงเท่งได้โดยไม่ต้องมีปืน GUTS Select ยิงได้ 1 นัดต่อเทิร์นในช่วงจั่วไพ่" },
+  blackSparklence: { icon: "BS", img: "/characters/ignis/Black Sparklence.webp", label: () => "Black Sparklence", desc: "ปืนถาวรของอิกนิส ใช้กระสุนจากร้านลุงเท่งได้ ยิงได้ 1 นัดต่อเทิร์นในช่วงจั่วไพ่ — หลังยิง Nursedessei Cannon จะใช้ปืนไม่ได้ 3 เทิร์น" },
   gutsAmmo: {
     icon: "🔑",
     imgOf: (it) => GUTS_AMMO_INFO[it.ammo]?.img,
@@ -1381,7 +1398,7 @@ const GUTS_AMMO_INFO = {
   shockwave: { name: "Shockwave Bullet",   img: "/item/guts_key/gomora_key.webp",    video: "/item/guts_key/shockwave_boost.mp4",    desc: "ทำลายเกราะของเป้าหมายทั้งหมด แต่ไม่สร้างความเสียหายให้พลังชีวิตจริง" },
   gargorgon: { name: "Gargorgon Ray",      img: "/item/guts_key/gargorgon_key.webp", video: "/item/guts_key/gargorgon_ray.mp4",      desc: "เทิร์นถัดไปเป้าหมายติดสถานะสตั้น 1 เทิร์น (จั่วการ์ด/กดสกิลไม่ได้) — ต้านทานได้" },
   thunder:   { name: "Thunder Bullet",     img: "/item/guts_key/eleking_key.webp",   video: "/item/guts_key/thunder_boost.mp4",      desc: "เป้าหมายติดสถานะ [สภาพชา] 2 เทิร์น — กดจั่ว 1 ครั้งได้ไพ่ 2 ใบ — ต้านทานได้" },
-  nurse:     { name: "Nursedessei Cannon", img: "/item/guts_key/nurse_key.webp",     video: "/item/guts_key/nursedessei_cannon.mp4", desc: "ความเสียหาย 4 หน่วย (ลดเกราะก่อน) — ยิงเสร็จปืนพังหายจากกระเป๋า ต้องซื้อใหม่" },
+  nurse:     { name: "Nursedessei Cannon", img: "/item/guts_key/nurse_key.webp",     video: "/item/guts_key/nursedessei_cannon.mp4", desc: "ความเสียหาย 4 หน่วย (ลดเกราะก่อน) — ปืน GUTS Select จะพัง; หากใช้ Black Sparklence จะใช้ปืนไม่ได้ 3 เทิร์น" },
   trigger_dark_key: { name: "Trigger Dark Key", img: "/item/guts_hyper_key/hyper_key_trigger_dark.jpg", video: "/characters/ignis/trigger_dark.mp4", desc: "ใช้กับ Black Sparklence ของอิกนิสเพื่อแปลงร่างเป็น Trigger Dark 5 เทิร์น ใช้แล้วคีย์หาย ต้องซื้อใหม่" },
   hyper_trigger: { name: "Hyper Key Trigger", img: "/item/guts_hyper_key/hyper_key_trigger.jpg", video: "/characters/ultraman_trigger/trigger_henshin.mp4", desc: "ซื้อขาด ใช้ร่วมกับปืน GUTS Select เพื่อแปลงร่างเป็น Ultraman Trigger 10 เทิร์น — หลังคืนร่างต้องรอ 5 เทิร์นก่อนใช้ซ้ำ" },
 };
@@ -1391,12 +1408,14 @@ const ITEM_PRELOAD_IMGS = ["/item/guts_select_gun/guts_gun.webp", "/characters/i
 //  แล้วโดนเวลาคัตซีนฝั่ง server ตัดจบก่อนวีดีโอเล่นจบ
 function GutsVideoPreloader({ me }) {
   const ammoTypes = [...new Set((me?.inventory || []).filter((it) => it.type === "gutsAmmo").map((it) => it.ammo))];
-  if (!ammoTypes.length) return null;
+  const preloadImpact = me?.characterId === "ignis";
+  if (!ammoTypes.length && !preloadImpact) return null;
   return (
     <div aria-hidden className="hidden">
       {ammoTypes.map((a) => GUTS_AMMO_INFO[a] && (
         <video key={a} src={GUTS_AMMO_INFO[a].video} preload="auto" muted playsInline />
       ))}
+      {preloadImpact && <video src="/characters/ignis/dark_skill3/trgger_dark__skill3.mp4" preload="auto" muted playsInline />}
     </div>
   );
 }
@@ -1484,16 +1503,18 @@ function InventoryModal({ me, players, gameState, roundNumber, onPickGunAmmo, on
   const ammoItems = items.filter((it) => it.type === "gutsAmmo");
   const targets = (players || []).filter((p) => p.alive && p.id !== me?.id && !(me?.teamId && p.teamId === me.teamId));
   const hyperCooldown = Math.max(0, me?.hyperTriggerCooldown || 0);
+  const blackSparklenceCooldown = Math.max(0, me?.blackSparklenceCooldown || 0);
   const hasBlackSparklence = (items || []).some((it) => it.type === "blackSparklence");
   const isIgnisUser = me?.characterId === "ignis" || hasBlackSparklence;
   const hasTargetedAmmo = ammoItems.some((it) => it.ammo !== "hyper_trigger" && it.ammo !== "trigger_dark_key");
   const hasReadyHyper = ammoItems.some((it) => it.ammo === "hyper_trigger") && hyperCooldown <= 0 && me?.characterId !== "ultraman_trigger" && !isIgnisUser;
-  const hasReadyDarkKey = ammoItems.some((it) => it.ammo === "trigger_dark_key") && isIgnisUser && !(me?.statuses?.triggerDarkForm > 0);
+  const hasReadyDarkKey = ammoItems.some((it) => it.ammo === "trigger_dark_key") && isIgnisUser && blackSparklenceCooldown <= 0 && !(me?.statuses?.triggerDarkForm > 0);
   // เหตุผลที่ยิงไม่ได้ (โชว์ให้เห็นเลย ไม่ปล่อยให้กดแล้วเงียบ)
   const fireBlock =
     gameState !== "PLAYING" ? "ยิงได้เฉพาะช่วงจั่วไพ่"
     : me?.locked ? "เปิดไพ่ไปแล้ว — ยิงไม่ได้"
     : (me?.gutsShotTurn || 0) === roundNumber ? "ยิงไปแล้วในเทิร์นนี้ (1 นัด/เทิร์น)"
+    : hasBlackSparklence && blackSparklenceCooldown > 0 ? "Black Sparklence ใช้งานไม่ได้อีก " + blackSparklenceCooldown + " เทิร์น"
     : ammoItems.length === 0 ? "ไม่มีกระสุน — ซื้อได้ที่ร้านขายของลุงเท่ง"
     : targets.length === 0 && hasTargetedAmmo && !hasReadyHyper && !hasReadyDarkKey ? "ไม่มีเป้าหมายให้ยิง"
     : null;
@@ -1510,6 +1531,7 @@ function InventoryModal({ me, players, gameState, roundNumber, onPickGunAmmo, on
   // เลือกกระสุนแล้วเด้งไปโหมดเลือกเป้าหมายบนกระดานทันที (กดที่การ์ดผู้เล่นจริง ไม่ใช่กดชื่อในกระเป๋า)
   function pickAmmo(a) {
     clickSound();
+    if (hasBlackSparklence && blackSparklenceCooldown > 0) return;
     if (a?.ammo === "hyper_trigger" && (hyperCooldown > 0 || me?.characterId === "ultraman_trigger" || isIgnisUser)) return;
     if (a?.ammo === "trigger_dark_key" && (!isIgnisUser || me?.statuses?.triggerDarkForm > 0)) return;
     setGunOpen(false);
@@ -1559,7 +1581,9 @@ function InventoryModal({ me, players, gameState, roundNumber, onPickGunAmmo, on
                       <div className="flex flex-wrap gap-2">
                         {ammoItems.map((a) => {
                           const ai = shopInfoOf(a);
-                          const hyperBlock = a.ammo === "hyper_trigger"
+                          const ammoBlock = hasBlackSparklence && blackSparklenceCooldown > 0
+                            ? "ปืนใช้ไม่ได้อีก " + blackSparklenceCooldown + " เทิร์น"
+                            : a.ammo === "hyper_trigger"
                             ? me?.characterId === "ultraman_trigger" ? "กำลังอยู่ในร่าง Ultraman Trigger"
                               : hyperCooldown > 0 ? "ต้องรออีก " + hyperCooldown + " เทิร์น"
                               : null
@@ -1569,10 +1593,10 @@ function InventoryModal({ me, players, gameState, roundNumber, onPickGunAmmo, on
                                 : null
                               : null;
                           return (
-                            <button key={a.uid} disabled={!!hyperBlock} title={hyperBlock || ""} className={"flex flex-col items-center gap-1 w-20 rounded-lg border border-white/15 bg-black/30 p-1.5 hover:border-echo-gold transition-colors " + (hyperBlock ? "opacity-45 cursor-not-allowed" : "")} onClick={() => pickAmmo(a)}>
+                            <button key={a.uid} disabled={!!ammoBlock} title={ammoBlock || ""} className={"flex flex-col items-center gap-1 w-20 rounded-lg border border-white/15 bg-black/30 p-1.5 hover:border-echo-gold transition-colors " + (ammoBlock ? "opacity-45 cursor-not-allowed" : "")} onClick={() => pickAmmo(a)}>
                               <ItemIcon info={ai} className="h-9 w-9" />
                               <span className="text-[10px] leading-tight text-center">{ai.label(a)}</span>
-                              {hyperBlock && <span className="text-[9px] leading-tight text-echo-hp text-center">{hyperBlock}</span>}
+                              {ammoBlock && <span className="text-[9px] leading-tight text-echo-hp text-center">{ammoBlock}</span>}
                             </button>
                           );
                           })}
@@ -1628,12 +1652,12 @@ function OtherPlayer({ p, phase, slot, targetable, onAttack, picked, onInspect, 
   return (
     <div
       ref={hostRef}
-      className="absolute -translate-x-1/2 flex flex-col items-center gap-1.5 w-28"
+      className={`absolute -translate-x-1/2 flex flex-col items-center gap-1.5 ${p.hisakawa ? "w-52 sm:w-60" : "w-28"}`}
       style={{ top: `${slot[0]}%`, left: `${slot[1]}%` }}
     >
       <div
         onClick={targetable ? () => { clickSound(); onAttack(p.id); } : () => { clickSound(); onInspect(p.id); }}
-        className={`p-target-wrap relative ${p.hisakawa ? "w-36 h-28 sm:w-44 sm:h-32" : "p-player-frame w-24 h-28 sm:w-28 sm:h-32"} -rotate-2 ${p.alive && !p.hisakawa ? "p-player-frame-live" : ""} ${!p.alive ? "opacity-40 grayscale" : ""} ${targetable ? "cursor-crosshair" : "cursor-pointer"}`}
+        className={`p-target-wrap relative ${p.hisakawa ? "w-44 h-28 sm:w-52 sm:h-32" : "p-player-frame w-24 h-28 sm:w-28 sm:h-32"} -rotate-2 ${p.alive && !p.hisakawa ? "p-player-frame-live" : ""} ${!p.alive ? "opacity-40 grayscale" : ""} ${targetable ? "cursor-crosshair" : "cursor-pointer"}`}
         title={targetable ? undefined : "แตะเพื่อดูสถานะ"}
         style={{ "--p-frame-color": p.color }}
       >
@@ -1663,7 +1687,8 @@ function OtherPlayer({ p, phase, slot, targetable, onAttack, picked, onInspect, 
         )}
       </div>
       <div className="rounded-xl px-2.5 py-1.5 flex flex-col items-center gap-1 w-full">
-        <Stats p={p} center />
+        {p.hisakawa ? <TwinVitals p={p} compact /> : <Stats p={p} center />}
+        {p.hisakawa && <Stats p={p} center hideLife />}
       </div>
       {/* ใบโปรโมทสินค้า (Apple guy): แต้มการ์ดถูกเปิดเผยให้ทุกคนเห็นแม้ยังไม่เปิดไพ่ */}
       {(summary || (p.statuses?.promo || 0) > 0) && p.score !== null && (
@@ -1678,6 +1703,29 @@ function OtherPlayer({ p, phase, slot, targetable, onAttack, picked, onInspect, 
 
 // ---------- การ์ดคู่ต่อสู้แบบมือถือ (เรียงกริดด้านบน แตะเพื่อโจมตี/เลือกเป้า ANATA) ----------
 //  แตะตอนไม่ได้เลือกเป้า = เปิดหน้าต่างดูสถานะของคนนั้น (onInspect)
+// บอสยูกิเป็นการ์ด P7 กลางจอแทนกองกลางตลอดเวลาที่ยังอยู่ในสนาม
+function YuukiBossCard({ p, phase, targetable, onPick, onInspect, hostRef, compact = false }) {
+  if (!p?.alive) return null;
+  const summary = phase === "SUMMARY";
+  return (
+    <div
+      ref={hostRef}
+      onClick={targetable ? () => { clickSound(); onPick(p.id); } : () => { clickSound(); onInspect(p.id); }}
+      className={`pointer-events-auto p-target-wrap relative rounded-2xl border-2 border-violet-400 bg-black/75 shadow-2xl cursor-pointer ${compact ? "w-28 p-2" : "w-36 p-3"}`}
+      style={{ boxShadow: "0 0 28px rgba(124,58,237,.65)" }}
+    >
+      <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-violet-700 border border-violet-300 px-3 py-0.5 text-[10px] font-black whitespace-nowrap z-20">BOSS · P7</div>
+      <Portrait p={p} className={`${compact ? "h-20" : "h-24"} w-full rounded-xl`} rounded="rounded-xl" />
+      <div className="mt-1 text-center text-sm font-black text-violet-200 truncate">ยูกิ (Over Load)</div>
+      <Stats p={p} center />
+      {summary && p.score !== null && <div className="text-center text-xl font-black text-echo-gold">{p.busted ? "แตก!" : `${p.score} แต้ม`}</div>}
+      <StatusChips p={p} compact max={4} />
+      {targetable && <><TargetLock /><span className="p-target-badge absolute -top-3 -right-5 text-[10px] px-2 py-0.5 rounded-full text-white">🎯 เป้า</span></>}
+      {phase === "PLAYING" && p.locked && <span className="absolute top-1 right-1 bg-emerald-600 rounded-full w-5 h-5 grid place-items-center text-xs">✓</span>}
+    </div>
+  );
+}
+
 function MobileOpponent({ p, phase, targetable, onAttack, picked, onInspect, hostRef }) {
   const summary = phase === "SUMMARY";
   return (
@@ -1703,7 +1751,7 @@ function MobileOpponent({ p, phase, targetable, onAttack, picked, onInspect, hos
         </div>
         <TeamBadge teamId={p.teamId} />
         {/* เลือด + เกราะ อยู่บรรทัดเดียวแนวนอนเสมอ */}
-        {!p.hisakawa && <LifeBar p={p} sm className="mt-0.5" />}
+        {p.hisakawa ? <TwinVitals p={p} compact /> : <LifeBar p={p} sm className="mt-0.5" />}
         <StatusChips p={p} left compact max={4} />
       </div>
       {targetable && (
@@ -1744,7 +1792,7 @@ function CharModal({ ch, me, onClose }) {
             <div className="flex flex-col gap-1.5">
               {myStatuses.map((it) => (
                 <div key={it.key} className="flex items-start gap-2 rounded-xl bg-white/5 border border-white/10 px-3 py-1.5">
-                  <span className={`text-xs px-1.5 py-0.5 rounded-md font-bold shrink-0 ${it.cls}`}>{it.icon}{it.label}{it.amt > 0 ? ` +${it.amt}` : ""}{showStatusValue(it) ? ` ${it.v}` : ""}</span>
+                  <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-md font-bold shrink-0 ${it.cls}`}><span>{it.icon}</span><span>{it.label}{it.amt > 0 ? ` +${it.amt}` : ""}{showStatusValue(it) ? ` ${it.v}` : ""}</span></span>
                   <span className="text-sm opacity-90 leading-snug">{it.desc}</span>
                 </div>
               ))}
@@ -2439,7 +2487,8 @@ export default function Game({ state, lowQ }) {
   const DOOM_TARGET_WEAPONS = ["shotgun", "heavy", "supershotgun", "rocket", "ballista", "plasma"];
   const [saObSel, setSaObSel] = useState(false);
   const [escanorSel, setEscanorSel] = useState(false);
-  const [ignisSel, setIgnisSel] = useState(false);     // ซาโตรุ: โหมดเลือกเป้าหมาย Do Do Do, De Da Da Da (เลือกตัวเองไม่ได้)
+  const [ignisSel, setIgnisSel] = useState(false);     // อิกนิส: โหมดเลือกเป้าหมาย ฉันขอละนะ! (เลือกตัวเองไม่ได้)
+  const [ignisImpactSel, setIgnisImpactSel] = useState(false); // Trigger Dark: โหมดเลือกเป้าหมาย Impact
   const [bardSel, setBardSel] = useState([]);        // Bard: เป้าหมายบทเพลงที่เลือกไว้ (บทเพลงต้องการ 1-2 คน)
   const [nanayaSel, setNanayaSel] = useState(false);  // นานายะ ชิกิ: โหมดเลือกเป้าหมาย อันนี้ของนายรึเปล่า (เลือกตัวเองไม่ได้)
   const [tpSel, setTpSel] = useState(false);          // เทเปา: โหมดเลือกเป้าหมาย นายเป็นคนทำตัวเองนะ (เลือกตัวเองไม่ได้)
@@ -2460,7 +2509,8 @@ export default function Game({ state, lowQ }) {
   const { flights: cardFlights, removeFlight: removeCardFlight, deckRef, selfHandRef, registerOther } = useCardFlights(state);
   const phase = state.gameState;
   const me = state.players.find((p) => p.id === state.youId);
-  const others = state.players.filter((p) => p.id !== state.youId);
+  const boss = state.players.find((p) => p.isBoss && p.alive) || null;
+  const others = state.players.filter((p) => p.id !== state.youId && !p.isBoss);
   const slots = SLOTS[Math.min(others.length, 5)] || [];
   const iAmAttacker = phase === "ATTACK" && state.attackerId === state.youId;
   const attacker = state.players.find((p) => p.id === state.attackerId);
@@ -2724,6 +2774,7 @@ export default function Game({ state, lowQ }) {
     if (tier === "basic" && ch?.id === "satoru") { setSaObSel(true); setSkillOpen(false); return; }
     if (tier === "basic" && ch?.id === "escanor" && !(me?.statuses?.escanorNight > 0) && !(me?.statuses?.escanorLastStand > 0)) { setEscanorSel(true); setSkillOpen(false); return; }
     if (tier === "basic" && ch?.id === "ignis") { setIgnisSel(true); setSkillOpen(false); return; }
+    if (tier === "ultimate" && ch?.id === "ignis") { setIgnisImpactSel(true); setSkillOpen(false); return; }
     if (tier === "secondary" && ch?.id === "satoru") { socket.emit("useSkill", { tier: "secondary", targets: [me.id] }); setSkillOpen(false); return; }
     if (tier === "ultimate" && ch?.id === "satoru") { setSkillOpen(false); return; }
     // ฟุจิตะ โคโตเนะ (patch 2.1.3): ท่าไม้ตาย Sekai ichi kawaii watashi เข้าโหมดเลือกเป้าหมาย (คนอื่นเท่านั้น)
@@ -2762,6 +2813,10 @@ export default function Game({ state, lowQ }) {
   const pickIgnis = (id) => {
     socket.emit("useSkill", { tier: "basic", targets: [id] });
     setIgnisSel(false);
+  };
+  const pickIgnisImpact = (id) => {
+    socket.emit("useSkill", { tier: "ultimate", targets: [id] });
+    setIgnisImpactSel(false);
   };
   // เลือกเป้าหมายแสงจันทร์ส่องวิญญาณ (ชเรด เอลัน) -> ส่งไป server ทันที
   const pickSh = (id) => {
@@ -2934,6 +2989,9 @@ export default function Game({ state, lowQ }) {
     if (ignisSel && (phase !== "PLAYING" || me?.skillUsed || done)) setIgnisSel(false);
   }, [ignisSel, phase, me?.skillUsed, done]);
   useEffect(() => {
+    if (ignisImpactSel && (phase !== "PLAYING" || me?.skillUsed || done)) setIgnisImpactSel(false);
+  }, [ignisImpactSel, phase, me?.skillUsed, done]);
+  useEffect(() => {
     if (escanorSel && (phase !== "PLAYING" || me?.skillUsed || done)) setEscanorSel(false);
   }, [escanorSel, phase, me?.skillUsed, done]);
   useEffect(() => {
@@ -2994,16 +3052,20 @@ export default function Game({ state, lowQ }) {
   //  ยกเว้นฉากประกาศเปลี่ยนร่าง (announce) -> แสดงกระดานเกมตามปกติ + เอฟเฟกต์ทับ (ไม่ตัดจอดำ)
   //  โหมดประหยัด (patch 2.0.6): ข้ามวีดีโอ — แสดงกระดาน + แจ้งเตือนว่าใครเปิดท่าไม้ตาย รอเวลาเท่าวีดีโอจริง
   const csYuna = phase === "CUTSCENE" && state.cutscene && state.cutscene.kind === "yuna" ? state.cutscene : null;
+  const csOverload = phase === "CUTSCENE" && state.cutscene && state.cutscene.kind === "overloadForce" ? state.cutscene : null;
+  const csYuuki = phase === "CUTSCENE" && state.cutscene?.kind?.startsWith("yuuki") ? state.cutscene : null;
   const csAnnounce = phase === "CUTSCENE" && state.cutscene && state.cutscene.announce ? state.cutscene : null;
-  const csSkipped = lowQ && phase === "CUTSCENE" && state.cutscene && !csAnnounce && !csYuna ? state.cutscene : null;
+  const csSkipped = lowQ && phase === "CUTSCENE" && state.cutscene && !csAnnounce && !csYuna && !csOverload && !csYuuki ? state.cutscene : null;
+  if (csOverload) return <OverloadForceCutscene key={state.cutscene.id} cs={state.cutscene} />;
+  if (csYuuki) return <Cutscene key={state.cutscene.id} cs={state.cutscene} />;
   if (phase === "CUTSCENE" && state.cutscene && csYuna && !lowQ) return <YunaCutscene key={state.cutscene.id} cs={state.cutscene} />;
   if (phase === "CUTSCENE" && state.cutscene && !csAnnounce && !csYuna && !lowQ) return <Cutscene key={state.cutscene.id} cs={state.cutscene} />;
 
   // สถานะ+handler ของทุกโหมดเลือกเป้าหมาย มัดรวมไว้ที่เดียว ใช้ร่วมกันทั้ง layout มือถือและจอใหญ่ (ดู isTargetable/resolveAttackPick)
   const targetChain = {
-    anataSel, dawnSel, appleSel, bbSel, shSel, skSel, doomSel, saObSel, escanorSel, ignisSel, bgSel, kawaiiSel, bardPending, nanayaSel, tpSel,
+    anataSel, dawnSel, appleSel, bbSel, shSel, skSel, doomSel, saObSel, escanorSel, ignisSel, ignisImpactSel, bgSel, kawaiiSel, bardPending, nanayaSel, tpSel,
     kaiCreateSel, kaiPunishSel, msMarkSel, msRuptureSel, psSealSel, pickPsSeal, gunSel, pickGunTarget,
-    pickAnata, pickDawn, pickGive, pickBb, pickSh, pickSk, pickDoom, pickSaOb, pickEscanor, pickIgnis, pickBg, pickKawaii, pickBard, pickNanaya, pickTp,
+    pickAnata, pickDawn, pickGive, pickBb, pickSh, pickSk, pickDoom, pickSaOb, pickEscanor, pickIgnis, pickIgnisImpact, pickBg, pickKawaii, pickBard, pickNanaya, pickTp,
     pickKaiCreate, pickKaiPunish, pickMsMark, pickMsRupture,
     kaiRivalId,
     myId: me?.id,
@@ -3019,7 +3081,7 @@ export default function Game({ state, lowQ }) {
     const revealed = phase === "SUMMARY" || phase === "ATTACK" || phase === "ATTACKING";
     return (
       <div className="fixed inset-0 overflow-hidden flex flex-col">
-        <GameBackground cycle={state.cycle} oberonBg={state.oberonBg} shradeBg={state.shradeBg} bardBg={state.bardBg} shikiBg={state.shikiBg} hakunoBg={state.hakunoBg} hisakawaBg={state.hisakawaBg} lowQ={lowQ} />
+        <GameBackground cycle={state.cycle} oberonBg={state.oberonBg} shradeBg={state.shradeBg} bardBg={state.bardBg} shikiBg={state.shikiBg} hakunoBg={state.hakunoBg} hisakawaBg={state.hisakawaBg} overloadForce={state.overloadForce} lowQ={lowQ} />
         {/* แถบบน: รอบ + เวลา (เว้นขวาให้ปุ่มเสียง) */}
         <div className="shrink-0 flex flex-col items-center gap-1 pt-2 px-14 min-h-[40px]">
           {(phase === "PLAYING" || phase === "ATTACK") && (
@@ -3178,11 +3240,13 @@ export default function Game({ state, lowQ }) {
           <div className="relative grid place-items-center">
             <img src="/image/logo_current.png" alt="" className="h-14 w-auto opacity-25" />
             <div className="absolute inset-0 grid place-items-center">
-              <DeckPile hostRef={deckRef} size="md" onClick={() => setDeckOpen(true)} />
+              {boss ? (
+                <YuukiBossCard p={boss} phase={phase} compact hostRef={(el) => registerOther(boss.id, el)} targetable={isTargetable(boss, iAmAttacker, targetChain)} onPick={(id) => resolveAttackPick(id, targetChain)} onInspect={setStatusViewId} />
+              ) : <DeckPile hostRef={deckRef} size="md" onClick={() => setDeckOpen(true)} />}
             </div>
           </div>
         </div>
-        {deckOpen && <DeckLedgerModal ledger={state.deckLedger || []} onClose={() => setDeckOpen(false)} />}
+        {deckOpen && !boss && <DeckLedgerModal ledger={state.deckLedger || []} onClose={() => setDeckOpen(false)} />}
 
         {/* ---------- แผงตัวเรา (ล่างสุด กดง่ายด้วยนิ้วโป้ง) ----------
             ออกแบบใหม่: รูป/แต้มรวม ลอยเป็นป้ายเฉียงเจาะทับขอบบนแผง (ไม่ใช่แถวในกล่องเหมือนเดิม)
@@ -3333,7 +3397,7 @@ export default function Game({ state, lowQ }) {
                     <>
                       <div className="relative flex h-14">
                         <button
-                          disabled={me.atCap || noDraw || shCharging || rgCharging || phenexTaunting || tepeuPonderLocked}
+                          disabled={state.deckEmpty || me.atCap || noDraw || shCharging || rgCharging || phenexTaunting || tepeuPonderLocked}
                           onClick={() => { clickSound(); socket.emit("hit"); }}
                           className="flex-1 font-black text-lg text-gray-900 transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                           style={{ background: "var(--color-echo-cyan)", clipPath: "polygon(0 0,94% 0,100% 100%,0 100%)" }}
@@ -3351,6 +3415,7 @@ export default function Game({ state, lowQ }) {
                       {noDraw && <div className="text-center text-sm font-bold text-echo-hp mt-1">🚫 เทิร์นนี้จั่วไม่ได้</div>}
                       {shCharging && <div className="text-center text-sm font-bold text-echo-hp mt-1">🎻 กำลังบรรเลงบทเพลงสุดท้าย — จั่ว/ใช้สกิลไม่ได้ (ชนะจั่วยังโจมตีได้)</div>}
                       {me.atCap && <div className="text-center text-sm font-bold text-echo-gold mt-1">{me.busted ? "ไพ่แตก! 😢 ยังกดสกิล/ใช้ไอเทมได้ จนกว่าจะเปิดไพ่" : "แต้มเต็มแล้ว! ใช้สกิล หรือเปิดไพ่ได้เลย"}</div>}
+                      {state.deckEmpty && <div className="text-center text-sm font-bold text-echo-hp mt-1">🂠 การ์ดหมดกอง — ทุกคนจั่วเพิ่มไม่ได้</div>}
                     </>
                   ) : phase === "PLAYING" && me.alive && done ? (
                   <div className="text-center text-lg font-bold py-2">{me.busted ? "แตก! 😢" : me.statuses?.sleep || me.statuses?.ksleep ? "หลับไหลอยู่ 💤" : me.statuses?.sena ? "หนีเซนะอยู่ 🏃‍♀️" : me.statuses?.stun ? "สตั้นอยู่ 😵" : "พร้อมแล้ว ✅"} รอเพื่อน...</div>
@@ -3403,7 +3468,7 @@ export default function Game({ state, lowQ }) {
         )}
 
         {/* ---------- overlay ที่ใช้ร่วมกับจอคอม ---------- */}
-        <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} timeLeft={state.timeLeft} flash={flash} notice={notice} cycleFx={cycleFx} />
+        <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} timeLeft={state.timeLeft} flash={flash} notice={notice} cycleFx={cycleFx} overloadForce={state.overloadForce} />
         <FlyingCardsLayer flights={cardFlights} onDone={removeCardFlight} />
         {state.yunaFieldFx === "beatbark" && <div className="field-fx-beatbark" />}
 
@@ -3420,6 +3485,7 @@ export default function Game({ state, lowQ }) {
             <div className="text-center">
               <div className="text-4xl font-black mb-4">
                 {(() => {
+                  if (state.yuukiVictory) return <>☠️ ผู้เล่นทั้งหมดพ่ายแพ้ต่อ ยูกิ (Over Load)</>;
                   if (state.gameMode !== "ffa" && state.winningTeamId) { const ws = state.players.filter((p) => p.alive && p.teamId === state.winningTeamId); const names = ws.map((w) => w.name).join(" & "); return <>🏆 Team {state.winningTeamId}{names ? ` (${names})` : ""} ชนะ!</>; }
                   if (state.allyWin) { const ws = state.players.filter((p) => p.alive); return <>🤝 {ws.map((w) => w.name).join(" & ")} ชนะทั้งคู่!</>; }
                   const c = state.players.find((p) => p.alive); return c ? <>🏆 {c.name} ชนะ!</> : "จบเกม";
@@ -3460,7 +3526,7 @@ export default function Game({ state, lowQ }) {
 
   return (
     <div className="fixed inset-0 overflow-hidden">
-      <GameBackground cycle={state.cycle} oberonBg={state.oberonBg} shradeBg={state.shradeBg} bardBg={state.bardBg} shikiBg={state.shikiBg} hakunoBg={state.hakunoBg} hisakawaBg={state.hisakawaBg} lowQ={lowQ} />
+      <GameBackground cycle={state.cycle} oberonBg={state.oberonBg} shradeBg={state.shradeBg} bardBg={state.bardBg} shikiBg={state.shikiBg} hakunoBg={state.hakunoBg} hisakawaBg={state.hisakawaBg} overloadForce={state.overloadForce} lowQ={lowQ} />
       <div
         className="relative overflow-hidden"
         style={{ width: DESIGN_W, height: designH, transform: `scale(${scale})`, transformOrigin: "top left" }}
@@ -3470,11 +3536,13 @@ export default function Game({ state, lowQ }) {
         <div className="relative grid place-items-center">
           <img src="/image/logo_current.png" alt="" className="h-16 sm:h-20 w-auto opacity-25" />
           <div className="absolute inset-0 grid place-items-center">
-            <DeckPile hostRef={deckRef} size="lg" onClick={() => setDeckOpen(true)} />
+            {boss ? (
+              <YuukiBossCard p={boss} phase={phase} hostRef={(el) => registerOther(boss.id, el)} targetable={isTargetable(boss, iAmAttacker, targetChain)} onPick={(id) => resolveAttackPick(id, targetChain)} onInspect={setStatusViewId} />
+            ) : <DeckPile hostRef={deckRef} size="lg" onClick={() => setDeckOpen(true)} />}
           </div>
         </div>
       </div>
-      {deckOpen && <DeckLedgerModal ledger={state.deckLedger || []} onClose={() => setDeckOpen(false)} />}
+      {deckOpen && !boss && <DeckLedgerModal ledger={state.deckLedger || []} onClose={() => setDeckOpen(false)} />}
 
       {/* ตัวจับเวลา + รอบ */}
       {(phase === "PLAYING" || phase === "ATTACK") && (
@@ -3773,7 +3841,7 @@ export default function Game({ state, lowQ }) {
               {/* ปุ่มจั่ว/เปิดไพ่ — ย้ายมาไว้ใต้การ์ดแล้ว */}
               <div className="flex gap-2 mt-2">
                 <button
-                  disabled={!(phase === "PLAYING" && me.alive && !done) || me.atCap || noDraw || shCharging || rgCharging || phenexTaunting || tepeuPonderLocked}
+                  disabled={state.deckEmpty || !(phase === "PLAYING" && me.alive && !done) || me.atCap || noDraw || shCharging || rgCharging || phenexTaunting || tepeuPonderLocked}
                   onClick={() => { clickSound(); socket.emit("hit"); }}
                   className="p-hs-action p-hs-action-draw w-28 sm:w-32 h-14 sm:h-16 flex items-center justify-center gap-2 disabled:opacity-35 disabled:cursor-not-allowed"
                   title="จั่วการ์ด"
@@ -3884,7 +3952,7 @@ export default function Game({ state, lowQ }) {
       )}
 
       {/* ---------- overlay ที่ใช้ร่วมกับมือถือ ---------- */}
-      <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} timeLeft={state.timeLeft} flash={flash} notice={notice} cycleFx={cycleFx} />
+      <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} timeLeft={state.timeLeft} flash={flash} notice={notice} cycleFx={cycleFx} overloadForce={state.overloadForce} />
       <FlyingCardsLayer flights={cardFlights} onDone={removeCardFlight} />
       {state.yunaFieldFx === "beatbark" && <div className="field-fx-beatbark" />}
 

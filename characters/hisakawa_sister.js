@@ -9,9 +9,10 @@ const STAGE_TURNS = 5;
 const TALENT_TURNS = 5;
 const DREAM_TURNS = 5;
 const LIMIT_TURNS = 3;
-const REVIVE_COST = 6;
+const REVIVE_COST = 4;
 const SWITCH_COST = 1;
 const TWIN_KEYS = ["nagi", "hayate"];
+const COUPLE_BUFF_KEYS = ["hisakawaStage", "hisakawaTalent", "hisakawaDream"];
 
 const PATHS = {
   select: `${BASE}/hisakawa_sister.webp`,
@@ -46,7 +47,7 @@ function makeTwin(key) {
   };
 }
 
-function ensure(p, opts = {}) {
+function ensure(p) {
   if (!p || p.characterId !== "hisakawa_sister") return null;
   if (!p.hisakawa) {
     p.hisakawa = {
@@ -56,10 +57,6 @@ function ensure(p, opts = {}) {
     };
   }
   for (const key of TWIN_KEYS) if (!p.hisakawa.twins[key]) p.hisakawa.twins[key] = makeTwin(key);
-  if (!opts.keepActive && (!p.hisakawa.active || !p.hisakawa.twins[p.hisakawa.active]?.alive)) {
-    const live = TWIN_KEYS.find((key) => p.hisakawa.twins[key]?.alive);
-    if (live) p.hisakawa.active = live;
-  }
   return p.hisakawa;
 }
 
@@ -132,6 +129,14 @@ function applyStatus(t, key, turns, amount) {
   }
 }
 
+function applyCoupleStatus(p, key, turns) {
+  const h = ensure(p);
+  if (!h) return;
+  for (const t of Object.values(h.twins)) {
+    t.statuses[key] = Math.max(t.statuses[key] || 0, turns);
+  }
+}
+
 function addFortune(t, n = 1) {
   if (!t || !t.alive) return;
   t.statuses.fortune = Math.min(3, (t.statuses.fortune || 0) + n);
@@ -181,7 +186,7 @@ function skillVoice(p, tier, skill) {
   const h = ensure(p);
   if (!h) return null;
   const voiceTwin = tier === "basic" ? otherKey(h.active) : h.active;
-  if (tier === "ultimate" && skill?.status === "hisakawaDream") return null;
+  if (tier === "ultimate" && skillStatus(skill) === "hisakawaDream") return null;
   const n = tier === "ultimate" ? 3 : tier === "secondary" ? 2 : 1;
   return `hisakawa_${voiceTwin}_${n}`;
 }
@@ -195,6 +200,9 @@ module.exports = {
   SWITCH_COST,
 
   init(p) {
+    p.hisakawa = null;
+    p.hisakawaSwitchedRound = 0;
+    p.hisakawaHayateAssist = false;
     ensure(p);
     syncIn(p);
   },
@@ -205,6 +213,35 @@ module.exports = {
   otherTwin,
   bothAlive,
   anyTwinDead,
+
+  reviveFallenTwin(p, hp = TWIN_MAX_HP) {
+    const h = ensure(p);
+    if (!h) return null;
+    const hadSurvivor = TWIN_KEYS.some((key) => h.twins[key].alive);
+    const revived = hadSurvivor
+      ? TWIN_KEYS.map((key) => h.twins[key]).find((t) => !t.alive)
+      : h.twins[h.active];
+    if (!revived) return null;
+    revived.alive = true;
+    revived.hp = Math.min(TWIN_MAX_HP, Math.max(1, hp));
+    revived.armor = 0;
+    if (!hadSurvivor) h.active = revived.key;
+    h.controlTurns = 0;
+    p.alive = true;
+    p.result = null;
+    p.locked = false;
+    syncIn(p);
+    return revived.key;
+  },
+
+  applyBuffToTwin(p, twinKey, key, amount, turns) {
+    const h = ensure(p);
+    const t = h && h.twins[twinKey];
+    if (!t || !t.alive) return false;
+    applyStatus(t, key, turns, amount);
+    if (h.active === twinKey) syncIn(p);
+    return true;
+  },
 
   maxHp() { return TWIN_MAX_HP; },
   maxArmor() { return TWIN_MAX_ARMOR; },
@@ -257,8 +294,9 @@ module.exports = {
     if (skillStatus(skill) === "hisakawaSwitch") {
       p.hisakawaSwitchedRound = engine.roundNumber;
       const outgoing = active;
-      outgoing.hp = Math.min(TWIN_MAX_HP, outgoing.hp + 2);
       syncOut(p);
+      outgoing.hp = Math.min(TWIN_MAX_HP, outgoing.hp + 2);
+      engine.addSkill(p, 2);
       h.active = other.key;
       h.controlTurns = 0;
       if (statusOn(outgoing, "hisakawaLimit") && other.key === "hayate") {
@@ -270,10 +308,15 @@ module.exports = {
     } else if (skillStatus(skill) === "hisakawaRevive") {
       const dead = TWIN_KEYS.map((key) => h.twins[key]).find((t) => !t.alive);
       if (!dead) return "";
+      const coupleStatuses = {};
+      for (const key of COUPLE_BUFF_KEYS) {
+        const turns = Math.max(...Object.values(h.twins).map((t) => t.statuses?.[key] || 0));
+        if (turns > 0) coupleStatuses[key] = turns;
+      }
       dead.alive = true;
       dead.hp = TWIN_MAX_HP;
       dead.armor = 0;
-      dead.statuses = {};
+      dead.statuses = coupleStatuses;
       dead.statusAmt = {};
       engine.log(`💫 ${p.name} ปลุก ${dead.name} กลับมาสู้ต่อ (${dead.hp}/${TWIN_MAX_HP}, เกราะ 0)`);
     } else if (skillStatus(skill) === "hisakawaLimit") {
@@ -285,19 +328,19 @@ module.exports = {
       syncIn(p);
       engine.log(`💨 ${active.name} จังหวะนี้แหละ — หากแต้มต่ำสุดแบบไม่เสมอ จะได้โจมตีหลังผู้ชนะ`);
     } else if (skillStatus(skill) === "hisakawaStage") {
-      for (const t of Object.values(h.twins)) applyStatus(t, "hisakawaStage", STAGE_TURNS);
+      applyCoupleStatus(p, "hisakawaStage", STAGE_TURNS);
       syncIn(p);
       engine.log(`🎤 ${p.name} Miracle Live — เปิดเวทีของพวกเรา ${STAGE_TURNS} เทิร์น`);
     } else if (skillStatus(skill) === "hisakawaTalent") {
-      for (const t of Object.values(h.twins)) applyStatus(t, "hisakawaTalent", TALENT_TURNS);
+      applyCoupleStatus(p, "hisakawaTalent", TALENT_TURNS);
       syncIn(p);
       engine.log(`💃 ${p.name} Miracle Dance — พรสวรรค์ของพวกเราเพิ่มพลังโจมตี +2`);
     } else if (skillStatus(skill) === "hisakawaDream") {
       for (const t of Object.values(h.twins)) {
         delete t.statuses.hisakawaStage;
         delete t.statuses.hisakawaTalent;
-        applyStatus(t, "hisakawaDream", DREAM_TURNS);
       }
+      applyCoupleStatus(p, "hisakawaDream", DREAM_TURNS);
       p.transformAt = engine.nextTransformCounter();
       syncIn(p);
       engine.queueCutscene(p, "hisakawaSunday");
@@ -397,11 +440,15 @@ module.exports = {
       }
       if (dmg > 0) {
         damageTwin(t, dmg);
+        if (!t.alive) {
+          if (engine.tryYunaLongingForTwin) engine.tryYunaLongingForTwin(p);
+        }
         engine.log(`👭 ${t.name} ที่พักอยู่ยังโดนผลค้างอยู่ — รับความเสียหาย -${dmg}`);
       }
     }
     if (active.alive) {
       h.controlTurns = (h.controlTurns || 0) + 1;
+      if (statusOn(active, "hisakawaDream")) addFortune(active, 1);
       if (h.controlTurns >= 2 && h.controlTurns % 3 === 2) {
         applyStatus(active, "resist", 1, 1);
         engine.log(`👭 ${active.name} ควบคุมต่อเนื่อง — ได้ต้านสถานะผิดปกติ 1 เทิร์น`);
@@ -415,10 +462,14 @@ module.exports = {
     if (!h) return;
     for (const key of TWIN_KEYS) {
       const t = h.twins[key];
-      if (!t.alive || key === h.active) continue;
+      if (key === h.active) continue;
       for (const s of Object.keys(t.statuses || {})) {
+        // สถานะทั่วไปของแฝดที่ล้มจะหยุดไว้ตามเดิม แต่บัฟคู่ต้องนับเวลา
+        // พร้อมกับแฝดที่ยังสู้ เพื่อไม่ให้การชุบดึงระยะเวลาเก่ากลับมาอีกครั้ง
+        if (!t.alive && !COUPLE_BUFF_KEYS.includes(s)) continue;
         if (t.statuses[s] >= 999) continue;
         if (s === "fortune") continue;
+        if (s === "hburn") continue;
         t.statuses[s]--;
         if (t.statuses[s] <= 0) {
           delete t.statuses[s];
@@ -445,7 +496,7 @@ module.exports = {
   },
 
   tryTwinDeath(engine, p) {
-    const h = ensure(p, { keepActive: true });
+    const h = ensure(p);
     if (!h) return false;
     const deadKey = h.active;
     const dead = h.twins[deadKey];
@@ -453,13 +504,20 @@ module.exports = {
     dead.alive = false;
     dead.armor = 0;
     const next = TWIN_KEYS.find((key) => key !== deadKey && h.twins[key].alive);
-    if (!next) return false;
+    if (!next) {
+      clearCoupleBuffs(p);
+      return false;
+    }
     h.active = next;
     h.controlTurns = 0;
     syncIn(p);
     p.alive = true;
     engine.log(`👭 ${dead.name} หมดสภาพต่อสู้ — ${h.twins[next].name} ออกมาควบคุมแทน`);
     return true;
+  },
+
+  reviveFromElimination(p, hp = TWIN_MAX_HP) {
+    return !!this.reviveFallenTwin(p, hp);
   },
 };
 

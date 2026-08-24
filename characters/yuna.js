@@ -86,19 +86,27 @@ function rollWindow(engine, roundNumber) {
   queueYunaCutscene(engine, kind);
 }
 
-// เรียกจาก endTurn() (server.js) เท่านั้น — ไม่เรียกตรงจาก instantDeath() อีกต่อไป เพราะต้องรอให้ฉากโจมตี
-//  ของเทิร์นนี้ (ถ้ามี) จบลงก่อน แล้วค่อยฟื้นคืนชีพ+คิววีดีโอ+ตั้งเพลงล็อก (ดู instantDeath()'s yunaLongingPendingId)
-//  จุดเรียกอยู่หลังลูปลดเทิร์นสถานะของ endTurn() ไปแล้ว จึงได้บัฟเต็ม 5 เทิร์นโดยอัตโนมัติ เริ่มนับจากเทิร์นถัดไปพอดี
+// ผู้เล่นทั่วไปเรียกจาก endTurn() หลังฉากโจมตี ส่วนคู่แฝดเรียกทันทีเมื่อแฝดคนแรกล้ม
+// เพื่อให้แฝดที่ล้มฟื้นกลับมา โดยอีกคนไม่ถูกนับว่าตายตามไปด้วย
 function reviveWithLonging(engine, p) {
-  p.hp = 3;               // ตามสเปก: เกราะไม่ฟื้น ปล่อยตามที่เป็นตอนตาย
-  p.alive = true;
-  p.result = null;
-  p.locked = false;
-  engine.applyBuff(p, "yunaLonging", 1, YUNA_WINDOW_TURNS); // พลังโจมตี +1 เต็ม 5 เทิร์น นับจากเทิร์นถัดไป (คีย์ใหม่ ไม่ชนกับ might)
+  const hisakawa = p.characterId === "hisakawa_sister" && engine.CHAR_HOOKS?.hisakawa_sister;
+  if (hisakawa) {
+    const revivedTwinKey = hisakawa.reviveFallenTwin(p, 3);
+    if (!revivedTwinKey) return false;
+    // Longing เป็นบัฟของคนที่ถูกชุบ จึงต้องเก็บไว้กับแฝดคนนั้น ไม่ใช่แฝดที่กำลังควบคุมอยู่
+    hisakawa.applyBuffToTwin(p, revivedTwinKey, "yunaLonging", 1, YUNA_WINDOW_TURNS);
+  } else {
+    p.hp = 3;               // ตามสเปก: เกราะไม่ฟื้น ปล่อยตามที่เป็นตอนตาย
+    p.alive = true;
+    p.result = null;
+    p.locked = false;
+    engine.applyBuff(p, "yunaLonging", 1, YUNA_WINDOW_TURNS);
+  }
   const windowEnd = engine.roundNumber + YUNA_WINDOW_TURNS;
   engine.setYunaTrigger({ effect: "longing", targetId: p.id, windowEnd });
   engine.log(`✨ ยูนะปรากฏตัว — Longing! ${p.name} ฟื้นคืนชีพด้วยพลังชีวิต 3 หน่วย (พลังโจมตี +1 เป็นเวลา ${YUNA_WINDOW_TURNS} เทิร์น เริ่มนับเทิร์นถัดไป)`);
   queueYunaCutscene(engine, "longing");
+  return true;
 }
 
 module.exports = {

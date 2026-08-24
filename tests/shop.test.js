@@ -257,6 +257,29 @@ test('Nursedessei Cannon: ปืนพังแม้เป้าหมายจ
   assert.equal(t.hp, 5); // ไม่โดนดาเมจ (ตกรอบไปแล้ว)
 });
 
+test('Ignis: ยิง Nursedessei ด้วย Black Sparklence แล้วปืนไม่หาย แต่ใช้ไม่ได้ 3 เทิร์น', () => {
+  const p = mkPlayer({ characterId: 'ignis' });
+  const t = mkPlayer();
+  engine.CHAR_HOOKS.ignis.ensureBlackSparklence(p);
+  const ammo = { ammo: 'nurse' };
+
+  engine.applyGutsBullet(p, ammo, t);
+
+  assert.equal(engine.hasBlackSparklence(p), true);
+  assert.equal(p.blackSparklenceReadyRound, 1 + engine.BLACK_SPARKLENCE_NURSE_COOLDOWN + 1);
+  for (const round of [2, 3, 4]) {
+    engine.setRoundNumber(round);
+    assert.equal(engine.gutsFireTargetOf(p, ammo, t.id), null, `ยังไม่ควรใช้ปืนได้ในเทิร์น ${round}`);
+  }
+  const darkKey = giveAmmo(p, 'trigger_dark_key');
+  engine.setRoundNumber(2);
+  engine.useInventoryItem(p.id, darkKey.uid);
+  assert.equal(p.statuses.triggerDarkForm || 0, 0, 'คูลดาวน์ต้องบล็อก Trigger Dark Key ด้วย');
+  assert.equal(p.inventory.some((item) => item.uid === darkKey.uid), true, 'ยิงไม่ได้ต้องไม่เสียคีย์');
+  engine.setRoundNumber(5);
+  assert.equal(engine.gutsFireTargetOf(p, ammo, t.id), t);
+});
+
 // ---------- สภาพชา (ดีบัฟ Universal) ----------
 test('สภาพชา: กดจั่ว 1 ครั้ง ได้ไพ่ 2 ใบ — ไม่ติดสถานะจั่วได้ใบเดียวตามปกติ', () => {
   const normal = mkPlayer();

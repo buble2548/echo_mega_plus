@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const hisakawa = require('../../characters/hisakawa_sister.js');
+const yuna = require('../../characters/yuna.js');
 
 function mkEngine(over = {}) {
   const logs = [];
@@ -12,6 +13,9 @@ function mkEngine(over = {}) {
       target.statuses[key] = turns;
       if (amount != null) target.statusAmt[key] = amount;
       return true;
+    },
+    addSkill(player, amount) {
+      player.skillPoints = Math.min(8, player.skillPoints + amount);
     },
     dealMixed(target, n) {
       for (let i = 0; i < n; i++) {
@@ -56,7 +60,10 @@ test('init exposes Nagi as active twin in one player slot', () => {
 
 test('switch heals outgoing twin and moves control to the other twin', () => {
   const engine = mkEngine();
-  const p = mkPlayer({ hp: 1, armor: 0 });
+  const p = mkPlayer();
+  p.hp = 1;
+  p.armor = 0;
+  p.skillPoints = 4;
   hisakawa.syncOut(p);
   hisakawa.applySkill(engine, p, 'basic', ch.basic);
   const state = hisakawa.publicState(p);
@@ -65,6 +72,7 @@ test('switch heals outgoing twin and moves control to the other twin', () => {
   assert.equal(nagi.hp, 3);
   assert.equal(p.hp, 3);
   assert.equal(p.armor, 2);
+  assert.equal(p.skillPoints, 6);
 });
 
 test('dynamic basic changes to revive after one twin is dead', () => {
@@ -122,7 +130,7 @@ test('first twin death still swaps after syncOut has marked active twin dead', (
   assert.equal(p.armor, 2);
 });
 
-test('ultimate buffs continue after one twin falls', () => {
+test('ultimate buffs keep their remaining duration and continue ticking after one twin falls', () => {
   const engine = mkEngine();
   const p = mkPlayer({ hp: 1, armor: 0 });
   hisakawa.applySkill(engine, p, 'ultimate', ch.ultimate);
@@ -137,4 +145,59 @@ test('ultimate buffs continue after one twin falls', () => {
   assert.equal(active.statuses.hisakawaTalent, 5);
   assert.equal(hisakawa.dynamicSkillFor(p, ch, 'ultimate').name, 'dream');
   assert.equal(hisakawa.canUseSkill(engine, p, 'ultimate', ch.ultimate3), true);
+
+  // จำลอง end-turn ของ server: ตัวที่คุมอยู่ลดผ่าน p.statuses ส่วนแฝดที่ล้ม
+  // ลดบัฟคู่ผ่าน hook เพื่อให้ระยะเวลาของทั้งสองฝั่งตรงกันเสมอ
+  for (let remaining = 4; remaining >= 0; remaining--) {
+    for (const key of ['hisakawaStage', 'hisakawaTalent']) {
+      p.statuses[key]--;
+      if (p.statuses[key] <= 0) delete p.statuses[key];
+    }
+    hisakawa.syncOut(p);
+    hisakawa.onEndTurnTick(engine, p);
+    const state = hisakawa.publicState(p);
+    for (const twin of state.twins) {
+      assert.equal(twin.statuses.hisakawaStage || 0, remaining);
+      assert.equal(twin.statuses.hisakawaTalent || 0, remaining);
+    }
+  }
+
+  assert.equal(hisakawa.dynamicSkillFor(p, ch, 'ultimate').name, ch.ultimate2.name);
+  assert.equal(hisakawa.canUseSkill(engine, p, 'ultimate', ch.ultimate3), false);
+});
+
+test('init always resets both twins for a new match', () => {
+  const p = mkPlayer();
+  p.hp = 0;
+  hisakawa.syncOut(p);
+  hisakawa.tryTwinDeath(mkEngine(), p);
+
+  hisakawa.init(p);
+  const state = hisakawa.publicState(p);
+  assert.equal(state.active, 'nagi');
+  assert.deepEqual(state.twins.map((t) => [t.alive, t.hp, t.armor]), [[true, 3, 2], [true, 3, 2]]);
+});
+
+test('Longing revives the first fallen twin and applies its buff to that twin', () => {
+  const p = mkPlayer();
+  const engine = mkEngine({
+    CHAR_HOOKS: { hisakawa_sister: hisakawa },
+    setYunaTrigger(data) { this.yuna = data; },
+    pushCutsceneRaw(entry) { this.cutscene = entry; },
+  });
+
+  p.hp = 0;
+  hisakawa.syncOut(p);
+  assert.equal(hisakawa.tryTwinDeath(engine, p), true);
+  assert.equal(p.alive, true);
+  yuna.reviveWithLonging(engine, p);
+
+  const state = hisakawa.publicState(p);
+  assert.equal(p.alive, true);
+  assert.equal(state.active, 'hayate');
+  assert.equal(state.twins.filter((t) => t.alive).length, 2);
+  const nagi = state.twins.find((t) => t.key === 'nagi');
+  assert.equal(nagi.hp, 3);
+  assert.equal(nagi.armor, 0);
+  assert.equal(nagi.statuses.yunaLonging, 5);
 });

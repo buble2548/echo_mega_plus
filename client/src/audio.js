@@ -12,6 +12,7 @@ const FILES = {
   card_prepare_turn: "/theme_song/card_prepare_turn.mp3",
   new_morning: "/theme_song/new_morning.mp3", // เพลงช่วงกลางวัน (patch พิเศษ)
   new_night: "/theme_song/new_night.mp3",     // เพลงช่วงกลางคืน (patch พิเศษ)
+  overload_force: "/overload_force/overload_force_connect.m4a",
   shrade: "/characters/shrade_elan/shrade_theme.mp3", // เพลงระหว่างชาร์จ แด่เพื่อนรักของฉัน (ชเรด เอลัน)
   shiki: "/characters/shiki/shiki_theme.mp3",         // เพลงระหว่างท่าไม้ตาย ฉันมองเห็นมันแล้ว (ชิกิ)
   shiki2: "/characters/shiki/shiki_theme2.mp3",       // เพลงระหว่างท่าไม้ตาย 2 ความตายที่โรยรา (ชิกิ patch 2.0.6)
@@ -100,6 +101,14 @@ const FILES = {
   attack: "/effect_sound/attack.wav",
 };
 
+// เพลงสนามนี้มี intro หนึ่งครั้ง แล้วจึงเปลี่ยนเป็น theme ที่วนลูปจนจบเทิร์น
+const MUSIC_SEQUENCES = {
+  overload_force: [
+    "/overload_force/overload_force_connect.m4a",
+    "/overload_force/overload_force_theme.mp3",
+  ],
+};
+
 // ระดับเสียงพื้นฐานต่อชนิด (ก่อนคูณ master) — บาลานซ์ให้ดังใกล้เคียงกัน
 const MUSIC_BASE = 0.55;
 const SFX_BASE = 0.85;
@@ -144,8 +153,20 @@ const musicSeq = {};
 const musicCache = {};
 function getMusic(name) {
   if (!musicCache[name]) {
-    const a = new Audio(FILES[name]);
-    a.loop = true;
+    const sequence = MUSIC_SEQUENCES[name];
+    const a = new Audio(sequence ? sequence[0] : FILES[name]);
+    a.loop = !sequence;
+    a._echoSequenceStage = 0;
+    if (sequence) {
+      a.addEventListener("ended", () => {
+        if (currentMusic !== name) return;
+        a._echoSequenceStage = 1;
+        a.src = sequence[1];
+        a.loop = true;
+        a.currentTime = 0;
+        a.play().catch(() => {});
+      });
+    }
     musicCache[name] = a;
   }
   musicCache[name].volume = trackVolume(name);
@@ -161,6 +182,12 @@ export function playMusic(name, seq) {
   const isNewSeq = seq != null && seq !== musicSeq[name];
   if (isNewSeq) {
     musicSeq[name] = seq;
+    const sequence = MUSIC_SEQUENCES[name];
+    if (sequence && a._echoSequenceStage !== 0) {
+      a.src = sequence[0];
+      a.loop = false;
+      a._echoSequenceStage = 0;
+    }
     a.currentTime = 0; // การเปิดร่างครั้งใหม่ (กดใหม่/โดนคนอื่นทับ) -> เริ่มจากต้น
   }
   if (currentMusic === name) {
@@ -178,8 +205,14 @@ export function stopMusic() {
 }
 // เริ่มเกมใหม่ / จบแมตช์: รีเซ็ตตำแหน่งเพลงทุกเพลง -> ครั้งถัดไปเริ่มจากต้นทั้งหมด
 export function resetMusicPositions() {
-  for (const a of Object.values(musicCache)) {
+  for (const [name, a] of Object.entries(musicCache)) {
     a.pause();
+    const sequence = MUSIC_SEQUENCES[name];
+    if (sequence) {
+      a.src = sequence[0];
+      a.loop = false;
+      a._echoSequenceStage = 0;
+    }
     a.currentTime = 0;
   }
   for (const k of Object.keys(musicSeq)) delete musicSeq[k];

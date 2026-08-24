@@ -10,5 +10,7 @@ npm-debug.log*
 
 # ไฟล์ตัวละคร (รูป/วิดีโอ/เพลง) ย้ายไปเก็บบน Cloudflare R2 แล้ว ไม่ track ใน git อีกต่อไป
 client/public/characters/
+# ไฟล์สนาม Overload Force เก็บบน R2 เช่นเดียวกับสื่อตัวละคร
+client/public/overload_force/
 # ไฟล์ไอเทม (ปืนหน่วย GUTS Select + คีย์/วีดีโอกระสุน) — เก็บบน R2 เหมือนกัน
 client/public/item/
