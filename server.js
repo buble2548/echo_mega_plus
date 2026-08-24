@@ -1215,6 +1215,12 @@ function yuukiCanSafelyDraw(p) {
   return nextExtraDraw % 5 !== 0 || p.hp > 2;
 }
 
+function resetOverloadDrawCounter(p, ready = false) {
+  if (!p) return;
+  p.overloadExtraDraws = 0;
+  p.overloadDrawReady = !!ready;
+}
+
 function autoPlayYuuki() {
   const p = yuukiBoss();
   if (!p || !p.cards || p.locked) return;
@@ -1698,10 +1704,12 @@ function loseHp(p) {
   }
 }
 
-// Overload Force: ใบแรกเป็นไพ่ตั้งต้น หลังจากนั้นทุกใบที่ 5 ที่จั่วเพิ่มจะเสีย HP จริง 2 หน่วย
+// Overload Force: เริ่มนับเฉพาะไพ่ที่จั่วหลังคะแนนเกิน 21 และรีเซ็ตตัวนับใหม่ทุกเทิร์น
+// ทุกใบที่ 5 ในช่วงคะแนนเกิน 21 จะเสีย HP จริง 2 หน่วย
 // ใช้ loseHp เพื่อให้ระบบกันตาย/เชื่อมผล/ร่างพิเศษยังทำงานตามกติกาหลักของเกม
 function applyOverloadOverdrawPenalty(p) {
   if (!overloadForceActive || !p || !p.alive || !p.overloadDrawReady) return;
+  if (calculateScore(p.cards) <= 21) return;
   p.overloadExtraDraws = (p.overloadExtraDraws || 0) + 1;
   if (p.overloadExtraDraws % 5 !== 0) return;
   const before = p.hp;
@@ -2979,8 +2987,7 @@ function dealRound() {
     p.cardBonus = 0; // แต้มการ์ดโบนัส (Ashen Trail โอกูริ patch 2.1.1) — รีเซ็ตทุกเทิร์น
     p.colorTrigger = { red: 0, blue: 0, green: 0, yellow: 0 }; // นับจำนวนครั้งที่ทริกเกอร์สีนั้นทำงานไปแล้วในรอบนี้
     p.statusAmt.cardAtkBonus = 0; // พลังโจมตีจากการ์ดแดง — รีเซ็ตทุกรอบ
-    p.overloadExtraDraws = 0;
-    p.overloadDrawReady = false; // ไพ่ตั้งต้นไม่นับเป็นไพ่จั่วเพิ่มของ Overload Force
+    resetOverloadDrawCounter(p, false); // ไพ่ตั้งต้นไม่นับเป็นไพ่จั่วเพิ่มของ Overload Force
     { const c = drawInitialCard(p); if (c) { p.cards.push(c); onCardDrawn(p, c); } }
     p.overloadDrawReady = overloadForceActive;
     p.locked = false;
@@ -4153,8 +4160,7 @@ function beginOverloadForceDraw() {
     p.colorTrigger = { red: 0, blue: 0, green: 0, yellow: 0 };
     p.statusAmt.cardAtkBonus = 0;
     delete p.statuses.freecast; // ไพ่ Queen จากมือเดิมถูกย้อนทิ้งไปพร้อมไพ่
-    p.overloadExtraDraws = 0;
-    p.overloadDrawReady = false;
+    resetOverloadDrawCounter(p, false);
     const initial = drawInitialCard(p);
     if (initial) {
       p.cards.push(initial);
@@ -6243,6 +6249,7 @@ module.exports = {
   maxArmorOf,
   yuukiStatsForPlayerCount,
   yuukiCanSafelyDraw,
+  resetOverloadDrawCounter,
   autoPlayYuuki,
 };
 
