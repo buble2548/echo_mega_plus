@@ -136,10 +136,27 @@ test('Yuuki reacts after each human action without locking early or waiting for 
   }
 });
 
-test('Yuuki refuses an Overload fifth draw when the 2 HP penalty would kill her', () => {
+test('Yuuki can always draw because the Overload HP penalty does not apply to the boss', () => {
   engine.setOverloadForceActive(true);
-  assert.equal(yuukiCanSafelyDraw({ hp: 1, overloadExtraDraws: 4 }), false);
+  assert.equal(yuukiCanSafelyDraw({ id: '__yuuki_boss__', hp: 1, overloadExtraDraws: 4 }), true);
   assert.equal(yuukiCanSafelyDraw({ hp: 3, overloadExtraDraws: 4 }), true);
   assert.equal(yuukiCanSafelyDraw({ hp: 1, overloadExtraDraws: 3 }), true);
+  engine.setOverloadForceActive(false);
+});
+
+test('Yuuki takes no HP damage from every fifth excess Overload draw', () => {
+  const boss = {
+    id: '__yuuki_boss__', name: 'Yuuki', alive: true, characterId: 'yuuki', hp: 7, armor: 3,
+    cards: [{ value: 10 }, { value: 10 }, { value: 2 }], overloadDrawReady: true, overloadExtraDraws: 4,
+    statuses: {}, statusAmt: {}, colorTrigger: { red: 0, blue: 0, green: 0, yellow: 0 }, dmgHp: 0, dmgArmor: 0,
+  };
+  engine.players[boss.id] = boss;
+  engine.setOverloadForceActive(true);
+  const card = { value: 1, color: 'red' };
+  boss.cards.push(card);
+  engine.onCardDrawn(boss, card);
+  assert.equal(boss.hp, 7);
+  assert.equal(boss.overloadExtraDraws, 4);
+  delete engine.players[boss.id];
   engine.setOverloadForceActive(false);
 });

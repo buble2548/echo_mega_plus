@@ -1210,6 +1210,7 @@ function yuukiStatsForPlayerCount(count) {
 }
 
 function yuukiCanSafelyDraw(p) {
+  if (isYuuki(p)) return true;
   if (!overloadForceActive) return true;
   const nextExtraDraw = (p.overloadExtraDraws || 0) + 1;
   return nextExtraDraw % 5 !== 0 || p.hp > 2;
@@ -1711,6 +1712,7 @@ function loseHp(p) {
 // ใช้ loseHp เพื่อให้ระบบกันตาย/เชื่อมผล/ร่างพิเศษยังทำงานตามกติกาหลักของเกม
 function applyOverloadOverdrawPenalty(p) {
   if (!overloadForceActive || !p || !p.alive || !p.overloadDrawReady) return;
+  if (isYuuki(p)) return; // บอสยูกิได้รับการยกเว้นโทษ HP -2 จาก Overload Force
   if (calculateScore(p.cards) <= 21) return;
   p.overloadExtraDraws = (p.overloadExtraDraws || 0) + 1;
   if (p.overloadExtraDraws % 5 !== 0) return;
