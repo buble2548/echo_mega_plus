@@ -99,6 +99,43 @@ test('Yuuki reads every human score and draws past the current leader during Ove
   engine.setOverloadForceActive(false);
 });
 
+test('Yuuki reacts after each human action without locking early or waiting for the deck to empty', () => {
+  const boss = {
+    id: '__yuuki_boss__', name: 'Yuuki', alive: true, characterId: 'yuuki', hp: 7, armor: 3,
+    cards: [{ value: 5, color: 'red' }], locked: false, overloadDrawReady: true, overloadExtraDraws: 0,
+    inventory: [], statuses: {}, statusAmt: {}, colorTrigger: { red: 0, blue: 0, green: 0, yellow: 0 }, dmgHp: 0, dmgArmor: 0,
+  };
+  const human = {
+    id: 'live-leader', name: 'Live Leader', alive: true, characterId: 'tohno',
+    cards: [{ value: 10 }], locked: false, statuses: {}, statusAmt: {},
+  };
+  engine.players[boss.id] = boss;
+  engine.players[human.id] = human;
+  engine.setOverloadForceActive(true);
+  engine.setCentralDeck([{ value: 6, color: 'blue' }, { value: 10, color: 'green' }]);
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+  try {
+    autoPlayYuuki(false);
+    assert.equal(engine.calculateScore(boss.cards), 11);
+    assert.equal(boss.locked, false, 'reactive draw must keep Yuuki available for later human draws');
+
+    human.cards.push({ value: 10 });
+    autoPlayYuuki(false);
+    assert.equal(engine.calculateScore(boss.cards), 21);
+    assert.equal(boss.locked, false);
+
+    autoPlayYuuki(true);
+    assert.equal(boss.locked, true);
+  } finally {
+    Math.random = originalRandom;
+    delete engine.players[boss.id];
+    delete engine.players[human.id];
+    engine.setCentralDeck([]);
+    engine.setOverloadForceActive(false);
+  }
+});
+
 test('Yuuki refuses an Overload fifth draw when the 2 HP penalty would kill her', () => {
   engine.setOverloadForceActive(true);
   assert.equal(yuukiCanSafelyDraw({ hp: 1, overloadExtraDraws: 4 }), false);

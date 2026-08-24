@@ -1221,7 +1221,7 @@ function resetOverloadDrawCounter(p, ready = false) {
   p.overloadDrawReady = !!ready;
 }
 
-function autoPlayYuuki() {
+function autoPlayYuuki(finalize = true) {
   const p = yuukiBoss();
   if (!p || !p.cards || p.locked) return;
   // ยูกิเห็นคะแนนจริงของผู้เล่นทุกคนตอนทุกคนล็อกแล้ว และพยายามแซงคะแนนสูงสุด 1 แต้ม
@@ -1255,8 +1255,10 @@ function autoPlayYuuki() {
     onCardDrawn(p, card);
     p.busted = bustedOf(p);
   }
-  applyLockColorTriggers(p);
-  p.locked = true;
+  if (finalize) {
+    applyLockColorTriggers(p);
+    p.locked = true;
+  }
 }
 
 function applyYuukiUltimate() {
@@ -4123,6 +4125,9 @@ function kaiOverhaul(id) {
 function checkAllLocked() {
   if (gameState !== "PLAYING") return;
   const c = alivePlayers();
+  // ตอบสนองหลังทุก action ของผู้เล่นทันที เพื่อไม่ให้มนุษย์จั่วกองกลางจนหมดก่อน AI ได้เล่น
+  // ยังไม่ล็อกมือยูกิจนกว่าทุกคนจะล็อกหรือหมดเวลา
+  autoPlayYuuki(false);
   // รอคำตอบข้อเสนอ/ต่อสัญญา (เจ้าแห่งเน็ตบ้าน) / เป้าหมายบทเพลง (Bard) ก่อนเปิดไพ่อัตโนมัติ
   //  — หมดเวลาเฟสไพ่ = ถือว่าปฏิเสธ / สุ่มเป้าหมาย
   const pendingAnswer =
