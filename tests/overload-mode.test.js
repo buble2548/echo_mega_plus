@@ -40,4 +40,13 @@ test('Over Load creates Yuuki immediately before the first turn', () => {
   assert.equal(boss.yuukiPlayerCount, 1);
   assert.equal(engine.overloadForceActive, true);
   assert.equal(engine.gameState, 'CUTSCENE');
+  assert.equal(engine.cutsceneInfo.kind, 'yuukiSpawn');
+  assert.equal(engine.cutsceneInfo.video, '/characters/yuuki/yuuki_overload.mp4');
+  assert.notEqual(engine.cutsceneInfo.video, '/overload_force/overload_force_start.mp4');
+});
+
+test('Yuuki victory always leaves the attack flow and enters game over', () => {
+  engine.setGameState('ATTACK');
+  engine.finishYuukiVictory();
+  assert.equal(engine.gameState, 'GAMEOVER');
 });

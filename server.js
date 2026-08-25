@@ -2581,8 +2581,9 @@ function startMatch() {
   kaiOverhaulSlots = []; // ไค ชิซากิ: ล้าง tracker Overhaul ทุกครั้งที่เริ่มแมตช์ใหม่
   // อาริมะ มิยาโกะ (characters/miyako.js): เจอ โทโนะ ชิกิ หรือ นานายะ ชิกิ ในเกมเดียวกัน -> เล่นวีดีโอ arima_shiki.mp4 ก่อนเริ่มเทิร์นแรก
   cutsceneQueue = [];
-  const hasIntro = CHAR_HOOKS.miyako.maybeQueueRivalIntro(engine);
   if (gameMode === "overload") {
+    // โหมดบอสต้องเปิดด้วยวิดีโอยูกิเสมอ ห้ามคิวเปิดตัวอื่นหรือ Overload Force แทรกนำหน้า
+    cutsceneQueue = [];
     createYuukiBoss();
     overloadForceActive = true;
     overloadForceCount = 3;
@@ -2590,7 +2591,7 @@ function startMatch() {
     queueYuukiCutscene(YUUKI_VIDEO.spawn, "ยูกิ Overload", 9, "yuukiSpawn");
     lastLog.push("⚡ โหมด Over Load เริ่มขึ้น — ยูกิ Overload ปรากฏตัวทันที!");
     runCutsceneQueue(dealRound);
-  } else if (hasIntro) {
+  } else if (CHAR_HOOKS.miyako.maybeQueueRivalIntro(engine)) {
     runCutsceneQueue(dealRound);
   } else {
     dealRound();
@@ -4591,7 +4592,10 @@ function afterSummary() {
     return;
   }
   if (isYuuki(winner) && !roundTiedWin) {
-    const targets = attackableTargets(winner.id).filter((p) => !isYuuki(p));
+    const forcedRivalId = winner.kaiRivalId && ((winner.statuses.kaiRival1 || 0) > 0 || (winner.statuses.kaiRival2 || 0) > 0)
+      ? winner.kaiRivalId
+      : null;
+    const targets = attackableTargets(winner.id).filter((p) => !isYuuki(p) && (!forcedRivalId || p.id === forcedRivalId));
     for (let i = targets.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [targets[i], targets[j]] = [targets[j], targets[i]];
@@ -4721,12 +4725,18 @@ function doAttack(byId, targetId) {
   const attacker = players[byId];
   if (!effectSourceId && attacker) return withEffectSource(attacker, () => doAttack(byId, targetId));
   let target = players[targetId];
-  if (!attacker || !target || !target.alive || target.id === attacker.id || sameTeam(attacker, target)) return;
-  if (sealActive(target)) return; // เรจูอาคมบัญชา (อมตะ): เลือกโจมตีไม่ได้
+  if (!attacker || !target || !target.alive || target.id === attacker.id || sameTeam(attacker, target) || sealActive(target)) {
+    // เป้าหมายยูกิอาจตาย/หายหรือป้องกันการเลือกเป้าระหว่างคัตซีน ห้ามปล่อยเฟส ATTACK ค้าง
+    if (isYuuki(attacker)) postAttackFollowup(attacker);
+    return;
+  }
   if (CHAR_HOOKS.bat_ben.cannotAttack(attacker)) return;              // แบทแมน (patch 2.2.7): ระหว่างเร้นเงา โจมตีไม่ได้
   if (CHAR_HOOKS.princess_shiki.cannotAttack(attacker)) return;       // เจ้าหญิงราก (patch 2.2.7): โจมตีไม่ได้ เว้นแต่ติดชักดาบ
   // ไค ชิซากิ: โทสะระงับด้วยโทสะ — มีคู่ปรับ (kaiRival1/kaiRival2 ยังไม่หมด) บังคับเป้าหมายมีแค่คู่ปรับเท่านั้น
-  if (attacker.kaiRivalId && ((attacker.statuses.kaiRival1 || 0) > 0 || (attacker.statuses.kaiRival2 || 0) > 0) && target.id !== attacker.kaiRivalId) return;
+  if (attacker.kaiRivalId && ((attacker.statuses.kaiRival1 || 0) > 0 || (attacker.statuses.kaiRival2 || 0) > 0) && target.id !== attacker.kaiRivalId) {
+    if (isYuuki(attacker)) postAttackFollowup(attacker);
+    return;
+  }
   clearPhaseTimer();
   let yuukiAttackVideoQueued = false;
   if (isYuuki(attacker)) {
@@ -5340,6 +5350,16 @@ function doAttack(byId, targetId) {
 }
 
 // ---- ปิดรอบ ----
+function finishYuukiVictory() {
+  clearPhaseTimer();
+  winningTeamId = null;
+  attackerId = null;
+  yuukiAttackTargets = [];
+  gameState = "GAMEOVER";
+  timeLeft = 0;
+  broadcastState();
+}
+
 function endTurn() {
   clearPhaseTimer();
   attackerId = null;
@@ -5682,6 +5702,9 @@ function endTurn() {
     yuukiWinShown = true;
     queueYuukiCutscene(YUUKI_VIDEO.win, "นายมันอ่อนแอเกินไป", 6, "yuukiWin");
     lastLog.push("☠️ ยูกิเอาชนะผู้เล่นทุกคน — ผู้เล่นทั้งหมดพ่ายแพ้!");
+    // จบเกมตรงหลังวิดีโอชนะ ไม่ผ่านเงื่อนไข FFA/ทีมทั่วไปซึ่งอาจทิ้งเกมไว้กลางเฟส
+    runCutsceneQueue(finishYuukiVictory);
+    return;
   }
   // เล่นฉากระเบิด/ยูนะ/ชัยชนะยูกิ (ถ้ามี) ให้จบก่อน แล้วค่อยสรุปจบเกม/ขึ้นรอบถัดไป
   runCutsceneQueue(() => {
@@ -6164,6 +6187,7 @@ const engine = {
   doomWeaponMarkPending,
   get gameState() { return gameState; },
   setGameState(v) { gameState = v; },
+  get cutsceneInfo() { return cutsceneInfo; },
   get gameMode() { return gameMode; },
   setGameMode(v) { gameMode = v; },
   setTeamCount(v) { teamCount = v; },
@@ -6206,6 +6230,7 @@ const engine = {
   nextTransformCounter() { return ++transformCounter; },
   startMatch,
   yuukiBoss,
+  finishYuukiVictory,
   endTurn,
   doAttack,
   useSkill,
