@@ -422,7 +422,10 @@ function isNightRound(n) {
   if (bardCycle) return bardCycle === "night";
   if (n <= dayForceUntil) return false;
   const m = n - cycleShift;
-  return m > 0 && Math.floor((m - 1) / CYCLE_TURNS) % 2 === 1;
+  const block = m > 0 ? Math.floor((m - 1) / CYCLE_TURNS) : 0;
+  // โหมด Over Load เริ่ม 5 เทิร์นแรกเป็นกลางคืน แล้วจึงสลับเป็นกลางวัน
+  if (gameMode === "overload") return m > 0 && block % 2 === 0;
+  return m > 0 && block % 2 === 1;
 }
 // patch 2.1.7: เช้าที่กี่ (1 = เช้าแรกของเกม, 2 = เช้าที่สอง, ...) — ใช้กำหนดว่าเช้าไหนแจกแต้มสกิลโบนัส
 function dayCycleIndex(n) {
@@ -777,7 +780,7 @@ const TRANSFORMS = require("./characters/_transforms")({
 // ---------- สถานะเกมส่วนกลาง ----------
 let players = {};
 let gameState = "LOBBY"; // LOBBY | TEAM_MODE | TEAM_SETUP | PLAYING | CUTSCENE | SUMMARY | ATTACK | TRANSITION | GAMEOVER
-let gameMode = "ffa"; // ffa | duo | trio | pending
+let gameMode = "ffa"; // ffa | duo | trio | overload | pending
 let teamSize = 1;
 let teamCount = 0;
 let winningTeamId = null;
@@ -798,6 +801,8 @@ let yuukiTurns = 0;               // นับเทิร์นบนสนา�
 let yuukiAttackTargets = [];      // คิวโจมตี 2 เป้าหมายแบบไม่ซ้ำเมื่อยูกิชนะ
 let yuukiLowShown = false;
 let yuukiWinShown = false;
+let yuukiDefeated = false;         // โหมด Over Load: โค่นบอสแล้วผู้เล่นทุกคนชนะทันทีเมื่อคัตซีนจบ
+let yuukiReactiveDrawCredits = 0;  // ยูกิจั่วตอบโต้ได้สูงสุด 1 ใบต่อไพ่ที่มนุษย์จั่ว
 let roundNumber = 0;
 let centralDeck = []; // กองกลาง 43 ใบ (สับใหม่ทุกรอบใน dealRound())
 let lastLog = [];
@@ -910,6 +915,7 @@ function resetPregameFlowToLobby() {
 }
 function validGameMode(mode, count = Object.keys(players).length) {
   if (mode === "ffa") return count >= 2;
+  if (mode === "overload") return count >= 2;
   if (mode === "duo") return count >= 4 && count % 2 === 0;
   if (mode === "trio") return count === 6;
   return false;
@@ -917,6 +923,7 @@ function validGameMode(mode, count = Object.keys(players).length) {
 function modeOptionsFor(count = Object.keys(players).length) {
   return [
     { mode: "ffa", label: "Free For All", size: 1, enabled: validGameMode("ffa", count) },
+    { mode: "overload", label: "Over Load", size: 1, enabled: validGameMode("overload", count) },
     { mode: "duo", label: "Duo", size: 2, enabled: validGameMode("duo", count) },
     { mode: "trio", label: "Trio", size: 3, enabled: validGameMode("trio", count) },
   ];
@@ -966,8 +973,8 @@ function startTeamSetup(mode) {
   const count = Object.keys(players).length;
   if (!validGameMode(mode, count)) return;
   resetModeVotes();
-  if (mode === "ffa") {
-    gameMode = "ffa";
+  if (mode === "ffa" || mode === "overload") {
+    gameMode = mode;
     teamSize = 1;
     teamCount = 0;
     resetTeamAssignments(false);
@@ -1109,6 +1116,7 @@ function onCardDrawn(p, card) {
   checkBlueTrigger(p);
   applySpecialCardEffect(p, card);
   applyOverloadOverdrawPenalty(p);
+  if (!isYuuki(p) && yuukiBoss() && gameState === "PLAYING") yuukiReactiveDrawCredits++;
 }
 // แดง/เขียว/เหลือง ครบ 3 ใบ: ประเมินครั้งเดียวตอนเปิดไพ่ (lock) จากมือสุดท้ายทั้งหมด
 function applyLockColorTriggers(p) {
@@ -1171,8 +1179,8 @@ function aliveHumans() { return alivePlayers().filter((p) => !isYuuki(p)); }
 function queueYuukiCutscene(video, title, seconds = 8, kind = "yuuki") {
   cutsceneQueue.push({
     seconds,
-    info: { kind, playerId: YUUKI_ID, name: "ยูกิ (Over Load)", img: YUUKI_IMG,
-      color: POSITION_COLORS[7], video, title, label: "BOSS · P7" },
+    info: { kind, playerId: YUUKI_ID, name: "ยูกิ Overload", img: YUUKI_IMG,
+      color: POSITION_COLORS[7], video, title, label: null },
   });
 }
 
@@ -1182,7 +1190,7 @@ function createYuukiBoss() {
   const p = {
     id: YUUKI_ID, socketId: null, connected: true, ready: true, isBoss: true,
     teamId: null, teamConfirmed: true, modeVote: null,
-    name: "ยูกิ (Over Load)", position: 7, characterId: "yuuki", avatar: ch.avatar, img: ch.img,
+    name: "ยูกิ Overload", position: 7, characterId: "yuuki", avatar: ch.avatar, img: ch.img,
     cards: [], locked: true, busted: false, result: null,
   };
   const scale = yuukiStatsForPlayerCount(Object.values(players).filter((o) => !isYuuki(o)).length);
@@ -1201,6 +1209,8 @@ function createYuukiBoss() {
   yuukiTurns = 0;
   yuukiLowShown = false;
   yuukiWinShown = false;
+  yuukiDefeated = false;
+  yuukiReactiveDrawCredits = 0;
   return p;
 }
 
@@ -1213,7 +1223,7 @@ function yuukiCanSafelyDraw(p) {
   if (isYuuki(p)) return true;
   if (!overloadForceActive) return true;
   const nextExtraDraw = (p.overloadExtraDraws || 0) + 1;
-  return nextExtraDraw % 5 !== 0 || p.hp > 2;
+  return nextExtraDraw % 5 !== 0 || p.hp > 1;
 }
 
 function resetOverloadDrawCounter(p, ready = false) {
@@ -1222,17 +1232,19 @@ function resetOverloadDrawCounter(p, ready = false) {
   p.overloadDrawReady = !!ready;
 }
 
-function autoPlayYuuki(finalize = true) {
+function autoPlayYuuki(finalize = true, maxDraws = finalize ? 2 : 1) {
   const p = yuukiBoss();
-  if (!p || !p.cards || p.locked) return;
+  if (!p || !p.cards || p.locked) return 0;
   // ยูกิเห็นคะแนนจริงของผู้เล่นทุกคนตอนทุกคนล็อกแล้ว และพยายามแซงคะแนนสูงสุด 1 แต้ม
-  // ระหว่าง Overload Force ไม่มีเพดาน/ไพ่แตก แต่ AI จะไม่จั่วใบที่ 5 หากโทษ HP -2 จะทำให้ตาย
+  // ระหว่าง Overload Force ไม่มีเพดาน/ไพ่แตก และยูกิไม่รับโทษ HP จากการจั่วเกิน
   const humanScores = aliveHumans().map(scoreOf);
   const bestHumanScore = humanScores.length ? Math.max(...humanScores) : 0;
   const targetScore = overloadForceActive
     ? Math.max(1, bestHumanScore + 1)
     : Math.min(21, Math.max(17, bestHumanScore + 1));
-  while (p.alive && centralDeck.length && scoreOf(p) < targetScore && !bustedOf(p) && yuukiCanSafelyDraw(p)) {
+  let drawnCount = 0;
+  const drawLimit = Math.max(0, Math.trunc(Number(maxDraws) || 0));
+  while (drawnCount < drawLimit && p.alive && centralDeck.length && scoreOf(p) < targetScore && !bustedOf(p) && yuukiCanSafelyDraw(p)) {
     let card = null;
     if ((p.statuses.fortune || 0) > 0) {
       p.statuses.fortune--;
@@ -1255,11 +1267,13 @@ function autoPlayYuuki(finalize = true) {
     p.cards.push(card);
     onCardDrawn(p, card);
     p.busted = bustedOf(p);
+    drawnCount++;
   }
   if (finalize) {
     applyLockColorTriggers(p);
     p.locked = true;
   }
+  return drawnCount;
 }
 
 function applyYuukiUltimate() {
@@ -1360,6 +1374,8 @@ function instantDeath(p) {
     const killer = (currentSource && !isYuuki(currentSource)) ? currentSource : players[p.lastDamageSourceId];
     p.hp = 0; p.alive = false; p.result = "dead"; p.locked = true;
     overloadForceActive = false;
+    yuukiDefeated = true;
+    yuukiReactiveDrawCredits = 0;
     yuukiAttackTargets = [];
     queueYuukiCutscene(YUUKI_VIDEO.end, "YUUKI · DEFEATED", 7, "yuukiEnd");
     if (killer && !isYuuki(killer)) {
@@ -1708,16 +1724,15 @@ function loseHp(p) {
 }
 
 // Overload Force: เริ่มนับเฉพาะไพ่ที่จั่วหลังคะแนนเกิน 21 และรีเซ็ตตัวนับใหม่ทุกเทิร์น
-// ทุกใบที่ 5 ในช่วงคะแนนเกิน 21 จะเสีย HP จริง 2 หน่วย
+// ทุกใบที่ 5 ในช่วงคะแนนเกิน 21 จะเสีย HP จริง 1 หน่วย
 // ใช้ loseHp เพื่อให้ระบบกันตาย/เชื่อมผล/ร่างพิเศษยังทำงานตามกติกาหลักของเกม
 function applyOverloadOverdrawPenalty(p) {
   if (!overloadForceActive || !p || !p.alive || !p.overloadDrawReady) return;
-  if (isYuuki(p)) return; // บอสยูกิได้รับการยกเว้นโทษ HP -2 จาก Overload Force
+  if (isYuuki(p)) return; // บอสยูกิได้รับการยกเว้นโทษ HP -1 จาก Overload Force
   if (calculateScore(p.cards) <= 21) return;
   p.overloadExtraDraws = (p.overloadExtraDraws || 0) + 1;
   if (p.overloadExtraDraws % 5 !== 0) return;
   const before = p.hp;
-  loseHp(p);
   loseHp(p);
   maybeBeatSave(p);
   maybeBeatMode(p);
@@ -2216,6 +2231,7 @@ function buildStateFor(viewerId) {
     overloadForce: overloadForceActive,
     yuukiAlive: !!yuukiBoss(),
     yuukiVictory: !!yuukiBoss() && yuukiWinShown,
+    overloadVictory: gameMode === "overload" && yuukiDefeated,
     deckEmpty: centralDeck.length === 0,
     cycle: nightNow ? "night" : "day", // กลางวัน/กลางคืน (สลับทุก 3 เทิร์น)
     oberonBg,
@@ -2544,7 +2560,11 @@ function checkLobbyReady() {
 }
 function startMatch() {
   delete players[YUUKI_ID];
-  if (!teamModeActive()) resetTeamAssignments(true);
+  if (!teamModeActive()) {
+    resetTeamAssignments(false);
+    teamSize = 1;
+    teamCount = 0;
+  }
   winningTeamId = null;
   for (const p of Object.values(players)) resetCombat(p);
   roundNumber = 0;
@@ -2555,13 +2575,22 @@ function startMatch() {
   yunaLongingUsed = false; yunaWindowEnd = 0; yunaEffect = null; yunaTargetId = null; yunaMusicSeq = 0; yunaLongingPendingId = null; yunaPity = 0;
   overloadForceActive = false;
   overloadForceCount = 0; yuukiSpawned = false; yuukiTurns = 0; yuukiAttackTargets = [];
-  yuukiLowShown = false; yuukiWinShown = false;
+  yuukiLowShown = false; yuukiWinShown = false; yuukiDefeated = false; yuukiReactiveDrawCredits = 0;
   allyWinFlag = false;
   shopItems = []; uncleShopItems = []; // ล้างสต็อกร้านค้าเก่าค้างจากแมตช์ก่อน (รอเปิดใหม่ตอนเทิร์นที่ 5)
   kaiOverhaulSlots = []; // ไค ชิซากิ: ล้าง tracker Overhaul ทุกครั้งที่เริ่มแมตช์ใหม่
   // อาริมะ มิยาโกะ (characters/miyako.js): เจอ โทโนะ ชิกิ หรือ นานายะ ชิกิ ในเกมเดียวกัน -> เล่นวีดีโอ arima_shiki.mp4 ก่อนเริ่มเทิร์นแรก
   cutsceneQueue = [];
-  if (CHAR_HOOKS.miyako.maybeQueueRivalIntro(engine)) {
+  const hasIntro = CHAR_HOOKS.miyako.maybeQueueRivalIntro(engine);
+  if (gameMode === "overload") {
+    createYuukiBoss();
+    overloadForceActive = true;
+    overloadForceCount = 3;
+    overloadForceSeq++;
+    queueYuukiCutscene(YUUKI_VIDEO.spawn, "ยูกิ Overload", 9, "yuukiSpawn");
+    lastLog.push("⚡ โหมด Over Load เริ่มขึ้น — ยูกิ Overload ปรากฏตัวทันที!");
+    runCutsceneQueue(dealRound);
+  } else if (hasIntro) {
     runCutsceneQueue(dealRound);
   } else {
     dealRound();
@@ -2803,6 +2832,7 @@ function applyGutsBullet(p, item, target) {
 function dealRound() {
   clearPhaseTimer();
   roundNumber++;
+  yuukiReactiveDrawCredits = 0;
   overloadForceActive = !!yuukiBoss(); // หลังยูกิเกิด Overload Force คงอยู่จนกว่าบอสจะตาย
   if (yuukiBoss()) yuukiTurns++;
   centralDeck = buildCentralDeck(); // กองกลาง 43 ใบ สับใหม่ทุกรอบ
@@ -3059,7 +3089,7 @@ function dealRound() {
     lastLog.push(night ? "🌙 ราตรีมาเยือน — สุ่มสกิลพื้นฐาน/สกิลรองแพงขึ้น +1 ทุกเทิร์น" : "☀️ ฟ้าสางแล้ว — จบเทิร์นได้แต้มสกิลเพิ่ม +1");
     // เสียงไพเราะที่กึกก้อง (ชเรด เอลัน, characters/shrade_elan.js): เข้ากลางคืนพร้อมท่วงทำนองครบ 5 -> เล่นวีดีโอเปิดตัว
     if (night) CHAR_HOOKS.shrade_elan.onNightStart(engine);
-    else if (yuukiBoss()) queueYuukiCutscene(YUUKI_VIDEO.field, "OVERLOAD FIELD", 7, "yuukiField");
+    else if (yuukiBoss()) queueYuukiCutscene(YUUKI_VIDEO.field, "ของจริงมันเริ่มต่อจากนี้", 7, "yuukiField");
   }
 
   const yuukiUltimateDue = !!yuukiBoss() && yuukiTurns > 0 && yuukiTurns % 5 === 0;
@@ -4127,9 +4157,12 @@ function kaiOverhaul(id) {
 function checkAllLocked() {
   if (gameState !== "PLAYING") return;
   const c = alivePlayers();
-  // ตอบสนองหลังทุก action ของผู้เล่นทันที เพื่อไม่ให้มนุษย์จั่วกองกลางจนหมดก่อน AI ได้เล่น
-  // ยังไม่ล็อกมือยูกิจนกว่าทุกคนจะล็อกหรือหมดเวลา
-  autoPlayYuuki(false);
+  // ยูกิจั่วตอบโต้ได้สูงสุด 1 ใบต่อไพ่ที่มนุษย์จั่ว และยังไม่ล็อกมือจนกว่าจะสรุปรอบ
+  if (yuukiReactiveDrawCredits > 0) {
+    const drawBudget = yuukiReactiveDrawCredits;
+    yuukiReactiveDrawCredits = 0;
+    autoPlayYuuki(false, drawBudget);
+  }
   // รอคำตอบข้อเสนอ/ต่อสัญญา (เจ้าแห่งเน็ตบ้าน) / เป้าหมายบทเพลง (Bard) ก่อนเปิดไพ่อัตโนมัติ
   //  — หมดเวลาเฟสไพ่ = ถือว่าปฏิเสธ / สุ่มเป้าหมาย
   const pendingAnswer =
@@ -4196,8 +4229,8 @@ function triggerOverloadForce() {
     createYuukiBoss();
     yuukiTurns = 1;
     cutsceneQueue = [];
-    queueYuukiCutscene(YUUKI_VIDEO.spawn, "YUUKI · OVER LOAD", 9, "yuukiSpawn");
-    lastLog.push("⚡ Overload Force ครั้งที่ 3 ถูกแทนที่ — ยูกิ (Over Load) ปรากฏตัวในฐานะ P7!");
+    queueYuukiCutscene(YUUKI_VIDEO.spawn, "ยูกิ Overload", 9, "yuukiSpawn");
+    lastLog.push("⚡ Overload Force ครั้งที่ 3 ถูกแทนที่ — ยูกิ Overload ปรากฏตัว!");
     runCutsceneQueue(beginOverloadForceDraw);
     return;
   }
@@ -4300,8 +4333,9 @@ function resolveRound() {
     u.anataTargets = null;
   }
 
-  // รอให้ไพ่และเอฟเฟกต์บังคับจั่วของมนุษย์สรุปครบก่อน ยูกิจึงอ่านคะแนนทั้งหมดแล้วตัดสินใจจั่ว
-  autoPlayYuuki();
+  // ตอนสรุปรอบยูกิจั่วแก้มือได้อีกไม่เกิน 2 ใบ แล้วจึงล็อกมือ
+  yuukiReactiveDrawCredits = 0;
+  autoPlayYuuki(true, 2);
 
   const combatants = alivePlayers();
   roundWinnerId = null;
@@ -4698,7 +4732,7 @@ function doAttack(byId, targetId) {
   if (isYuuki(attacker)) {
     attacker.yuukiAttacksThisTurn = (attacker.yuukiAttacksThisTurn || 0) + 1;
     if (attacker.yuukiAttacksThisTurn === 1) {
-      queueYuukiCutscene(YUUKI_VIDEO.attack, "OVERLOAD · ATTACK", 4, "yuukiAttack");
+      queueYuukiCutscene(YUUKI_VIDEO.attack, "จงหวาดกลัว", 4, "yuukiAttack");
       yuukiAttackVideoQueued = true;
     }
   }
@@ -5646,13 +5680,22 @@ function endTurn() {
   }
   if (yuukiBoss() && aliveHumans().length === 0 && !yuukiWinShown) {
     yuukiWinShown = true;
-    queueYuukiCutscene(YUUKI_VIDEO.win, "YUUKI · OVERLOAD VICTORY", 6, "yuukiWin");
+    queueYuukiCutscene(YUUKI_VIDEO.win, "นายมันอ่อนแอเกินไป", 6, "yuukiWin");
     lastLog.push("☠️ ยูกิเอาชนะผู้เล่นทุกคน — ผู้เล่นทั้งหมดพ่ายแพ้!");
   }
   // เล่นฉากระเบิด/ยูนะ/ชัยชนะยูกิ (ถ้ามี) ให้จบก่อน แล้วค่อยสรุปจบเกม/ขึ้นรอบถัดไป
   runCutsceneQueue(() => {
     const stillAlive = alivePlayers();
     const total = Object.keys(players).length;
+
+    if (gameMode === "overload" && yuukiDefeated) {
+      winningTeamId = null;
+      lastLog.push("🏆 ยูกิ Overload ถูกโค่น — ผู้เล่นทุกคนชนะโหมด Over Load!");
+      gameState = "GAMEOVER";
+      timeLeft = 0;
+      broadcastState();
+      return;
+    }
 
     // สกิลติดตัว 2 ริดดี้ (characters/riddhe.js): เหลือแค่คู่พันธมิตรบันชี × ยูนิคอร์นบนสนาม -> ถามจะคงพันธมิตรจนจบเกมไหม
     CHAR_HOOKS.riddhe.maybeAskFinalAlliance(engine, stillAlive);
@@ -5701,7 +5744,7 @@ function backToLobby() {
   yunaLongingUsed = false; yunaWindowEnd = 0; yunaEffect = null; yunaTargetId = null; yunaMusicSeq = 0; yunaLongingPendingId = null; yunaPity = 0;
   overloadForceActive = false;
   overloadForceCount = 0; yuukiSpawned = false; yuukiTurns = 0; yuukiAttackTargets = [];
-  yuukiLowShown = false; yuukiWinShown = false;
+  yuukiLowShown = false; yuukiWinShown = false; yuukiDefeated = false; yuukiReactiveDrawCredits = 0;
   kaiOverhaulSlots = []; // ไค ชิซากิ: ล้าง tracker Overhaul เมื่อกลับล็อบบี้
   lastLog = [];
   cutsceneQueue = [];
@@ -6127,6 +6170,8 @@ const engine = {
   setTeamSize(v) { teamSize = v; },
   resetModeVotes,
   voteGameMode,
+  validGameMode,
+  modeOptionsFor,
   remainingTeamWinInfo,
   get winningTeamId() { return winningTeamId; },
   teamModeActive,
@@ -6159,6 +6204,8 @@ const engine = {
   log(msg) { lastLog.push(msg); },
   colorOf(p) { return POSITION_COLORS[p.position] || "#888"; },
   nextTransformCounter() { return ++transformCounter; },
+  startMatch,
+  yuukiBoss,
   endTurn,
   doAttack,
   useSkill,

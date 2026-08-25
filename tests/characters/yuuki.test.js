@@ -12,7 +12,7 @@ const {
   autoPlayYuuki,
 } = require('../../server');
 
-test('Yuuki is a visible but non-selectable special P7 boss', () => {
+test('Yuuki is a visible but non-selectable special boss', () => {
   const boss = publicRoster().find((c) => c.id === 'yuuki');
   assert.ok(boss);
   assert.equal(boss.difficulty, 'special');
@@ -74,7 +74,7 @@ test('Yuuki remembers the last damage source and awards Hero Sword on delayed de
   delete engine.players[boss.id];
 });
 
-test('Yuuki reads every human score and draws past the current leader during Overload Force', () => {
+test('Yuuki reads every human score but draws at most two cards during finalization', () => {
   const boss = {
     id: '__yuuki_boss__', name: 'Yuuki', alive: true, characterId: 'yuuki', hp: 7, armor: 3,
     cards: [{ value: 5, color: 'red' }], locked: false, overloadDrawReady: true, overloadExtraDraws: 0,
@@ -90,9 +90,12 @@ test('Yuuki reads every human score and draws past the current leader during Ove
   engine.setCentralDeck([{ value: 10, color: 'blue' }, { value: 10, color: 'green' }, { value: 10, color: 'yellow' }]);
   const originalRandom = Math.random;
   Math.random = () => 0;
-  try { autoPlayYuuki(); } finally { Math.random = originalRandom; }
+  let drawn;
+  try { drawn = autoPlayYuuki(); } finally { Math.random = originalRandom; }
   assert.equal(boss.locked, true);
-  assert.ok(engine.calculateScore(boss.cards) > engine.calculateScore(human.cards));
+  assert.equal(drawn, 2);
+  assert.equal(boss.cards.length, 3);
+  assert.ok(engine.calculateScore(boss.cards) < engine.calculateScore(human.cards));
   delete engine.players[boss.id];
   delete engine.players[human.id];
   engine.setCentralDeck([]);
@@ -139,7 +142,8 @@ test('Yuuki reacts after each human action without locking early or waiting for 
 test('Yuuki can always draw because the Overload HP penalty does not apply to the boss', () => {
   engine.setOverloadForceActive(true);
   assert.equal(yuukiCanSafelyDraw({ id: '__yuuki_boss__', hp: 1, overloadExtraDraws: 4 }), true);
-  assert.equal(yuukiCanSafelyDraw({ hp: 3, overloadExtraDraws: 4 }), true);
+  assert.equal(yuukiCanSafelyDraw({ hp: 2, overloadExtraDraws: 4 }), true);
+  assert.equal(yuukiCanSafelyDraw({ hp: 1, overloadExtraDraws: 4 }), false);
   assert.equal(yuukiCanSafelyDraw({ hp: 1, overloadExtraDraws: 3 }), true);
   engine.setOverloadForceActive(false);
 });

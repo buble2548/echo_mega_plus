@@ -19,7 +19,7 @@ test('Overload Force makes Joker a fixed +12 and removes score/bust caps', () =>
   assert.equal(engine.scoreCap(p), Infinity);
 });
 
-test('Overload Force counts only draws after score exceeds 21 and deducts 2 HP on every fifth such draw', () => {
+test('Overload Force counts only draws after score exceeds 21 and deducts 1 HP on every fifth such draw', () => {
   const p = {
     id: 'overdraw', name: 'Overdraw', characterId: 'kai', alive: true,
     hp: 7, armor: 2, tempHp: 0, dmgHp: 0, cards: [{ value: 10 }, { value: 10 }],
@@ -36,11 +36,11 @@ test('Overload Force counts only draws after score exceeds 21 and deducts 2 HP o
   for (let i = 0; i < 4; i++) draw({ value: 1, color: 'red' });
   assert.equal(p.hp, 7);
   draw({ value: 1, color: 'red' });
-  assert.equal(p.hp, 5);
+  assert.equal(p.hp, 6);
   assert.equal(p.armor, 2, 'penalty bypasses armor and deducts HP');
 
   for (let i = 0; i < 5; i++) draw({ value: 1, color: 'green' });
-  assert.equal(p.hp, 3);
+  assert.equal(p.hp, 5);
   assert.equal(p.overloadExtraDraws, 10);
 });
 

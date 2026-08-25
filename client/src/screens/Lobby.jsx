@@ -29,8 +29,8 @@ function LobbyParticles() {
 }
 
 const TEAM_COLORS = { A: "#22d3ee", B: "#f97316", C: "#a3e635" };
-const MODE_TITLES = { ffa: "FFA", duo: "Duo", trio: "Trio" };
-const MODE_SUBTITLES = { ffa: "ทุกคนสู้กันเอง", duo: "ทีมละ 2 คน", trio: "ทีมละ 3 คน" };
+const MODE_TITLES = { ffa: "FFA", overload: "Over Load", duo: "Duo", trio: "Trio" };
+const MODE_SUBTITLES = { ffa: "ทุกคนสู้กันเอง", overload: "ร่วมมือกันโค่นยูกิ", duo: "ทีมละ 2 คน", trio: "ทีมละ 3 คน" };
 
 function modeTitle(mode) {
   return MODE_TITLES[mode] || mode;
@@ -60,6 +60,7 @@ function TeamModeView({ state, onBack }) {
   const me = state.players.find((p) => p.id === state.youId);
   const options = state.modeVotes?.length ? state.modeVotes : (state.modeOptions?.length ? state.modeOptions : [
     { mode: "ffa", label: "Free For All", enabled: count >= 2, voters: [], voteCount: 0 },
+    { mode: "overload", label: "Over Load", enabled: count >= 2, voters: [], voteCount: 0 },
     { mode: "duo", label: "Duo", enabled: count >= 4 && count % 2 === 0, voters: [], voteCount: 0 },
     { mode: "trio", label: "Trio", enabled: count === 6, voters: [], voteCount: 0 },
   ]);
@@ -79,7 +80,7 @@ function TeamModeView({ state, onBack }) {
           <h1 className="text-2xl sm:text-4xl font-black text-white text-hard leading-tight" style={{ fontFamily: P_DISPLAY }}>โหวตโหมดการเล่น</h1>
         </div>
 
-        <div className="min-h-0 grid grid-cols-3 gap-2 sm:gap-4">
+        <div className="min-h-0 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
           {options.map((opt) => {
             const selected = me?.modeVote === opt.mode;
             const voters = state.players.filter((p) => (opt.voters || []).includes(p.id));

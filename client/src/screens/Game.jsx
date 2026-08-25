@@ -1703,7 +1703,7 @@ function OtherPlayer({ p, phase, slot, targetable, onAttack, picked, onInspect, 
 
 // ---------- การ์ดคู่ต่อสู้แบบมือถือ (เรียงกริดด้านบน แตะเพื่อโจมตี/เลือกเป้า ANATA) ----------
 //  แตะตอนไม่ได้เลือกเป้า = เปิดหน้าต่างดูสถานะของคนนั้น (onInspect)
-// บอสยูกิเป็นการ์ด P7 กลางจอแทนกองกลางตลอดเวลาที่ยังอยู่ในสนาม
+// บอสยูกิเป็นการ์ดกลางจอแทนกองกลางตลอดเวลาที่ยังอยู่ในสนาม
 function YuukiBossCard({ p, phase, targetable, onPick, onInspect, hostRef, compact = false }) {
   if (!p?.alive) return null;
   const summary = phase === "SUMMARY";
@@ -1714,9 +1714,9 @@ function YuukiBossCard({ p, phase, targetable, onPick, onInspect, hostRef, compa
       className={`pointer-events-auto p-target-wrap relative rounded-2xl border-2 border-violet-400 bg-black/75 shadow-2xl cursor-pointer ${compact ? "w-28 p-2" : "w-36 p-3"}`}
       style={{ boxShadow: "0 0 28px rgba(124,58,237,.65)" }}
     >
-      <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-violet-700 border border-violet-300 px-3 py-0.5 text-[10px] font-black whitespace-nowrap z-20">BOSS · P7</div>
+      <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-violet-700 border border-violet-300 px-3 py-0.5 text-[10px] font-black whitespace-nowrap z-20">ยูกิ Overload</div>
       <Portrait p={p} className={`${compact ? "h-20" : "h-24"} w-full rounded-xl`} rounded="rounded-xl" />
-      <div className="mt-1 text-center text-sm font-black text-violet-200 truncate">ยูกิ (Over Load)</div>
+      <div className="mt-1 text-center text-sm font-black text-violet-200 truncate">ยูกิ Overload</div>
       <Stats p={p} center />
       {summary && p.score !== null && <div className="text-center text-xl font-black text-echo-gold">{p.busted ? "แตก!" : `${p.score} แต้ม`}</div>}
       <StatusChips p={p} compact max={4} />
@@ -3485,7 +3485,8 @@ export default function Game({ state, lowQ }) {
             <div className="text-center">
               <div className="text-4xl font-black mb-4">
                 {(() => {
-                  if (state.yuukiVictory) return <>☠️ ผู้เล่นทั้งหมดพ่ายแพ้ต่อ ยูกิ (Over Load)</>;
+                  if (state.yuukiVictory) return <>☠️ ผู้เล่นทั้งหมดพ่ายแพ้ต่อ ยูกิ Overload</>;
+                  if (state.overloadVictory) return <>🏆 ผู้เล่นทุกคนเอาชนะ ยูกิ Overload!</>;
                   if (state.gameMode !== "ffa" && state.winningTeamId) { const ws = state.players.filter((p) => p.alive && p.teamId === state.winningTeamId); const names = ws.map((w) => w.name).join(" & "); return <>🏆 Team {state.winningTeamId}{names ? ` (${names})` : ""} ชนะ!</>; }
                   if (state.allyWin) { const ws = state.players.filter((p) => p.alive); return <>🤝 {ws.map((w) => w.name).join(" & ")} ชนะทั้งคู่!</>; }
                   const c = state.players.find((p) => p.alive); return c ? <>🏆 {c.name} ชนะ!</> : "จบเกม";
@@ -3971,6 +3972,8 @@ export default function Game({ state, lowQ }) {
           <div className="text-center">
             <div className="text-4xl sm:text-5xl font-black mb-4">
               {(() => {
+                if (state.yuukiVictory) return <>☠️ ผู้เล่นทั้งหมดพ่ายแพ้ต่อ ยูกิ Overload</>;
+                if (state.overloadVictory) return <>🏆 ผู้เล่นทุกคนเอาชนะ ยูกิ Overload!</>;
                 if (state.gameMode !== "ffa" && state.winningTeamId) { const ws = state.players.filter((p) => p.alive && p.teamId === state.winningTeamId); const names = ws.map((w) => w.name).join(" & "); return <>🏆 Team {state.winningTeamId}{names ? ` (${names})` : ""} ชนะ!</>; }
                   if (state.allyWin) { const ws = state.players.filter((p) => p.alive); return <>🤝 {ws.map((w) => w.name).join(" & ")} ชนะทั้งคู่!</>; }
                   const c = state.players.find((p) => p.alive); return c ? <>🏆 {c.name} ชนะ!</> : "จบเกม";
