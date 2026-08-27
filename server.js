@@ -633,6 +633,10 @@ function doomWeaponMarkPending() {
 }
 // ยูนะ — Break Beat Bark! ทำงานอยู่ไหม (บัฟทั้งสนาม ไม่ใช่สถานะผู้เล่นคนเดียว เหมือน moonCellActive)
 function yunaBeatBarkActive() {
+  // เอจิ: ท่าไม้ตาย "ไม่ว่ายังก็ตาม" บังคับเปิด Break Beat Bark! — ถือ statuses.eijiUlt เป็นแหล่งความจริง
+  //  ห้ามพึ่ง yunaEffect อย่างเดียว เพราะ Longing (ที่ทริกจากการตาย ไม่ผ่าน rollWindow) เขียนทับตัวแปรร่วมนี้
+  //  ได้ทุกเมื่อ ทำให้เอฟเฟกต์สนามของท่าไม้ตายหายกลางคันทั้งที่ตัวท่ายังนับเทิร์นเหลืออยู่
+  if (eijiUltFieldActive()) return true;
   return yunaEffect === "beatbark" && roundNumber <= yunaWindowEnd;
 }
 // ท่าไม้ตายที่ยกเลิกย้อนหลังได้ (เจ้าของท่ามาตีชิกิระหว่างถือชาร์จ) — สถานะท่าไม้ตายที่กำลังมีผลอยู่
@@ -2339,7 +2343,7 @@ function buildStateFor(viewerId) {
     winnerId: (gameState === "SUMMARY" || gameState === "ATTACK") ? roundWinnerId : null,
     skillMusic: sm ? sm.music : null,
     skillMusicSeq: sm ? sm.at : 0, // เปลี่ยน = การเปิดร่างครั้งใหม่ -> client เริ่มเพลงใหม่
-    yunaFieldFx: (yunaEffect === "beatbark" && roundNumber <= yunaWindowEnd) ? "beatbark" : null, // Break Beat Bark!: ออร่าขอบจอแดงทั้งสนาม
+    yunaFieldFx: yunaBeatBarkActive() ? "beatbark" : null, // Break Beat Bark!: ออร่าขอบจอแดงทั้งสนาม (เกตเดียวกับผลจริง)
     cutscene: gameState === "CUTSCENE" ? cutsceneInfo : null,
     attack: gameState === "ATTACKING" ? lastAttack : null,
     log: (gameState === "SUMMARY" || gameState === "TRANSITION" || gameState === "GAMEOVER") ? lastLog : [],
@@ -6433,6 +6437,7 @@ const engine = {
   extendNight() { cycleShift = roundNumber - (CYCLE_TURNS + 1); },
   // ยูนะ ไอดอลประจำสนาม
   get yunaEffect() { return yunaEffect; },
+  yunaBeatBarkActive, // เกตจริงของ Break Beat Bark! (รวมกรณีที่ท่าไม้ตายเอจิบังคับเปิด) — เทสต์อ่านตรงนี้
   get yunaWindowEnd() { return yunaWindowEnd; },
   get yunaLongingUsed() { return yunaLongingUsed; },
   get yunaPity() { return yunaPity; },

@@ -198,3 +198,54 @@ test('Longing ลงเอจิเอง: ทำงานตามปกติ 
   assert.equal(e.hp, 3, 'ไม่โดนสวนคืน');
   assert.equal(e.statuses.yunaLonging, 5, 'บัฟยังอยู่');
 });
+
+// ---------- ท่าไม้ตาย x Longing: ทั้งคู่ใช้ตัวแปรสนามยูนะร่วมกัน จึงเขียนทับกันได้ ----------
+test('ท่าไม้ตายทำงานอยู่ แล้วเกิด Longing กับคนอื่น — Break Beat Bark! ต้องไม่หาย', () => {
+  const { e } = setup();
+  eiji.applyUlt(engine, e);
+  assert.equal(engine.yunaBeatBarkActive(), true, 'ตั้งต้น: สนามเปิดอยู่');
+
+  const w = mk('W', 'satoru', 4);
+  engine.players.W = w;
+  w.alive = false; w.hp = 0;
+  YunaMod.reviveWithLonging(engine, w);
+
+  assert.equal(e.statuses.eijiUlt, 5, 'ท่าไม้ตายยังนับเทิร์นอยู่');
+  assert.equal(engine.yunaBeatBarkActive(), true, 'Longing ต้องไม่พาเอฟเฟกต์สนามของท่าไม้ตายหายไป');
+  assert.equal(engine.yunaEffect, 'beatbark', 'คืนสนาม Break Beat Bark! กลับหลังปิด Longing');
+});
+
+test('ท่าไม้ตายทำงานอยู่ แล้วเกิด Longing กับเอจิเอง — Break Beat Bark! ต้องไม่หาย', () => {
+  const { e } = setup();
+  eiji.applyUlt(engine, e);
+  e.alive = false; e.hp = 0;
+  YunaMod.reviveWithLonging(engine, e);
+
+  assert.equal(e.statuses.eijiUlt, 5, 'ท่าไม้ตายยังนับเทิร์นอยู่');
+  assert.equal(e.statuses.yunaLonging, 5, 'Longing ลงเอจิเองทำงานตามปกติ');
+  assert.equal(engine.yunaBeatBarkActive(), true, 'สนามของท่าไม้ตายยังทำงานคู่กับ Longing ได้');
+});
+
+test('Longing ลงคนอื่นมาก่อน: ปิดทันที -> เอจิกดท่าไม้ตายได้เลย', () => {
+  const { e } = setup();
+  const w = mk('W', 'satoru', 4);
+  engine.players.W = w;
+  w.alive = false; w.hp = 0;
+  YunaMod.reviveWithLonging(engine, w);
+  assert.equal(engine.yunaEffect, null, 'ไม่มีท่าไม้ตายค้าง -> สนามถูกปิด');
+  assert.equal(eiji.canUseSkill(engine, e, 'ultimate'), true);
+});
+
+test('Longing ลงเอจิเองมาก่อน: สนามยูนะเปิดอยู่ -> กดท่าไม้ตายไม่ได้ (ตามสเปก)', () => {
+  const { e } = setup();
+  e.alive = false; e.hp = 0;
+  YunaMod.reviveWithLonging(engine, e);
+  assert.equal(engine.yunaEffect, 'longing');
+  assert.equal(eiji.canUseSkill(engine, e, 'ultimate'), false);
+});
+
+test('กดท่าไม้ตายซ้ำระหว่างที่ยังทำงานอยู่ไม่ได้', () => {
+  const { e } = setup();
+  eiji.applyUlt(engine, e);
+  assert.equal(eiji.canUseSkill(engine, e, 'ultimate'), false);
+});

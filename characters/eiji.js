@@ -326,7 +326,14 @@ module.exports = {
     if (revived.statusAmt) delete revived.statusAmt.yunaLonging; // ไม่ล้างด้วยจะค้างเป็นขยะ (statusAmtOf อ่านคู่กัน)
     const hisakawa = engine.CHAR_HOOKS && engine.CHAR_HOOKS.hisakawa_sister;
     if (hisakawa && hisakawa.clearStatusOnTwins) hisakawa.clearStatusOnTwins(revived, "yunaLonging");
-    engine.setYunaTrigger({ effect: null, targetId: null, windowEnd: 0 }); // ปิดเอฟเฟกต์สนาม + เพลงยูนะ
+    //  ถ้ามีท่าไม้ตายของเอจิทำงานค้างอยู่ ต้องคืนสนาม Break Beat Bark! กลับไป ไม่ใช่ล้างเป็น null
+    //  (Longing เขียนทับ yunaEffect ตอนฟื้นคืนชีพ — ล้างทิ้งเฉยๆ จะพาเอฟเฟกต์ของท่าไม้ตายหายไปด้วย)
+    const ultOwner = engine.alivePlayers().find((o) => ultOn(o));
+    if (ultOwner) {
+      engine.setYunaTrigger({ effect: "beatbark", targetId: null, windowEnd: engine.roundNumber + (ultOwner.statuses.eijiUlt || 1) - 1 });
+    } else {
+      engine.setYunaTrigger({ effect: null, targetId: null, windowEnd: 0 }); // ปิดเอฟเฟกต์สนาม + เพลงยูนะ
+    }
 
     // 2) วีดีโอต่อท้ายคิว -> เล่นหลังฉากเปิดยูนะจบพอดี  3) แล้วค่อยลงความเสียหาย
     //    ใช้ dealDirect เพราะคนที่เพิ่งฟื้นคืนชีพยังมีเกราะเดิมติดตัวอยู่ (Longing ฟื้นแค่เลือด)
