@@ -218,5 +218,13 @@ module.exports = function buildTransforms(img) {
     triggerHenshin:    { img: "/characters/ultraman_trigger/trigger.webp", video: "/characters/ultraman_trigger/trigger_henshin.mp4", title: "ULTRAMAN TRIGGER", label: "แปลงร่าง", seconds: 23, music: "trigger", afterReveal: false },
     triggerMultiSword: { img: "/characters/ultraman_trigger/skill2/trigger_skill2.png", video: "/characters/ultraman_trigger/skill2/trigger_skill2.mp4", title: "MULTI SWORD FINISH", label: "โจมตี", seconds: 13, music: null, afterReveal: false },
     triggerZeperion:   { img: "/characters/ultraman_trigger/skill3/trigger_skill3.jpg", video: "/characters/ultraman_trigger/skill3/trigger_skill3.mp4", title: "ZEPERION RAY", label: "ปล่อยท่าไม้ตาย", seconds: 17, music: null, afterReveal: false },
+    // ---------- เอจิ (patch 2.4 new) ----------
+    //  seconds วัดจาก mvhd atom จริง (+buffer ~1 วิ กันตัดก่อนจบ):
+    //  eiji_skill3 20.19 / eiji_passive1 6.26 / eiji_passive_extra 16.47 / eiji_skill2_hit 2.63 วิ
+    //  eijiUlt: music "eiji_ult" = eiji_skill3_connect.m4a แล้วต่อด้วย Break Beat Bark!.mp3 วนลูป (ดู MUSIC_SEQUENCES ใน client/src/audio.js)
+    eijiUlt:       { img: "/characters/eiji/eiji_change.jpg", video: "/characters/eiji/skill3/eiji_skill3.mp4", title: "ไม่ว่ายังก็ตาม", label: "ปล่อยท่าไม้ตาย", seconds: 21, music: "eiji_ult", afterReveal: false },
+    eijiSwordHit:  { img: "/characters/eiji/skill2/eiji_skill2.jpg", video: "/characters/eiji/skill2/eiji_skill2_hit.mp4", title: "ดาบแห่งความทรงจำ", label: "ความเสียหาย 2 เท่า", seconds: 4, music: null, afterReveal: false },
+    eijiInterrupt: { img: "/characters/eiji/eiji.webp", video: "/characters/eiji/passive/eiji_passive1.mp4", title: "ผู้เล่นอันดับ 2", label: "ขัดจังหวะ + สวนคืน", seconds: 7, music: null, afterReveal: false },
+    eijiLonging:   { img: "/characters/eiji/eiji.webp", video: "/characters/eiji/passive/eiji_passive_extra.mp4", title: "Longing", label: "ตามไปจบเรื่อง", seconds: 17, music: null, afterReveal: false },
   };
 };

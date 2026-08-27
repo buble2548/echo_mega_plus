@@ -38,6 +38,7 @@ const escanor = require("./escanor");
 const hisakawa_sister = require("./hisakawa_sister");
 const ignis = require("./ignis");
 const yuuki = require("./yuuki");
+const eiji = require("./eiji");
 
 const CHARACTER_MODULES = [
   tohno,
@@ -74,6 +75,7 @@ const CHARACTER_MODULES = [
   hisakawa_sister,
   ignis,
   yuuki,
+  eiji,
 ];
 
 const CHAR_HOOKS = {};

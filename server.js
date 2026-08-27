@@ -378,6 +378,8 @@ function maxHpOf(p) {
     return Math.max(1, base - ((p.maxHpPenalty) || 0));
   }
   if (p && p.characterId === "hisakawa_sister") return CHAR_HOOKS.hisakawa_sister.maxHp(p);
+  // เอจิ (patch 2.4 new): พลังชีวิตพื้นฐาน 4 หน่วย (แทน MAX_HP ปกติ)
+  if (p && p.characterId === "eiji") return Math.max(1, CHAR_HOOKS.eiji.maxHp() - ((p.maxHpPenalty) || 0));
   return Math.max(1, MAX_HP - ((p && p.maxHpPenalty) || 0));
 }
 // ฟื้นเลือดจริงแบบเคารพสถานะ "ไม่ใช้งานต่อ" / "ไร้ทางเยียวยา" — คืนจำนวนที่ฟื้นได้จริง
@@ -884,6 +886,21 @@ function startPhaseTimer(seconds, onExpire) {
 function teamModeActive() {
   return gameMode === "duo" || gameMode === "trio";
 }
+// เอจิ (patch 2.4 new): มีคนกดท่าไม้ตาย "ไม่ว่ายังก็ตาม" ค้างอยู่ไหม — ใช้บีบเวลาเฟสจั่วการ์ด
+//  และกันไม่ให้ยูนะเกิดขึ้นเองแบบปกติระหว่างท่านี้ทำงาน
+function eijiUltFieldActive() {
+  return Object.values(players).some((p) => p.alive && CHAR_HOOKS.eiji.ultActive(p));
+}
+// เวลาของเฟสจั่วการ์ดในเทิร์นนี้ (ปกติ CARD_TIME · ระหว่าง Break Beat Bark! ของเอจิเหลือ 40 วิ)
+function cardPhaseSeconds() {
+  return eijiUltFieldActive() ? CHAR_HOOKS.eiji.ULT_CARD_TIME : CARD_TIME;
+}
+// เอจิ สกิลติดตัว 1: บีบเวลาที่เหลือของเฟสจั่วการ์ดลง n วินาที (เหลืออย่างน้อย 1 วิ) — คืนเวลาที่เหลือจริง
+function reduceCardTimer(n) {
+  if (gameState !== "PLAYING" || !(n > 0)) return timeLeft;
+  timeLeft = Math.max(1, timeLeft - n);
+  return timeLeft;
+}
 function sameTeam(a, b) {
   return !!(teamModeActive() && a && b && a.id !== b.id && a.teamId && b.teamId && a.teamId === b.teamId);
 }
@@ -1361,6 +1378,7 @@ function maxArmorOf(p) {
     : (p && p.characterId === "hisakawa_sister") ? CHAR_HOOKS.hisakawa_sister.maxArmor(p)
     : (escanorArmor != null) ? escanorArmor
     : (p && p.characterId === "eva13") ? 0
+    : (p && p.characterId === "eiji") ? CHAR_HOOKS.eiji.maxArmor() // เอจิ (patch 2.4 new): เกราะพื้นฐาน 4 หน่วย
     : MAX_ARMOR;
   return armorBase
     + ((((p.statuses && p.statuses.vortarmor) || 0) > 0) ? 1 : 0)
@@ -1510,6 +1528,8 @@ function displayImg(p) {
   if (p.characterId === "ignis" && CHAR_HOOKS.ignis.displayImg) return CHAR_HOOKS.ignis.displayImg(p);
   // ฟุจิตะ โคโตเนะ: ระหว่างร่าง [พร้อมลุย] = ภาพ Kotone.png (null = ใช้ภาพปกติ)
   if (p.characterId === "kotone") { const kimg = CHAR_HOOKS.kotone.displayImg(p); if (kimg) return kimg; }
+  // เอจิ: ระหว่างท่าไม้ตาย ไม่ว่ายังก็ตาม ทำงาน = ภาพ eiji_change.jpg (null = ใช้ภาพปกติ)
+  if (p.characterId === "eiji") { const eimg = CHAR_HOOKS.eiji.displayImg(p); if (eimg) return eimg; }
   // โอเบรอน: ร่างสลับตามช่วงเวลากลางวัน/กลางคืนเสมอ
   if (p.characterId === "oberon") return isNightRound(roundNumber) ? OBERON_NIGHT_IMG : OBERON_MORNING_IMG;
   // ชเรด เอลัน: รวมร่างทำนองเพลงแล้ว = ร่างอควาเรียน สปาด้า ถาวร
@@ -2063,6 +2083,8 @@ function resetCombat(p) {
   p.piggy = 0;              // กระปุกออมสินน้องหมูน้อย: เงินที่หยอดไว้ (สูงสุด 15 — แปลงเป็นดาเมจผ่าน รัก รักที่สุดเลย)
   p.senaNext = false;       // โดนท่านประธานเซนะจังเจอตัว -> เทิร์นถัดไปสตั้น 1 เทิร์น
   p.kotoneExtraAtk = false; // Self-affirmation Explosion! Love Love: รอ postAttackFollowup อ่านเพื่อโจมตีเพิ่มอีก 1 ครั้ง
+  // ---------- เอจิ (patch 2.4 new) ----------
+  CHAR_HOOKS.eiji.resetCombat(p); // eijiOrdinal (สแตค Ordinal Scale ของเทิร์นนี้) + eijiDodgeUsedRound (โควตาหลบ 1 ครั้ง/เทิร์น)
   // ---------- เจ้าแห่งเน็ตบ้าน (patch 1.9) ----------
   p.contractPartner = null; // เจ้าแห่งเน็ตบ้าน: id คู่สัญญาปัจจุบัน (มีได้ 1 คน)
   p.contractWith = null;    // ฝั่งคู่สัญญา: id เจ้าแห่งเน็ตบ้านที่ทำสัญญาด้วย
@@ -2220,8 +2242,13 @@ function buildStateFor(viewerId) {
   const bardBg = bardCycleNow === "day" ? "blood" : bardCycleNow === "night" ? "soul" : null;
   // ยูนะ: เพลงล็อกทั้งสนาม ชนะทุกอย่างรวมถึง ANATA WAAAAAAAA ตลอด "ทุกเฟส" ของรอบ (จั่วไพ่/สรุปคะแนน/โจมตี) จนกว่าจะหมดเวลา
   //  ไม่ผูกกับ gameState==="PLAYING" เหมือน anata เพราะเอฟเฟกต์ยูนะไม่ได้จำกัดแค่ช่วงจั่วไพ่ — ตอน CUTSCENE ฝั่ง client เงียบเพลงเองอยู่แล้วไม่ต้องกันซ้ำที่นี่
+  //  เอจิ: ท่าไม้ตาย ไม่ว่ายังก็ตาม เป็นคนบังคับเปิดสนาม Break Beat Bark! เอง — เพลงจึงเป็นลำดับ
+  //  eiji_skill3_connect.m4a แล้วต่อด้วย Break Beat Bark!.mp3 วนลูป (MUSIC_SEQUENCES ฝั่ง client)
+  const eijiUltOwner = Object.values(players).find((p) => p.alive && CHAR_HOOKS.eiji.ultActive(p));
   let sm = (overloadForceActive && gameState !== "CUTSCENE")
     ? { music: "overload_force", at: overloadForceSeq }
+    : eijiUltOwner
+    ? { music: "eiji_ult", at: eijiUltOwner.transformAt || 0 }
     : (yunaEffect && roundNumber <= yunaWindowEnd)
     ? { music: YunaMod.YUNA_MUSIC[yunaEffect], at: yunaMusicSeq }
     : (gameState === "PLAYING" && anataMusicSeq)
@@ -2484,6 +2511,11 @@ function buildStateFor(viewerId) {
         kotoneReady: p.characterId === "kotone" ? CHAR_HOOKS.kotone.readyStacks(p) : undefined, // [ความพร้อม] ที่สะสมอยู่
         kotoneReadyNeed: p.characterId === "kotone" ? CHAR_HOOKS.kotone.READY_NEED : undefined,
         kotoneForm: p.characterId === "kotone" ? CHAR_HOOKS.kotone.formActive(p) : undefined,   // อยู่ในร่าง [พร้อมลุย] หรือไม่
+        // ---------- เอจิ (patch 2.4 new): UI อัตราหลบหลีกปัจจุบัน (ไม่ใช่สถานะสะสม) ----------
+        eijiDodge: p.characterId === "eiji" ? CHAR_HOOKS.eiji.dodgeChance(p) : undefined,        // % หลบหลีกรวมของเทิร์นนี้
+        eijiOrdinal: p.characterId === "eiji" ? CHAR_HOOKS.eiji.ordinalStacks(p) : undefined,    // สแตค Ordinal Scale ที่กดไปแล้ว
+        eijiOrdinalMax: p.characterId === "eiji" ? CHAR_HOOKS.eiji.ORDINAL_MAX : undefined,
+        eijiDodgeUsed: p.characterId === "eiji" ? !!p.eijiDodgeUsedRound : undefined,            // ใช้โควตาหลบของเทิร์นนี้ไปแล้วหรือยัง
         shradeForm: !!p.shradeForm,        // ชเรด เอลัน: รวมร่างทำนองเพลงแล้ว (อควาเรียน สปาด้า — ถาวร)
         bardNotes: p.bardNotes || [],      // Bard: โน้ตในช่องประพันธ์เพลง (ทุกคนเห็นได้)
         bardNotesUsed: p.bardNotesUsed || 0, // Bard: โน้ตที่เติมไปแล้วเทิร์นนี้ (จำกัด 2)
@@ -2941,7 +2973,8 @@ function dealRound() {
   // ร้านค้ามายา (patch 2.2 full): เปิดทุกๆ 5 เทิร์น ตอนเริ่มเทิร์นใหม่
   if (roundNumber % SHOP_INTERVAL_TURNS === 0) openShop();
   // ยูนะ ไอดอลประจำสนาม: ม้วนลูกเต๋าทุกๆ 5 เทิร์น เริ่มจากเทิร์นที่ 16 (16, 21, 26, ...)
-  if (roundNumber >= 16 && (roundNumber - 16) % 5 === 0) YunaMod.rollWindow(engine, roundNumber);
+  //  เอจิ: ระหว่างท่าไม้ตาย ไม่ว่ายังก็ตาม บังคับเปิดสนามอยู่ ยูนะจะไม่เกิดขึ้นเองแบบปกติ
+  if (roundNumber >= 16 && (roundNumber - 16) % 5 === 0 && !eijiUltFieldActive()) YunaMod.rollWindow(engine, roundNumber);
   // รีเซ็ตเวลากลางคืน (Lie Like Vortigern): นับกลางคืนใหม่ — เทิร์นนี้เป็นคืนที่ 1 จาก 3
   const prevNight = isNightRound(roundNumber - 1); // เช็คด้วยวงจรเดิมก่อนเลื่อน (กันแบนเนอร์สลับเวลาเด้งผิด)
   if (nightResetPending) {
@@ -3142,6 +3175,8 @@ function dealRound() {
     CHAR_HOOKS.princess_shiki.onRoundStartTick(engine, p);
     // ---------- ฟุจิตะ โคโตเนะ (characters/kotone.js): Sleeping time (ฮีล/แต้มสกิลต่อเทิร์น) + สตั้นจากท่านประธานเซนะจัง ----------
     CHAR_HOOKS.kotone.onRoundStartTick(engine, p);
+    // ---------- เอจิ (characters/eiji.js): รีเซ็ตโควตาหลบหลีก/Ordinal Scale + ฟื้นเลือดจากความเร็วสูง ----------
+    if (p.characterId === "eiji") CHAR_HOOKS.eiji.onRoundStartTick(engine, p);
     // Gargorgon Ray (ปืนหน่วย GUTS Select): ผลหน่วง 1 เทิร์น — เช็คต้านสถานะตอนนี้ (เป้าหมายซื้อยาต้านมากันไว้ทัน)
     //  ต้องอยู่ "ก่อน" บล็อกเช็คสตั้นด้านล่าง ไม่งั้นสตั้นจะข้ามไปมีผลอีกเทิร์นหนึ่ง
     if (p.gutsGargorgonPending) {
@@ -3183,7 +3218,7 @@ function dealRound() {
   if (yuukiUltimateDue) queueYuukiCutscene(YUUKI_VIDEO.ultimate, "STAR OF FALL", 7, "yuukiUltimate");
   captureTurnSnapshot(); // จุดย้อนเวลาของเทิร์นนี้ (เอฟเฟกต์ต้นเทิร์นทำงานครบแล้ว ยังไม่มีใครกดอะไร)
   gameState = "PLAYING";
-  startPhaseTimer(CARD_TIME, resolveRound);
+  startPhaseTimer(cardPhaseSeconds(), resolveRound);
   if (cutsceneQueue.length) { pausePlayingForCutscene(yuukiUltimateDue ? applyYuukiUltimate : undefined); return; } // วีดีโอทำงานก่อนผล Star of Fall
   broadcastState();
   checkAllLocked();
@@ -3228,7 +3263,7 @@ function hit(id) {
     drawn = drawCardFor(p);
     if (drawn) p.cards.push(drawn);
   }
-  if (drawn) { onCardDrawn(p, drawn); CHAR_HOOKS.escanor.onCardDraw(engine, p); }
+  if (drawn) { onCardDrawn(p, drawn); CHAR_HOOKS.escanor.onCardDraw(engine, p); CHAR_HOOKS.eiji.onCardDraw(engine, p); }
   // สภาพชา (ดีบัฟ Universal — Thunder Bullet): กดจั่ว 1 ครั้ง ได้ไพ่ 2 ใบ
   //  ใบที่ 2 จั่วแบบสุ่มปกติเสมอ (โชคลาภช่วยแค่ใบแรก) และไม่เช็คเพดานแต้มซ้ำ — แตกได้ตามสภาพ
   if ((p.statuses.chaa || 0) > 0) {
@@ -3262,6 +3297,21 @@ function nanayaToggleEye(id) {
   io.emit("skillFlash", {
     name: `Mystic eye of death perception — ${p.nanayaEyeOn ? "เปิดใช้งาน" : "ปิดใช้งาน"}`,
     img: "/characters/nanaya/nanaya.png", by: p.name, color: POSITION_COLORS[p.position] || "#9B4F96",
+  });
+  broadcastState();
+}
+// เอจิ สกิลติดตัว 3 (characters/eiji.js): ปุ่ม กลโกง Ordinal Scale — สละแต้มสกิล 1 แลกอัตราหลบ +10%
+//  ไม่นับเป็นการใช้สกิลของเทิร์น จึงกดพร้อมสกิลอื่นได้ และกดซ้ำได้จนครบ 5 ครั้งต่อเทิร์น
+function eijiOrdinalScale(id) {
+  const p = players[id];
+  if (gameState !== "PLAYING" || !p || !p.alive || p.locked) return;
+  if (p.characterId !== "eiji") return;
+  if (moonCellActive()) return; // MOON*CELL: สกิลทุกอย่างของทุกคนใช้ไม่ได้
+  if (!CHAR_HOOKS.eiji.pressOrdinal(engine, p)) return;
+  io.emit("skillFlash", {
+    name: `กลโกง Ordinal Scale — เร่งความเร็ว ${CHAR_HOOKS.eiji.ordinalStacks(p)}/${CHAR_HOOKS.eiji.ORDINAL_MAX} (หลบหลีก ${CHAR_HOOKS.eiji.dodgeChance(p)}%)`,
+    img: CHAR_HOOKS.eiji.IMG.passive3,
+    by: p.name, color: POSITION_COLORS[p.position] || "#9B4F96",
   });
   broadcastState();
 }
@@ -3542,6 +3592,9 @@ function useSkill(id, tier, targets, item) {
   const kotoneNight = isNightRound(roundNumber);
   const kotoneWasForm = isKotone && CHAR_HOOKS.kotone.formActive(p); // อยู่ร่าง [พร้อมลุย] ตอนกด (ท่าจะถอดร่างทีหลัง)
   if (isKotone && !CHAR_HOOKS.kotone.canUseSkill(engine, p, tier, skill, kotoneNight)) return;
+  // ---------- เอจิ (characters/eiji.js) ----------
+  const isEiji = p.characterId === "eiji";
+  if (isEiji && !CHAR_HOOKS.eiji.canUseSkill(engine, p, tier)) return;
   // ---------- ชเรด เอลัน (patch พิเศษ) ----------
   const isShrade = p.characterId === "shrade_elan";
   const isShradeBasic = isShrade && tier === "basic";                        // เชิญรับฟัง
@@ -3750,6 +3803,8 @@ function useSkill(id, tier, targets, item) {
     flashSuffix = CHAR_HOOKS.kotone.payFormUltGold(engine, p, skill) || flashSuffix;
     flashSuffix = CHAR_HOOKS.kotone.applyInstantSkill(engine, p, tier, kotoneNight) || flashSuffix;
   }
+  // ---------- เอจิ (characters/eiji.js): ว่องไว / ความแค้น / ไม่ว่ายังก็ตาม ----------
+  if (isEiji) flashSuffix = CHAR_HOOKS.eiji.applyInstantSkill(engine, p, tier) || flashSuffix;
   // ---------- ชเรด เอลัน (characters/shrade_elan.js) ----------
   if (isShradeBasic) flashSuffix = CHAR_HOOKS.shrade_elan.applyBasicEffect(engine, p);
   if (isShradeMoon && shradeMoonTarget) flashSuffix = CHAR_HOOKS.shrade_elan.applyMoonEffect(engine, p, shradeMoonTarget, skill.name);
@@ -4349,7 +4404,7 @@ function beginOverloadForceDraw() {
 
   lastLog.push("⚡ Overload Force เริ่มทำงาน — แจกไพ่ใหม่ในเทิร์นเดิม ปลดเพดาน 21 แต้ม!");
   gameState = "PLAYING";
-  startPhaseTimer(CARD_TIME, resolveRound);
+  startPhaseTimer(cardPhaseSeconds(), resolveRound);
   broadcastState();
   checkAllLocked();
 }
@@ -5042,6 +5097,11 @@ function doAttack(byId, targetId) {
   if (CHAR_HOOKS.oguri.tryFlowDodge(engine, attacker, target)) return;
   if (CHAR_HOOKS.escanor.tryNightDodge(engine, attacker, target)) return;
 
+  // เอจิ (characters/eiji.js): อัตราหลบหลีกรวม (ว่องไว + ไม่ว่ายังก็ตาม + Ordinal Scale) — 1 ครั้งต่อเทิร์น
+  if (CHAR_HOOKS.eiji.tryAttackDodge(engine, attacker, target)) return;
+  // เอจิ สกิลติดตัว 1 (ผู้เล่นอันดับ 2): ผู้ชนะไปตีคนอื่นที่ไม่ใช่เอจิ -> 25% ขัดจังหวะแล้วสวนคืน
+  if (CHAR_HOOKS.eiji.tryInterrupt(engine, attacker, target)) return;
+
   // ---------- ซาโตรุ อาเคฟุ (patch 2.0.8.2): สกิลติดตัวลบล้างการโจมตี + Wonder of U สวนกลับ ----------
   if (target.characterId === "satoru") {
     const r = satoruOnTargeted(target, attacker, "การโจมตี");
@@ -5125,7 +5185,8 @@ function doAttack(byId, targetId) {
   // ยูนะ: Delete (+1 ดาเมจที่ได้รับ) / Smile for You (-1 ดาเมจที่ได้รับ) — ต้าน/ลบไม่ได้ ซ้อนกับเปราะบางได้
   const yunaDeleteAmt = statusAmtOf(target, "yunaDelete");
   if (yunaDeleteAmt > 0) dmg += yunaDeleteAmt;
-  const yunaSmileAmt = statusAmtOf(target, "yunaSmile");
+  //  เอจิ (เอฟเฟกต์เฉพาะตัว): โจมตีปกติของเอจิไม่สนบัฟลดความเสียหาย Smile for You ของเป้าหมาย
+  const yunaSmileAmt = CHAR_HOOKS.eiji.ignoresYunaSmile(attacker) ? 0 : statusAmtOf(target, "yunaSmile");
   if (yunaSmileAmt > 0) dmg = Math.max(0, dmg - yunaSmileAmt);
   // เต็มอิ่ม (Breakfast โอกูริ patch 2.0.8.1): ดาเมจที่ได้รับ -1 (หมดหลังจบเทิร์นที่กดใช้)
   const fullBelly = (target.statuses.fullbelly || 0) > 0;
@@ -5138,6 +5199,8 @@ function doAttack(byId, targetId) {
   if (takutoLanceAtk) dmg = TAKUTO_LANCE_DMG;
   if (CHAR_HOOKS.escanor.adjustOutgoingDamage) dmg = CHAR_HOOKS.escanor.adjustOutgoingDamage(engine, attacker, target, dmg);
   if (attacker.characterId === "satoru") dmg = 0; // ซาโตรุ: โจมตีธรรมดาดาเมจ 0 แล้วติด ObLa หลังโจมตี
+  // เอจิ (characters/eiji.js): ดาบแห่งความทรงจำ — โอกาสคูณดาเมจ 2 เท่า (คิดท้ายสุดเพื่อให้คูณยอดสุทธิจริง)
+  dmg = CHAR_HOOKS.eiji.applySwordDouble(engine, attacker, dmg);
 
   // ---------- ริต้า เบอร์นัล (characters/phenex.js): ฝันไปเถอะ — ตั้งรับ สะท้อนความเสียหายทั้งหมดกลับผู้โจมตีแทนที่จะรับเอง ----------
   if (CHAR_HOOKS.phenex.tryReflectHit(engine, attacker, target, dmg)) return;
@@ -5194,6 +5257,8 @@ function doAttack(byId, targetId) {
   });
   // (รัก รักที่สุดเลย) (ฟุจิตะ โคโตเนะ, characters/kotone.js): ใช้แล้วหมดไปทันที และล้างกระปุกออมสินทั้งหมด
   CHAR_HOOKS.kotone.onAttackConsumeLove(engine, attacker);
+  // เอจิ (characters/eiji.js): Smile for You ลงตัวเอง -> ฟื้นเลือด · Delete ลงเป้าหมาย -> มอบ "ผุพัง"
+  CHAR_HOOKS.eiji.onAttackLanded(engine, attacker, target);
   // Ginga Strium (ฮิคารุ, characters/hikaru.js): โจมตีโดนเป้าหมาย -> ติดลุกไหม้ให้เป้าหมาย / ถูกโจมตีขณะอยู่ในร่างนี้ -> ผู้โจมตีติดลุกไหม้สวนกลับ
   CHAR_HOOKS.hikaru.onAttackBurnApply(engine, attacker, target);
   const escanorAttackVideoQueued = CHAR_HOOKS.escanor.onAttackLanded(engine, attacker, target);
@@ -6214,6 +6279,7 @@ io.on('connection', (socket) => {
   onPlayerEvent(socket, 'contractAnswer', (id, { accept, fromId } = {}) => withEffectSource(players[fromId] || players[id], () => answerContract(id, !!accept, fromId)), 4);
   onPlayerEvent(socket, 'attack', (id, { targetId } = {}) => doAttack(id, targetId), 6);
   onPlayerEvent(socket, 'nanayaToggleEye', (id) => nanayaToggleEye(id), 4);
+  onPlayerEvent(socket, 'eijiOrdinalScale', (id) => withEffectSource(players[id], () => eijiOrdinalScale(id)), 8);
   onPlayerEvent(socket, 'nanayaCancelReattack', (id) => nanayaCancelReattack(id), 4);
   onPlayerEvent(socket, 'backToLobby', () => { if (gameState === 'GAMEOVER') backToLobby(); }, 2);
 
@@ -6468,6 +6534,7 @@ const engine = {
   pausePlayingForCutscene,
   startPhaseTimer,
   clearPhaseTimer,
+  reduceCardTimer, // เอจิ สกิลติดตัว 1: บีบเวลาที่เหลือของเฟสจั่วการ์ด
   broadcastState,
   checkAllLocked,
 };

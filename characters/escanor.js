@@ -6,6 +6,9 @@ const BURN_MAX = 6;
 const WINE_MAX = 3;
 let wineUidSeq = 0;
 
+// ร่างกลางคืน: โอกาส 50/50 ที่จะรับความเสียหายจากการโจมตีปกติ 0 หน่วย (หลบพ้นไปเลย)
+const NIGHT_DODGE_CHANCE = 0.5;
+
 const IMG = {
   morning: "/characters/escanor/ร่าง เช้า Profile.png",
   night: "/characters/escanor/ร่าง กลางคืน Profile.png",
@@ -308,8 +311,27 @@ function adjustIncomingDamage(engine, p, n, isNormalAttack) {
 }
 function tryNightDodge(engine, attacker, target) {
   if (!target || target.characterId !== ID || !isNight(target)) return false;
-  if (Math.random() >= 0.5) return false;
-  engine.log?.(`🌙 ${target.name} หลบการโจมตีในร่างกลางคืน`);
+  if (Math.random() >= NIGHT_DODGE_CHANCE) {
+    engine.log?.(`💢 ${target.name} พยายามหลบในร่างกลางคืน (${NIGHT_DODGE_CHANCE * 100}%) แต่ไม่พ้น`);
+    return false;
+  }
+  // patch 2.1.3.5: ถูกโจมตีไม่ได้แต้มสกิลอีกต่อไป (แม้หลบพ้น)
+  target.wasAttacked = true;
+  engine.log?.(`🌙 หลบหลีก! ${target.name} หลบการโจมตีของ ${attacker.name} ในร่างกลางคืนได้ — รับความเสียหาย 0 หน่วย`);
+  // ต้องจบฉากโจมตีให้ครบเหมือนกลไกหลบของตัวอื่น (oguri/appleguy) ไม่งั้น doAttack จะ return ทิ้งไว้
+  //  โดยที่ gameState ยังเป็น "ATTACK" และไม่มี timer เดินอยู่ = เทิร์นค้าง (บั๊กเดิม "หลบไม่ได้จริง")
+  engine.setLastAttack({
+    byName: attacker.name, byImg: engine.displayImg(attacker), byColor: engine.POSITION_COLORS[attacker.position] || "#888",
+    byDoomWeapon: attacker.characterId === "doomguy" ? attacker.doomWeapon : undefined,
+    targetName: target.name, targetImg: engine.displayImg(target), targetColor: engine.POSITION_COLORS[target.position] || "#888",
+    dmg: 0, dodge: true,
+    skills: [{ name: `ร่างกลางคืน (หลบพ้น ${NIGHT_DODGE_CHANCE * 100}%)`, img: IMG.night, by: target.name, color: engine.POSITION_COLORS[target.position] || "#888", side: "def" }],
+  });
+  engine.runCutsceneQueue(() => {
+    engine.setGameState("ATTACKING");
+    engine.startPhaseTimer(engine.ATTACKFX_TIME, engine.endTurn);
+    engine.broadcastState();
+  });
   return true;
 }
 function onAttackLanded(engine, attacker, target) {

@@ -722,7 +722,10 @@ function ModalMounts({
 const PHASE_NAMES = { PLAYING: "🎴 สุ่มการ์ด", ATTACK: "⚔️ โจมตี" };
 
 // สถานะที่ผูกกับท่าไม้ตายของแต่ละตัวละคร — ใช้เช็คว่ากำลังมีผลอยู่ไหม (กดซ้ำไม่ได้จนกว่าจะหมดเวลา)
-const ULTIMATE_STATUS = { hikaru: "gingastrium", kuwagata: "rachan", banagher: "paradise", temari: "anata", gambler: "golden", eva13: "fourth", appleguy: "chill", kotone: "kready", shiki: "deatheye", miyako: "miyakoUlt", hakuno: "moonCell", takumi: "takumiBlackout", bat_ben: "batTaunt", princess_shiki: "pshikiUlt" };
+//  หมายเหตุ: โคโตเนะไม่อยู่ในตารางนี้ — สถานะ kready คือ "ร่าง [พร้อมลุย]" ที่ต้องยังอยู่ตอนกดท่าไม้ตายในร่าง
+//  (Self-affirmation Explosion! Love Love) ถ้าผูกไว้ที่นี่ ปุ่มท่าไม้ตายจะถูกปิดตลอดเวลาที่อยู่ในร่าง = กด ULT5 ไม่ได้เลย
+//  เงื่อนไขกดซ้ำของโคโตเนะคุมด้วย ktUltLocked ด้านล่าง (+ CHAR_HOOKS.kotone.canUseSkill ฝั่ง server) อยู่แล้ว
+const ULTIMATE_STATUS = { hikaru: "gingastrium", kuwagata: "rachan", banagher: "paradise", temari: "anata", gambler: "golden", eva13: "fourth", appleguy: "chill", shiki: "deatheye", miyako: "miyakoUlt", hakuno: "moonCell", takumi: "takumiBlackout", bat_ben: "batTaunt", princess_shiki: "pshikiUlt" };
 
 // ---------- Apple guy: ของส่งมอบ 3 ชิ้น (สกิลพื้นฐาน เอาแบบนี้ได้ไหม เลือก -> สกิลรอง เอาไปสิ ส่งให้เป้าหมาย) ----------
 const APPLE_ITEMS = [
@@ -1089,6 +1092,10 @@ const STATUS_INFO = {
   saphir:     { icon: "💙", label: "ดาบแห่งแสงแซฟไฟร์", cls: "bg-echo-cyan text-gray-900", desc: "Star Sword Saphir: ลำพังไม่มีผลอะไรเพิ่มเติม — ต้องมีดาบแห่งแสงเอเมอโรด (Emeraude) ติดตัวด้วยเท่านั้น การโจมตีปกติครั้งถัดไปจึงจะได้โจมตีเพิ่มอีกครั้งทันที (การันตี)" },
   lance:      { icon: "🔱", label: "หอกผู้พิชิต", cls: "bg-echo-gold text-gray-900", desc: "ทั้งสองสิ่งรวมเป็นหนึ่ง: ดาบเอเมอโรดและแซฟไฟร์หลอมรวมเป็นหอกเดียว — การโจมตีปกติครั้งถัดไปดาเมจคงที่ 5 หน่วย และฟื้นพลังชีวิต +3 ใช้แล้วหอกจะถูกล้างออก ต้องรวมดาบทั้งคู่ใหม่อีกครั้ง" },
   takutoThirdAtk: { icon: "✨", label: "พิชิตแสงดาว", cls: "bg-echo-hp", desc: "อย่างนายน่ะ จะไปเข้าใจอะไร: การโจมตีคอมโบครั้งนี้มีโอกาส 50% ได้โจมตีเพิ่มเป็นครั้งที่ 3" },
+  // ---------- เอจิ (patch 2.4 new) ----------
+  eijiSwift: { icon: "💨", label: "ความเร็วสูง", cls: "bg-echo-cyan text-gray-900", desc: "ว่องไว: อัตราหลบหลีก +10% (ใช้ได้ 1 ครั้งต่อเทิร์น ซ้อนทับกับท่าไม้ตายและ Ordinal Scale ได้) และฟื้นพลังชีวิต +1 ต่อเทิร์นระหว่างมีผล" },
+  eijiSword: { icon: "⚔️", label: "ดาบแห่งความทรงจำ", cls: "bg-echo-hp", desc: "ความแค้น: การโจมตีปกติมีโอกาสสร้างความเสียหาย 2 เท่า — คิดจากเกราะ + พลังชีวิตของเอจิรวมกัน (1 หน่วย = 10%)" },
+  eijiUlt: { icon: "🔥", label: "ไม่ว่ายังก็ตาม", cls: "bg-echo-gold text-gray-900", desc: "ไม่ว่ายังก็ตาม: บังคับเปิดสนาม Break Beat Bark! — ทุกคนได้พลังโจมตีปกติ +1 · เวลาเฟสจั่วการ์ดเหลือ 40 วินาที · เอจิหลบหลีก +20%" },
   // ---------- ซาโตรุ อาเคฟุ (patch 2.0.8.2) ----------
   oblada:   { icon: "🎵", label: "สิ่งแปลกปลอม", cls: "bg-echo-hp", desc: "ObLa Di, ObLa Da: รับความเสียหาย 1 หน่วยทุกๆ 2 เทิร์น เป็นเวลา 4 เทิร์น" },
   // ---------- ริดดี้ มาร์เซนาส (patch 2.0.9) ----------
@@ -1838,6 +1845,42 @@ function TakutoStarBadge({ me, ch }) {
     </span>
   );
 }
+// เอจิ (patch 2.4 new): ป้ายอัตราหลบหลีกปัจจุบัน — โชว์เป็น % สดๆ ไม่ใช่สถานะสะสม (คล้ายป้ายเกียร์ของทาคุมิ)
+function EijiDodgeBadge({ me, ch }) {
+  if (!ch || ch.id !== "eiji" || me.eijiDodge == null) return null;
+  const pct = me.eijiDodge || 0;
+  const used = !!me.eijiDodgeUsed;
+  return (
+    <span
+      className={`text-xs font-bold rounded-full px-2 py-0.5 whitespace-nowrap ${used ? "bg-black/55 opacity-60" : pct >= 50 ? "bg-echo-cyan text-gray-900" : pct > 0 ? "bg-black/55 text-echo-cyan" : "bg-black/55"}`}
+      title="อัตราหลบหลีกรวมของเทิร์นนี้ (ว่องไว +10% · ไม่ว่ายังก็ตาม +20% · กลโกง Ordinal Scale +10% ต่อครั้ง) — ใช้ได้ 1 ครั้งต่อเทิร์น กันได้ทั้งการโจมตีปกติและความเสียหายจากสกิล"
+    >
+      💨 หลบหลีก {pct}%{used ? " (ใช้แล้ว)" : ""}
+    </span>
+  );
+}
+
+// เอจิ สกิลติดตัว 3: ปุ่ม กลโกง Ordinal Scale — ไม่นับเป็นการใช้สกิล กดสะสมได้สูงสุด 5 ครั้งต่อเทิร์น
+function EijiOrdinalButton({ me, usable, onPress, className = "" }) {
+  const used = me.eijiOrdinal || 0;
+  const max = me.eijiOrdinalMax || 5;
+  return (
+    <button
+      onClick={() => { if (usable) { clickSound(); onPress(); } }}
+      disabled={!usable}
+      title="กลโกง Ordinal Scale — สละแต้มสกิล 1 แต้มแลกอัตราหลบหลีก +10% (สูงสุด 5 ครั้งต่อเทิร์น · มีผลเฉพาะเทิร์นนี้ · ไม่นับเป็นการใช้สกิล)"
+      className={`relative rounded-xl overflow-hidden border-2 border-echo-cyan shadow-lg transition ${
+        usable ? "hover:scale-105 ring-2 ring-echo-cyan/60" : "opacity-60 grayscale cursor-not-allowed"
+      } ${className}`}
+    >
+      <img src="/characters/eiji/passive/eiji_passive3.webp" alt="" className="absolute inset-0 w-full h-full object-cover" />
+      <span className="absolute bottom-0 inset-x-0 bg-black/75 text-[10px] font-bold text-echo-cyan leading-tight py-0.5">
+        ⏱️ เร่ง {used}/{max}
+      </span>
+    </button>
+  );
+}
+
 // ---------- อาคมบัญชาระดับ EX+ (สกิลติดตัวคิชินามิ ฮาคุโนะ patch 2.2.1): UI พิเศษแยกจากช่องสกิล ----------
 //  ไม่นับเป็นการใช้สกิล -> ใช้พร้อมสกิลอื่นได้ | 3 ครั้งต่อเกม กดได้กี่ครั้งก็ได้ใน 1 เทิร์น | รูปเปลี่ยนตามจำนวนที่เหลือ
 const HAKUNO_COMMANDS = [
@@ -2615,6 +2658,12 @@ export default function Game({ state, lowQ }) {
   const isHakuno = ch?.id === "hakuno"; // เธอ/นาย คือฉันหรอ? (สกิลพื้นฐาน) ไม่นับเป็นการใช้สกิลของเทิร์นเช่นกัน (กดสลับได้ 1 ครั้ง/เทิร์น)
   const hakunoCmdUsable = !!(isHakuno && phase === "PLAYING" && me?.alive && !done && (me?.hakunoCommandUses || 0) > 0);
   const useHakunoCmd = (cmd) => { socket.emit("hakunoCommandSpell", { command: cmd }); setHakunoCmdOpen(false); };
+  // ---------- เอจิ (patch 2.4 new) ----------
+  //  กลโกง Ordinal Scale: ปุ่มเฉพาะตัว ไม่นับเป็นการใช้สกิลของเทิร์น -> กดพร้อมสกิลอื่นได้ และกดซ้ำได้จนครบ 5 ครั้ง
+  const isEiji = ch?.id === "eiji";
+  const eijiOrdinalUsable = !!(isEiji && phase === "PLAYING" && me?.alive && !done && !me?.locked &&
+    (me?.eijiOrdinal || 0) < (me?.eijiOrdinalMax || 5) && (me?.skillPoints || 0) >= 1);
+  const useEijiOrdinal = () => { socket.emit("eijiOrdinalScale"); };
   // ---------- เจ้าแห่งเน็ตบ้าน ----------
   const isBroadband = ch?.id === "broadband_man";
   const lanLocked = isBroadband && !me?.contractPartnerId;    // กระชากสายแลน: ใช้ได้ก็ต่อเมื่อมีคู่สัญญาแล้ว
@@ -3245,6 +3294,11 @@ export default function Game({ state, lowQ }) {
                 {me.hisakawa ? <TwinPortraitCards p={me} size="sm" /> : <Portrait p={me} className="w-14 h-16 p-player-frame" rounded="rounded-xl" />}
                 <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 text-[10px] font-bold bg-black/75 rounded-full px-1.5 leading-tight whitespace-nowrap">ℹ️</span>
               </button>
+              {isEiji && (
+                <div className="absolute -top-7 left-[4.6rem] z-20">
+                  <EijiOrdinalButton me={me} usable={eijiOrdinalUsable} onPress={useEijiOrdinal} className="w-14 h-16" />
+                </div>
+              )}
               {isHakuno && (
                 <div className="absolute -top-7 left-[4.6rem] z-20">
                   <HakunoCommandButton me={me} usable={hakunoCmdUsable} onOpen={() => setHakunoCmdOpen(true)} className="w-14 h-16" />
@@ -3284,6 +3338,7 @@ export default function Game({ state, lowQ }) {
                 <DoomChargeBadge me={me} ch={ch} />
                 <TakutoStarBadge me={me} ch={ch} />
                 <TakumiGearBadge me={me} ch={ch} />
+                <EijiDodgeBadge me={me} ch={ch} />
                 <span className="ml-auto flex items-center gap-1.5">
                   <span className="flex gap-1 p-1 rounded-lg bg-black/25">
                     {Array.from({ length: me.maxSkill }, (_, i) => (
@@ -3732,8 +3787,10 @@ export default function Game({ state, lowQ }) {
                   <DoomChargeBadge me={me} ch={ch} />
                   <TakutoStarBadge me={me} ch={ch} />
                   <TakumiGearBadge me={me} ch={ch} />
+                  <EijiDodgeBadge me={me} ch={ch} />
                 </div>
                 {isHakuno && <HakunoCommandButton me={me} usable={hakunoCmdUsable} onOpen={() => setHakunoCmdOpen(true)} className="w-14 h-11 shrink-0 mt-1" />}
+                {isEiji && <EijiOrdinalButton me={me} usable={eijiOrdinalUsable} onPress={useEijiOrdinal} className="w-14 h-11 shrink-0 mt-1" />}
                 {me.hisakawa ? (
                   <TwinVitals p={me} />
                 ) : me.maxHp == null ? (

@@ -55,7 +55,9 @@ function pickSmileTarget(engine) { return pickExtreme(engine, "min"); }
 function rollWindow(engine, roundNumber) {
   const chance = Math.min(1, YUNA_ROLL_CHANCE + (engine.yunaPity || 0));
   if (Math.random() >= chance) {
-    engine.setYunaPity((engine.yunaPity || 0) + YUNA_PITY_STEP); // ไม่ติด -> เพิ่มโอกาสหน้าต่างถัดไป
+    // เอจิ สกิลติดตัว 2 (ฉันอยากเจอเธออีก): มีเอจิในสนาม -> สะสมเพิ่มอีก +5% ต่อหน้าต่างที่ไม่ติด
+    const eijiBonus = engine.CHAR_HOOKS?.eiji ? engine.CHAR_HOOKS.eiji.yunaPityBonus(engine) : 0;
+    engine.setYunaPity((engine.yunaPity || 0) + YUNA_PITY_STEP + eijiBonus); // ไม่ติด -> เพิ่มโอกาสหน้าต่างถัดไป
     return;
   }
   engine.setYunaPity(0); // ติดแล้ว -> รีเซ็ตกลับฐานตั้งต้น
@@ -70,9 +72,11 @@ function rollWindow(engine, roundNumber) {
   if (kind === "delete") {
     const target = pickDeleteTarget(engine);
     if (!target) return;
-    engine.applyBuff(target, "yunaDelete", 1, YUNA_WINDOW_TURNS);
-    engine.setYunaTrigger({ effect: "delete", targetId: target.id, windowEnd });
-    engine.log(`💜 ยูนะปรากฏตัว — Delete! ${target.name} (พลังชีวิต+เกราะรวมสูงสุด) จะรับดาเมจแรงขึ้น +1 เป็นเวลา ${YUNA_WINDOW_TURNS} เทิร์น`);
+    // เอจิ (เอฟเฟกต์เฉพาะตัว): Delete ที่ลงเอจิเองอยู่แค่ 3 เทิร์น
+    const deleteTurns = engine.CHAR_HOOKS?.eiji ? engine.CHAR_HOOKS.eiji.yunaDeleteTurns(target, YUNA_WINDOW_TURNS) : YUNA_WINDOW_TURNS;
+    engine.applyBuff(target, "yunaDelete", 1, deleteTurns);
+    engine.setYunaTrigger({ effect: "delete", targetId: target.id, windowEnd: roundNumber + deleteTurns - 1 });
+    engine.log(`💜 ยูนะปรากฏตัว — Delete! ${target.name} (พลังชีวิต+เกราะรวมสูงสุด) จะรับดาเมจแรงขึ้น +1 เป็นเวลา ${deleteTurns} เทิร์น`);
   } else if (kind === "smile") {
     const target = pickSmileTarget(engine);
     if (!target) return;
@@ -106,6 +110,9 @@ function reviveWithLonging(engine, p) {
   engine.setYunaTrigger({ effect: "longing", targetId: p.id, windowEnd });
   engine.log(`✨ ยูนะปรากฏตัว — Longing! ${p.name} ฟื้นคืนชีพด้วยพลังชีวิต 3 หน่วย (พลังโจมตี +1 เป็นเวลา ${YUNA_WINDOW_TURNS} เทิร์น เริ่มนับเทิร์นถัดไป)`);
   queueYunaCutscene(engine, "longing");
+  // เอจิ (เอฟเฟกต์เฉพาะตัว): Longing ลงคนอื่น -> ต่อท้ายฉากด้วย eiji_passive_extra.mp4
+  //  แล้วสวนใส่คนที่ฟื้นคืนชีพ 1 หน่วย พร้อมปิดบัฟ/เพลง Longing ทิ้ง
+  if (engine.CHAR_HOOKS?.eiji) engine.CHAR_HOOKS.eiji.onYunaLonging(engine, p);
   return true;
 }
 

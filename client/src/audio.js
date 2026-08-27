@@ -101,6 +101,8 @@ const FILES = {
   hisakawa_hayate_1: "/characters/hisakawa_sister/voice/hayate_voice.m4a",
   hisakawa_hayate_2: "/characters/hisakawa_sister/voice/hayate_voice2.m4a",
   hisakawa_hayate_3: "/characters/hisakawa_sister/voice/hayate_voice3.m4a",
+  // เอจิ (patch 2.4 new): ท่าไม้ตาย ไม่ว่ายังก็ตาม — ไฟล์แรกของลำดับเพลง (ดู MUSIC_SEQUENCES ด้านล่าง)
+  eiji_ult: "/characters/eiji/skill3/eiji_skill3_connect.m4a",
   action_button: "/effect_sound/action_button.wav",
   trun_change: "/effect_sound/trun_change.wav",
   attack: "/effect_sound/attack.wav",
@@ -111,6 +113,12 @@ const MUSIC_SEQUENCES = {
   overload_force: [
     "/overload_force/overload_force_connect.m4a",
     "/overload_force/overload_force_theme.mp3",
+  ],
+  // เอจิ: วีดีโอท่าไม้ตายจบ -> ต่อด้วย eiji_skill3_connect.m4a
+  //  ถ้าท่ายังไม่จบแต่ไฟล์นั้นจบก่อน -> วนลูป Break Beat Bark!.mp3 ต่อไปจนหมดผล
+  eiji_ult: [
+    "/characters/eiji/skill3/eiji_skill3_connect.m4a",
+    "/characters/yuna/Break Beat Bark!.mp3",
   ],
 };
 

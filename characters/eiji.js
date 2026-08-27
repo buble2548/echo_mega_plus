@@ -1,0 +1,330 @@
+// ============================================================
+//  เอจิ (patch 2.4 new) — ว่องไว / ความแค้น / ไม่ว่ายังก็ตาม
+//  + สกิลติดตัว 1 ผู้เล่นอันดับ 2 · 2 ฉันอยากเจอเธออีก · 3 กลโกง Ordinal Scale
+//
+//  แกนกลางของตัวละครคือ "อัตราหลบหลีก" ที่ซ้อนทับได้จาก 3 แหล่ง (ดู dodgeChance)
+//    ว่องไว (eijiSwift)  +10%   · ไม่ว่ายังก็ตาม (eijiUlt) +20%  · Ordinal Scale +10% ต่อสแตค (สูงสุด 5)
+//  ใช้ได้ 1 ครั้งต่อเทิร์น เท่านั้น (p.eijiDodgeUsedRound) — กันทั้งการโจมตีปกติและดาเมจจากสกิล
+//  UI ฝั่ง client โชว์ % ปัจจุบันเป็นป้ายเฉพาะตัว (แบบเกียร์ของทาคุมิ) ไม่ใช่สถานะสะสม
+//
+//  หมายเหตุ: ไม่ใช้สถานะ evade กลาง (_universal_status) เพราะกลไกคนละแบบ —
+//  evade กลางเป็น "สแตคที่ถูกกินทีละครั้ง" ส่วนของเอจิเป็น "% รวมต่อเทิร์น" ที่คิดสดทุกครั้ง
+// ============================================================
+
+const ID = "eiji";
+
+const EIJI_MAX_HP = 4;              // พลังชีวิตพื้นฐาน 4 หน่วย (แทน MAX_HP ปกติ)
+const EIJI_MAX_ARMOR = 4;           // เกราะพื้นฐาน 4 หน่วย (แทน MAX_ARMOR ปกติ)
+
+// ---------- ว่องไว (สกิลพื้นฐาน) ----------
+const SWIFT_TURNS = 3;
+const SWIFT_DODGE = 10;             // +10% ต่อการหลบ 1 ครั้ง/เทิร์น
+const SWIFT_HEAL = 1;               // ระหว่างมีผล ฟื้นพลังชีวิต +1 ต่อเทิร์น
+
+// ---------- ความแค้น (สกิลรอง) ----------
+const SWORD_TURNS = 3;
+const SWORD_PCT_PER_UNIT = 10;      // โอกาสดาเมจ 2 เท่า = (เกราะ + พลังชีวิตของเอจิ) × 10%
+
+// ---------- ไม่ว่ายังก็ตาม (ท่าไม้ตาย) ----------
+const ULT_TURNS = 5;
+const ULT_DODGE = 20;               // +20% ต่อการหลบ 1 ครั้ง/เทิร์น
+const ULT_CARD_TIME = 40;           // เวลาช่วงจั่วการ์ดถูกบีบเหลือ 40 วินาที
+
+// ---------- สกิลติดตัว 1: ผู้เล่นอันดับ 2 ----------
+const DRAW_TIME_CUT = 5;            // จั่ว 1 ใบ = เวลาเทิร์นลด 5 วิ
+const DRAW_TIME_CUT_LONGING = 10;   // ระหว่างมีบัฟ Longing ของยูนะบนตัวเอง ลด 10 วิแทน
+const INTERRUPT_CHANCE = 0.25;      // 25% ขัดจังหวะผู้ชนะที่ไปตีคนอื่น
+const INTERRUPT_DMG = 1;            // สวนคืนผู้ชนะ 1 หน่วย
+
+// ---------- สกิลติดตัว 2: ฉันอยากเจอเธออีก ----------
+const YUNA_PITY_BONUS = 0.05;       // หน้าต่างยูนะที่ไม่ติด -> โอกาสรอบหน้า +5% เพิ่มจากระบบกันดวงซวยปกติ
+const DODGE_SKILL_REFUND = 2;       // หลบสำเร็จ 1 ครั้ง = ฟื้นแต้มสกิล +2
+
+// ---------- สกิลติดตัว 3: กลโกง Ordinal Scale ----------
+const ORDINAL_MAX = 5;              // กดสะสมได้สูงสุด 5 ครั้งต่อเทิร์น
+const ORDINAL_COST = 1;             // 1 ครั้ง = สละแต้มสกิล 1 แต้ม
+const ORDINAL_DODGE = 10;           // 1 ครั้ง = +10% (สูงสุด 50%)
+
+// ---------- เอฟเฟกต์เฉพาะตัวตอนยูนะทำงาน ----------
+const LONGING_PUNISH_DMG = 1;       // Longing ลงคนอื่น -> เอจิสวนใส่คนที่ฟื้นคืนชีพ 1 หน่วย + ปิดบัฟยูนะ
+const DELETE_DECAY_TURNS = 1;       // Delete ลงคนอื่น -> เอจิตีปกติใส่เป้านั้น มอบ "ผุพัง" 1 เทิร์น
+const DELETE_SELF_TURNS = 3;        // Delete ลงเอจิเอง -> อยู่แค่ 3 เทิร์น (แทน 5)
+const SMILE_SELF_HEAL = 1;          // Smile for You ลงเอจิเอง -> โจมตีปกติฟื้นพลังชีวิต +1
+
+const IMG = {
+  base: "/characters/eiji/eiji.webp",
+  ult: "/characters/eiji/eiji_change.jpg",
+  skill1: "/characters/eiji/skill1/eiji_skill1.jpg",
+  skill2: "/characters/eiji/skill2/eiji_skill2.jpg",
+  skill3: "/characters/eiji/skill3/eiji_skill3.jpg",
+  passive3: "/characters/eiji/passive/eiji_passive3.webp",
+};
+
+function isEiji(p) { return !!p && p.characterId === ID; }
+function swiftOn(p) { return isEiji(p) && ((p.statuses && p.statuses.eijiSwift) || 0) > 0; }
+function swordOn(p) { return isEiji(p) && ((p.statuses && p.statuses.eijiSword) || 0) > 0; }
+function ultOn(p) { return isEiji(p) && ((p.statuses && p.statuses.eijiUlt) || 0) > 0; }
+function ordinalStacks(p) { return isEiji(p) ? Math.min(ORDINAL_MAX, p.eijiOrdinal || 0) : 0; }
+
+// อัตราหลบหลีกรวมของเทิร์นนี้ (%) — ซ้อนทับได้ทั้ง 3 แหล่งตามสเปก
+function dodgeChance(p) {
+  if (!isEiji(p)) return 0;
+  return (swiftOn(p) ? SWIFT_DODGE : 0) + (ultOn(p) ? ULT_DODGE : 0) + ordinalStacks(p) * ORDINAL_DODGE;
+}
+
+// เอจิที่ยังอยู่ในสนาม (ใช้กับกลไกที่ทำงานแม้เอจิไม่ใช่คนกด — สกิลติดตัว 1/2 และเอฟเฟกต์ยูนะ)
+function aliveEiji(engine, exceptId) {
+  return engine.alivePlayers().find((p) => isEiji(p) && p.id !== exceptId) || null;
+}
+
+module.exports = {
+  id: ID,
+  MAX_HP: EIJI_MAX_HP,
+  MAX_ARMOR: EIJI_MAX_ARMOR,
+  ORDINAL_MAX,
+  ORDINAL_COST,
+  ULT_CARD_TIME,
+  IMG,
+
+  // ---------- helper ที่ server.js / client อ่านผ่าน buildStateFor ----------
+  dodgeChance,
+  ordinalStacks,
+  ultActive: ultOn,
+  // เพดานเลือด/เกราะเฉพาะตัว — เรียกจาก maxHpOf() / maxArmorOf()
+  maxHp() { return EIJI_MAX_HP; },
+  maxArmor() { return EIJI_MAX_ARMOR; },
+  // ภาพประจำตัวระหว่างท่าไม้ตายทำงาน (null = ใช้ภาพปกติ) — เรียกจาก displayImg()
+  displayImg(p) { return ultOn(p) ? IMG.ult : null; },
+
+  // ---------- เงื่อนไขการกด — เรียกจาก useSkill() ก่อนหักแต้ม ----------
+  canUseSkill(engine, p, tier) {
+    if (tier === "basic") return !swiftOn(p);        // "ความเร็วสูง" ยังอยู่ = กดซ้ำไม่ได้
+    if (tier === "secondary") return !swordOn(p);    // "ดาบแห่งความทรงจำ" ยังอยู่ = กดซ้ำไม่ได้
+    if (tier === "ultimate") {
+      if (ultOn(p)) return false;
+      // เอฟเฟกต์สนามยูนะทำงานอยู่ = กดไม่ได้ (ท่านี้เป็นการ "บังคับเปิด" สนามยูนะเอง)
+      return !(engine.yunaEffect && engine.roundNumber <= engine.yunaWindowEnd);
+    }
+    return true;
+  },
+
+  // ---------- ผลของสกิลที่ทำงานทันที (instant) — เรียกจาก useSkill() ในส่วน effect ----------
+  applyInstantSkill(engine, p, tier) {
+    if (tier === "basic") return this.applySwift(engine, p);
+    if (tier === "secondary") return this.applySword(engine, p);
+    if (tier === "ultimate") return this.applyUlt(engine, p);
+    return "";
+  },
+
+  // ว่องไว: บัฟตัวเอง 3 เทิร์น — หลบ +10% และฟื้นพลังชีวิต +1 ต่อเทิร์น
+  applySwift(engine, p) {
+    p.statuses.eijiSwift = SWIFT_TURNS;
+    engine.log(`💨 ${p.name} ว่องไว — ได้สถานะ "ความเร็วสูง" ${SWIFT_TURNS} เทิร์น (หลบหลีก +${SWIFT_DODGE}% · ฟื้นพลังชีวิต +${SWIFT_HEAL} ต่อเทิร์น) · อัตราหลบตอนนี้ ${dodgeChance(p)}%`);
+    return ` — หลบหลีก ${dodgeChance(p)}%`;
+  },
+
+  // ความแค้น: บัฟตัวเอง 3 เทิร์น — โจมตีปกติมีโอกาสดาเมจ 2 เท่า ตาม (เกราะ+พลังชีวิต) ของเอจิเอง
+  applySword(engine, p) {
+    p.statuses.eijiSword = SWORD_TURNS;
+    const pct = this.doubleChance(p);
+    engine.log(`⚔️ ${p.name} ความแค้น — ได้สถานะ "ดาบแห่งความทรงจำ" ${SWORD_TURNS} เทิร์น (โจมตีปกติมีโอกาส ${pct}% สร้างความเสียหาย 2 เท่า)`);
+    return ` — ดาเมจ 2 เท่า ${pct}%`;
+  },
+
+  // โอกาสดาเมจ 2 เท่า: เกราะ + พลังชีวิตรวมกันของเอจิ 1 หน่วย = 10% (เพดาน 100%)
+  doubleChance(p) {
+    return Math.max(0, Math.min(100, ((p.hp || 0) + (p.armor || 0)) * SWORD_PCT_PER_UNIT));
+  },
+
+  // ไม่ว่ายังก็ตาม: บังคับเปิดเอฟเฟกต์สนามยูนะ Break Beat Bark! แบบพิเศษ 5 เทิร์น
+  //  ทุกคน (รวมเอจิ) ได้พลังโจมตีปกติ +1 · เวลาช่วงจั่วการ์ดเหลือ 40 วิ · เอจิหลบ +20%
+  applyUlt(engine, p) {
+    p.statuses.eijiUlt = ULT_TURNS;
+    p.transformAt = engine.nextTransformCounter();
+    engine.setYunaTrigger({ effect: "beatbark", targetId: null, windowEnd: engine.roundNumber + ULT_TURNS - 1 });
+    engine.triggerCutscene(p, "eijiUlt"); // eiji_skill3.mp4 -> ต่อด้วยเพลง eiji_ult (connect.m4a -> Break Beat Bark! loop)
+    engine.log(`🔥 ${p.name} ไม่ว่ายังก็ตาม — บังคับเปิด Break Beat Bark! ${ULT_TURNS} เทิร์น! ทุกคนได้พลังโจมตีปกติ +1 · เวลาจั่วการ์ดเหลือ ${ULT_CARD_TIME} วินาที · เอจิหลบหลีก +${ULT_DODGE}%`);
+    return " — Break Beat Bark!";
+  },
+
+  // ---------- สกิลติดตัว 3: กลโกง Ordinal Scale (ปุ่มเฉพาะตัว ไม่นับเป็นการใช้สกิล) ----------
+  //  คืน true ถ้ากดสำเร็จ — ผู้เรียก (server.js's eijiOrdinalScale) เป็นคนยิง skillFlash/broadcast
+  pressOrdinal(engine, p) {
+    if (!isEiji(p)) return false;
+    if (ordinalStacks(p) >= ORDINAL_MAX) return false;
+    if ((p.skillPoints || 0) < ORDINAL_COST) return false;
+    p.skillPoints -= ORDINAL_COST;
+    p.eijiOrdinal = (p.eijiOrdinal || 0) + 1;
+    engine.log(`⏱️ ${p.name} กลโกง Ordinal Scale — เร่งความเร็ว (${p.eijiOrdinal}/${ORDINAL_MAX}) สละแต้มสกิล ${ORDINAL_COST} · อัตราหลบหลีกเทิร์นนี้ ${dodgeChance(p)}%`);
+    return true;
+  },
+
+  // ---------- ต้นเทิร์น — เรียกจาก dealRound() ----------
+  onRoundStartTick(engine, p) {
+    p.eijiOrdinal = 0;          // Ordinal Scale รีเซ็ตทุกเทิร์น (มีผลแค่ภายในเทิร์นที่กด)
+    p.eijiDodgeUsedRound = false; // โควตาหลบหลีก 1 ครั้งต่อเทิร์น
+    if (swiftOn(p)) {
+      const heal = engine.healHp(p, SWIFT_HEAL);
+      if (heal > 0) engine.log(`💨 ${p.name} ความเร็วสูง — ฟื้นพลังชีวิต +${heal} (เหลืออีก ${p.statuses.eijiSwift} เทิร์น)`);
+    }
+  },
+
+  // ---------- สกิลติดตัว 1: จั่วการ์ด 1 ใบ = บีบเวลาเทิร์นลง ----------
+  //  เรียกจาก hit() ทุกครั้งที่เอจิจั่วได้ไพ่จริง
+  onCardDraw(engine, p) {
+    if (!isEiji(p)) return;
+    // Longing ลงเอจิเอง: สกิลติดตัว 1 ถูกเสริมพลัง — ลด 10 วิแทน 5 วิ
+    const cut = ((p.statuses && p.statuses.yunaLonging) || 0) > 0 ? DRAW_TIME_CUT_LONGING : DRAW_TIME_CUT;
+    const left = engine.reduceCardTimer(cut);
+    engine.log(`⏱️ ${p.name} ผู้เล่นอันดับ 2 — เวลาช่วงจั่วการ์ดลดลง ${cut} วินาที (เหลือ ${left} วิ)`);
+  },
+
+  // ---------- สกิลติดตัว 2: ดันโอกาสเกิดยูนะ (ระบบกันดวงซวยแรงขึ้น) ----------
+  //  เรียกจาก characters/yuna.js's rollWindow() — คืน % เพิ่มเติมที่จะสะสมเมื่อหน้าต่างนี้ไม่ติด
+  yunaPityBonus(engine) {
+    return aliveEiji(engine) ? YUNA_PITY_BONUS : 0;
+  },
+
+  // ---------- หลบหลีก ----------
+  //  โรลหลบ 1 ครั้งต่อเทิร์น — ใช้ได้ทั้งกับการโจมตีปกติ (doAttack) และดาเมจจากสกิล (adjustIncomingDamage)
+  //  คืน true = หลบพ้น
+  tryDodge(engine, p, what) {
+    if (!isEiji(p) || !p.alive) return false;
+    if (p.eijiDodgeUsedRound) return false;
+    const pct = dodgeChance(p);
+    if (pct <= 0) return false;
+    p.eijiDodgeUsedRound = true; // โควตาหมดไม่ว่าจะหลบพ้นหรือไม่
+    if (Math.random() * 100 >= pct) {
+      engine.log(`💢 ${p.name} พยายามหลบ${what ? ` ${what}` : ""} (${pct}%) แต่ไม่พ้น`);
+      return false;
+    }
+    engine.log(`💨 หลบหลีก! ${p.name} หลบ${what ? ` ${what}` : "การโจมตี"}ได้ (${pct}%)`);
+    // สกิลติดตัว 2: หลบสำเร็จ = ฟื้นแต้มสกิล +2
+    engine.addSkill(p, DODGE_SKILL_REFUND, "passive");
+    engine.log(`✨ ${p.name} ฉันอยากเจอเธออีก — หลบสำเร็จ ฟื้นแต้มสกิล +${DODGE_SKILL_REFUND}`);
+    return true;
+  },
+
+  // เรียกจาก doAttack() — หลบการโจมตีปกติ (จัดฉาก lastAttack เองแบบเดียวกับ oguri/appleguy)
+  //  คืน true ถ้าหลบพ้น (ผู้เรียกต้อง return ทันที)
+  tryAttackDodge(engine, attacker, target) {
+    if (!isEiji(target)) return false;
+    if (!this.tryDodge(engine, target, `การโจมตีของ ${attacker.name}`)) return false;
+    target.wasAttacked = true; // patch 2.1.3.5: ถูกโจมตีไม่ได้แต้มสกิล (แม้หลบพ้น)
+    engine.setLastAttack({
+      byName: attacker.name, byImg: engine.displayImg(attacker), byColor: engine.POSITION_COLORS[attacker.position] || "#888",
+      byDoomWeapon: attacker.characterId === "doomguy" ? attacker.doomWeapon : undefined,
+      targetName: target.name, targetImg: engine.displayImg(target), targetColor: engine.POSITION_COLORS[target.position] || "#888",
+      dmg: 0, dodge: true,
+      skills: [{ name: `หลบหลีก (${dodgeChance(target)}%)`, img: engine.displayImg(target), by: target.name, color: engine.POSITION_COLORS[target.position] || "#888", side: "def" }],
+    });
+    engine.runCutsceneQueue(() => {
+      engine.setGameState("ATTACKING");
+      engine.startPhaseTimer(engine.ATTACKFX_TIME, engine.endTurn);
+      engine.broadcastState();
+    });
+    return true;
+  },
+
+  // เรียกจาก adjustIncomingDamage() (universal dispatcher) — หลบดาเมจจากสกิล
+  //  การโจมตีปกติจัดการที่ tryAttackDodge ไปแล้ว จึงข้าม isNormalAttack ที่นี่
+  adjustIncomingDamage(engine, p, n, isNormalAttack) {
+    if (!isEiji(p) || n <= 0 || isNormalAttack || p._statusDamage) return n;
+    return this.tryDodge(engine, p, "ความเสียหายจากสกิล") ? 0 : n;
+  },
+
+  // ---------- สกิลติดตัว 1: ขัดจังหวะผู้ชนะที่ไปตีคนอื่น ----------
+  //  เรียกจาก doAttack() ก่อนคิดดาเมจ — เอจิต้อง "ไม่ชนะ + ไม่การ์ดแตก" และเป้าหมายต้องไม่ใช่เอจิ
+  //  คืน true ถ้าขัดสำเร็จ (ผู้เรียกต้อง return ทันที — เทิร์นจบด้วยฉากสวนคืนแทน)
+  tryInterrupt(engine, attacker, target) {
+    if (!attacker || !target) return false;
+    if (isEiji(attacker) || isEiji(target)) return false;
+    const e = engine.alivePlayers().find((p) => isEiji(p) && !p.busted && p.id !== attacker.id && !engine.passiveSealed(p));
+    if (!e) return false;
+    if (engine.sameTeam(e, attacker)) return false; // โหมดทีม: ไม่สวนพวกเดียวกัน
+    if (Math.random() >= INTERRUPT_CHANCE) return false;
+
+    engine.log(`🚧 ${e.name} ผู้เล่นอันดับ 2 — ขัดจังหวะ ${attacker.name} ไม่ให้โจมตี ${target.name} ได้สำเร็จ!`);
+    engine.triggerCutscene(e, "eijiInterrupt"); // eiji_passive1.mp4 เล่นก่อน แล้วค่อยเกิดความเสียหาย
+    engine.withEffectSource(e, () => {
+      engine.dealMixed(attacker, INTERRUPT_DMG);
+      engine.maybeBeatSave(attacker); engine.maybeBeatMode(attacker); engine.maybeEva3(attacker);
+      attacker.wasAttacked = true;
+    });
+    engine.log(`⚔️ ${e.name} สวนคืน ${attacker.name} -${INTERRUPT_DMG}`);
+    engine.setLastAttack({
+      byName: e.name, byImg: engine.displayImg(e), byColor: engine.POSITION_COLORS[e.position] || "#888",
+      targetName: attacker.name, targetImg: engine.displayImg(attacker), targetColor: engine.POSITION_COLORS[attacker.position] || "#888",
+      dmg: INTERRUPT_DMG,
+      skills: [{ name: "ผู้เล่นอันดับ 2 (ขัดจังหวะ + สวนคืน)", img: IMG.base, by: e.name, color: engine.POSITION_COLORS[e.position] || "#888", side: "atk" }],
+    });
+    engine.runCutsceneQueue(() => {
+      engine.setGameState("ATTACKING");
+      engine.startPhaseTimer(engine.ATTACKFX_TIME, engine.endTurn);
+      engine.broadcastState();
+    });
+    return true;
+  },
+
+  // ---------- การโจมตีปกติของเอจิ ----------
+  // ความแค้น: โอกาสดาเมจ 2 เท่า — เรียกจาก doAttack() หลังคำนวณดาเมจฐานแล้ว
+  //  คืนดาเมจใหม่ (คิววีดีโอ eiji_skill2_hit.mp4 ให้เองเมื่อเข้าเงื่อนไข)
+  applySwordDouble(engine, attacker, dmg) {
+    if (!swordOn(attacker) || dmg <= 0) return dmg;
+    const pct = this.doubleChance(attacker);
+    if (Math.random() * 100 >= pct) {
+      engine.log(`⚔️ ${attacker.name} ดาบแห่งความทรงจำ — ไม่ติดดาเมจ 2 เท่า (${pct}%)`);
+      return dmg;
+    }
+    engine.log(`⚔️ ${attacker.name} ดาบแห่งความทรงจำทำงาน (${pct}%) — ความเสียหาย ${dmg} → ${dmg * 2}!`);
+    engine.queueCutscene(attacker, "eijiSwordHit"); // เล่นก่อนสรุปความเสียหาย
+    return dmg * 2;
+  },
+
+  // Smile for You ลงคนอื่น: เอจิตีทะลุบัฟลดดาเมจของยูนะ — เรียกจาก doAttack() ตอนหักบัฟ smile
+  ignoresYunaSmile(attacker) { return isEiji(attacker); },
+
+  // เรียกจาก doAttack() หลังดาเมจลงจริง — Smile for You ลงเอจิเอง / Delete ลงคนอื่น
+  onAttackLanded(engine, attacker, target) {
+    if (!isEiji(attacker)) return;
+    // Smile for You ลงเอจิเอง: การโจมตีปกติฟื้นพลังชีวิต +1
+    if (((attacker.statuses && attacker.statuses.yunaSmile) || 0) > 0) {
+      const heal = engine.healHp(attacker, SMILE_SELF_HEAL);
+      if (heal > 0) engine.log(`💚 ${attacker.name} Smile for You — การโจมตีปกติฟื้นพลังชีวิต +${heal}`);
+    }
+    // Delete ลงคนอื่น: เอจิตีปกติใส่เป้านั้น -> มอบสถานะ "ผุพัง"
+    if (target && target.alive && ((target.statuses && target.statuses.yunaDelete) || 0) > 0) {
+      if (engine.applyDebuff(target, "decay", null, DELETE_DECAY_TURNS)) {
+        engine.log(`💜 ${attacker.name} Delete — ${target.name} ติดสถานะ "ผุพัง" ${DELETE_DECAY_TURNS} เทิร์น (เกราะไม่ฟื้น)`);
+      }
+    }
+  },
+
+  // ---------- เอฟเฟกต์เฉพาะตัวตอนยูนะทำงาน ----------
+  // Longing ลงคนอื่น: หลังฉากเปิดยูนะจบ -> เล่น eiji_passive_extra.mp4 แล้วเอจิสวนใส่คนที่ฟื้นคืนชีพ
+  //  พร้อมปิดบัฟ Longing ของเป้าหมาย (เพลงหยุดตามไปด้วย เพราะ yunaEffect ถูกล้าง)
+  //  เรียกจาก server.js ต่อท้าย YunaMod.reviveWithLonging()
+  onYunaLonging(engine, revived) {
+    if (!revived || isEiji(revived)) return; // ลงเอจิเอง = ทำงานตามปกติ (ผลเสริมอยู่ที่ onCardDraw)
+    const e = aliveEiji(engine, revived.id);
+    if (!e || engine.passiveSealed(e) || engine.sameTeam(e, revived)) return;
+    engine.queueCutscene(e, "eijiLonging"); // ต่อท้ายคิว -> เล่นหลังฉากเปิดยูนะจบพอดี
+    engine.withEffectSource(e, () => {
+      engine.dealMixed(revived, LONGING_PUNISH_DMG);
+      engine.maybeBeatSave(revived); engine.maybeBeatMode(revived); engine.maybeEva3(revived);
+      revived.wasAttacked = true;
+    });
+    delete revived.statuses.yunaLonging;
+    engine.setYunaTrigger({ effect: null, targetId: null, windowEnd: 0 }); // ปิดเอฟเฟกต์สนาม + เพลงยูนะ
+    engine.log(`🥀 ${e.name} — ตามไปจบเรื่องกับ ${revived.name} ทันทีที่ฟื้นคืนชีพ (-${LONGING_PUNISH_DMG}) และบัฟ Longing ถูกปิดการใช้งาน`);
+  },
+
+  // Delete ลงเอจิเอง: ดีบัฟอยู่แค่ 3 เทิร์นแทน 5 — เรียกจาก characters/yuna.js ตอนแจกดีบัฟ
+  yunaDeleteTurns(target, def) { return isEiji(target) ? DELETE_SELF_TURNS : def; },
+
+  // ---------- ฟิลด์ที่ต้องรีเซ็ตทุกแมตช์ — เรียกจาก resetCombat() ----------
+  resetCombat(p) {
+    p.eijiOrdinal = 0;            // กลโกง Ordinal Scale: สแตคที่กดสะสมในเทิร์นนี้ (0-5 · รีเซ็ตทุกเทิร์น)
+    p.eijiDodgeUsedRound = false; // ใช้โควตาหลบหลีกของเทิร์นนี้ไปแล้วหรือยัง
+  },
+};

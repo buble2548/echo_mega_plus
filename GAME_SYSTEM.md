@@ -11,7 +11,7 @@
 server.js (6.3k บรรทัด)          เอนจินกลางทั้งหมด: state, เฟส, การ์ด, ดาเมจ, สกิล, socket handler
 characters.js (1.7k)             DATA ล้วน — roster/ชื่อสกิล/desc/cost/img + POSITION_COLORS + publicRoster()
 characters/index.js              มัดรวม CHAR_HOOKS = { [characterId]: module } — ตัวละครใหม่ต้อง require+push ที่นี่
-characters/<id>.js               LOGIC ของตัวละครนั้น (34 ตัว) — export { id, ...methods(engine, ...) }
+characters/<id>.js               LOGIC ของตัวละครนั้น (35 ตัว) — export { id, ...methods(engine, ...) }
 characters/_universal_status.js  บัฟ/ดีบัฟกลาง (pure function ไม่พึ่ง engine)
 characters/_transforms.js        ตาราง metadata คัตซีน (TRANSFORMS) — data ล้วน
 characters/yuna.js               "ไอดอลประจำสนาม" ไม่ใช่ตัวละครที่เล่นได้ (ไม่อยู่ใน CHAR_HOOKS, require ตรง)
@@ -41,7 +41,7 @@ LOBBY → TEAM_MODE → TEAM_SETUP → PLAYING ⇄ CUTSCENE → SUMMARY → ATTA
 | `LOBBY` | ห้องรอ กด ready — ครบ 2+ คน & ready หมด → `enterModeSelect()` | – |
 | `TEAM_MODE` | โหวตโหมด (ffa / duo / trio / overload) | – |
 | `TEAM_SETUP` | เลือกทีม A/B/C + ยืนยัน | – |
-| `PLAYING` | เฟสจั่วไพ่ + ใช้สกิล/ไอเทม | `CARD_TIME` 60s |
+| `PLAYING` | เฟสจั่วไพ่ + ใช้สกิล/ไอเทม | `cardPhaseSeconds()` = `CARD_TIME` 60s (เหลือ 40s ระหว่างท่าไม้ตายของเอจิ) — เอจิจั่ว 1 ใบ บีบเวลาที่เหลือลงอีกผ่าน `reduceCardTimer()` |
 | `CUTSCENE` | เล่นวีดีโอในคิว (พัก state เดิมไว้) | ตาม `seconds` ของแต่ละคลิป |
 | `SUMMARY` | เปิดแต้มทุกคน ประกาศผู้ชนะ | `SUMMARY_TIME` 5s |
 | `ATTACK` | ผู้ชนะเลือกเป้า (หมดเวลา = สุ่มเป้าให้) | `ATTACK_TIME` 15s |
@@ -100,6 +100,7 @@ endTurn()              :5363  ลดเทิร์นสถานะทั้�
 ## 5. ท่อความเสียหาย (สำคัญที่สุด)
 
 **ค่าคงที่ฐาน**: `MAX_HP = 7` · `MAX_ARMOR = 3` · `MAX_SKILL = 8` (Bard = 9) · `MAX_PLAYERS = 6`
+(เพดานเฉพาะตัว: ฮาคุโนะ 6-5/2-3 · เอสคานอร์ Last Stand 7/0 · เอวา 13 เกราะ 0 · **เอจิ 4/4**)
 
 **ลำดับการรับดาเมจ**: `shield` (กันครั้ง) → `armor` (เกราะ) → `hp` (เลือดจริง) — hp ถึง 0 = ตกรอบ
 
