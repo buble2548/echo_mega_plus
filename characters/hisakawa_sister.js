@@ -272,6 +272,22 @@ module.exports = {
     return revived.key;
   },
 
+  // ล้างสถานะ key หนึ่งออกจากแฝดทั้งคู่ — จำเป็นเพราะบัฟของคู่แฝดไม่ได้อยู่ที่ p.statuses
+  //  (โค้ดที่ delete p.statuses[key] ตรงๆ จะไม่มีผลกับตัวละครนี้เลย) คืน true ถ้ามีอะไรถูกล้างจริง
+  clearStatusOnTwins(p, key) {
+    const h = ensure(p);
+    if (!h) return false;
+    let cleared = false;
+    for (const twinKey of TWIN_KEYS) {
+      const t = h.twins[twinKey];
+      if (!t || !t.statuses || !t.statuses[key]) continue;
+      delete t.statuses[key];
+      if (t.statusAmt) delete t.statusAmt[key];
+      cleared = true;
+    }
+    return cleared;
+  },
+
   applyBuffToTwin(p, twinKey, key, amount, turns) {
     const h = ensure(p);
     const t = h && h.twins[twinKey];

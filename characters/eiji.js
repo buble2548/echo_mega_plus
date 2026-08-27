@@ -29,6 +29,7 @@ const SWORD_PCT_PER_UNIT = 10;      // โอกาสดาเมจ 2 เท�
 const ULT_TURNS = 5;
 const ULT_DODGE = 20;               // +20% ต่อการหลบ 1 ครั้ง/เทิร์น
 const ULT_CARD_TIME = 40;           // เวลาช่วงจั่วการ์ดถูกบีบเหลือ 40 วินาที
+const ULT_SKILL_REGEN = 1;          // ระหว่างท่าไม้ตายทำงาน ฟื้นแต้มสกิล +1 ต่อเทิร์น
 
 // ---------- สกิลติดตัว 1: ผู้เล่นอันดับ 2 ----------
 const DRAW_TIME_CUT = 5;            // จั่ว 1 ใบ = เวลาเทิร์นลด 5 วิ
@@ -143,7 +144,7 @@ module.exports = {
     p.transformAt = engine.nextTransformCounter();
     engine.setYunaTrigger({ effect: "beatbark", targetId: null, windowEnd: engine.roundNumber + ULT_TURNS - 1 });
     engine.triggerCutscene(p, "eijiUlt"); // eiji_skill3.mp4 -> ต่อด้วยเพลง eiji_ult (connect.m4a -> Break Beat Bark! loop)
-    engine.log(`🔥 ${p.name} ไม่ว่ายังก็ตาม — บังคับเปิด Break Beat Bark! ${ULT_TURNS} เทิร์น! ทุกคนได้พลังโจมตีปกติ +1 · เวลาจั่วการ์ดเหลือ ${ULT_CARD_TIME} วินาที · เอจิหลบหลีก +${ULT_DODGE}%`);
+    engine.log(`🔥 ${p.name} ไม่ว่ายังก็ตาม — บังคับเปิด Break Beat Bark! ${ULT_TURNS} เทิร์น! ทุกคนได้พลังโจมตีปกติ +1 · เวลาจั่วการ์ดเหลือ ${ULT_CARD_TIME} วินาที · เอจิหลบหลีก +${ULT_DODGE}% · แต้มสกิล +${ULT_SKILL_REGEN} ต่อเทิร์น`);
     return " — Break Beat Bark!";
   },
 
@@ -166,6 +167,11 @@ module.exports = {
     if (swiftOn(p)) {
       const heal = engine.healHp(p, SWIFT_HEAL);
       if (heal > 0) engine.log(`💨 ${p.name} ความเร็วสูง — ฟื้นพลังชีวิต +${heal} (เหลืออีก ${p.statuses.eijiSwift} เทิร์น)`);
+    }
+    // ไม่ว่ายังก็ตาม: ระหว่างท่าไม้ตายทำงาน ฟื้นแต้มสกิล +1 ต่อเทิร์น
+    if (ultOn(p)) {
+      engine.addSkill(p, ULT_SKILL_REGEN, "passive");
+      engine.log(`🔥 ${p.name} ไม่ว่ายังก็ตาม — ฟื้นแต้มสกิล +${ULT_SKILL_REGEN} (เหลืออีก ${p.statuses.eijiUlt} เทิร์น)`);
     }
   },
 
@@ -268,8 +274,9 @@ module.exports = {
 
   // ---------- การโจมตีปกติของเอจิ ----------
   // ความแค้น: โอกาสดาเมจ 2 เท่า — เรียกจาก doAttack() หลังคำนวณดาเมจฐานแล้ว
-  //  คืนดาเมจใหม่ (คิววีดีโอ eiji_skill2_hit.mp4 ให้เองเมื่อเข้าเงื่อนไข)
-  applySwordDouble(engine, attacker, dmg) {
+  //  คืนดาเมจใหม่ และตั้ง ctx.videoQueued = true เมื่อคิววีดีโอไว้ เพื่อให้ doAttack รู้ว่าต้องเล่นวีดีโอ
+  //  "ก่อน" ขึ้นสรุปความเสียหาย (ค่าเริ่มต้นของ doAttack คือขึ้นสรุปก่อนแล้วค่อยเล่นวีดีโอที่ค้างคิว)
+  applySwordDouble(engine, attacker, dmg, ctx) {
     if (!swordOn(attacker) || dmg <= 0) return dmg;
     const pct = this.doubleChance(attacker);
     if (Math.random() * 100 >= pct) {
@@ -277,7 +284,8 @@ module.exports = {
       return dmg;
     }
     engine.log(`⚔️ ${attacker.name} ดาบแห่งความทรงจำทำงาน (${pct}%) — ความเสียหาย ${dmg} → ${dmg * 2}!`);
-    engine.queueCutscene(attacker, "eijiSwordHit"); // เล่นก่อนสรุปความเสียหาย
+    engine.queueCutscene(attacker, "eijiSwordHit");
+    if (ctx) ctx.videoQueued = true;
     return dmg * 2;
   },
 
@@ -308,15 +316,26 @@ module.exports = {
     if (!revived || isEiji(revived)) return; // ลงเอจิเอง = ทำงานตามปกติ (ผลเสริมอยู่ที่ onCardDraw)
     const e = aliveEiji(engine, revived.id);
     if (!e || engine.passiveSealed(e) || engine.sameTeam(e, revived)) return;
-    engine.queueCutscene(e, "eijiLonging"); // ต่อท้ายคิว -> เล่นหลังฉากเปิดยูนะจบพอดี
+
+    // 1) ปิดบัฟยูนะก่อนเสมอ — ต้องมาก่อนคิววีดีโอ/ดาเมจ เพราะนี่คือผลหลักตามสเปก
+    //    ("ทำให้บัฟยูนะของเป้าหมายหยุดทำงานลง เพลงก็หยุด") ถ้าขั้นตอนหลังพลาด ผลหลักต้องยังลงไปแล้ว
+    //    คู่แฝดฮิซากาว่าเก็บบัฟไว้ที่ตัวแฝด ไม่ใช่ p.statuses — delete ตรงๆ จะไม่มีผลกับตัวละครนี้เลย
+    delete revived.statuses.yunaLonging;
+    if (revived.statusAmt) delete revived.statusAmt.yunaLonging; // ไม่ล้างด้วยจะค้างเป็นขยะ (statusAmtOf อ่านคู่กัน)
+    const hisakawa = engine.CHAR_HOOKS && engine.CHAR_HOOKS.hisakawa_sister;
+    if (hisakawa && hisakawa.clearStatusOnTwins) hisakawa.clearStatusOnTwins(revived, "yunaLonging");
+    engine.setYunaTrigger({ effect: null, targetId: null, windowEnd: 0 }); // ปิดเอฟเฟกต์สนาม + เพลงยูนะ
+
+    // 2) วีดีโอต่อท้ายคิว -> เล่นหลังฉากเปิดยูนะจบพอดี  3) แล้วค่อยลงความเสียหาย
+    //    ใช้ dealDirect เพราะคนที่เพิ่งฟื้นคืนชีพยังมีเกราะเดิมติดตัวอยู่ (Longing ฟื้นแค่เลือด)
+    //    ถ้าใช้ dealMixed เกราะจะกินหมัดนี้ไปเงียบๆ จนดูเหมือนเอจิไม่ได้ทำดาเมจอะไรเลย
+    engine.queueCutscene(e, "eijiLonging");
     engine.withEffectSource(e, () => {
-      engine.dealMixed(revived, LONGING_PUNISH_DMG);
+      engine.dealDirect(revived, LONGING_PUNISH_DMG);
       engine.maybeBeatSave(revived); engine.maybeBeatMode(revived); engine.maybeEva3(revived);
       revived.wasAttacked = true;
     });
-    delete revived.statuses.yunaLonging;
-    engine.setYunaTrigger({ effect: null, targetId: null, windowEnd: 0 }); // ปิดเอฟเฟกต์สนาม + เพลงยูนะ
-    engine.log(`🥀 ${e.name} — ตามไปจบเรื่องกับ ${revived.name} ทันทีที่ฟื้นคืนชีพ (-${LONGING_PUNISH_DMG}) และบัฟ Longing ถูกปิดการใช้งาน`);
+    engine.log(`🥀 ${e.name} — ตามไปจบเรื่องกับ ${revived.name} ทันทีที่ฟื้นคืนชีพ (-${LONGING_PUNISH_DMG} ทะลุเกราะ) และบัฟ Longing ถูกปิดการใช้งาน`);
   },
 
   // Delete ลงเอจิเอง: ดีบัฟอยู่แค่ 3 เทิร์นแทน 5 — เรียกจาก characters/yuna.js ตอนแจกดีบัฟ

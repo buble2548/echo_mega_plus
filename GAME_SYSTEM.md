@@ -156,7 +156,7 @@ cost = skill.cost
 - จบเทิร์น **+1** (เช้าที่แจกโบนัส = **+2**) — `endTurn()` `:5546`
 - แพ้เพราะแต้มน้อยสุด / ไพ่แตก **+1** — `resolveRound()` `:4437`
 - ทริกเกอร์ไพ่เหลืองครบ 3 ใบ **+2 ต่อชุด**
-- รีเจนพิเศษรายตัวละคร (satoru / hakuno หญิง / ultraman_trigger / hisakawa / ignis) +1 ต่อเทิร์น
+- รีเจนพิเศษรายตัวละคร (satoru / hakuno หญิง / ultraman_trigger / hisakawa / ignis · eiji ระหว่างท่าไม้ตาย) +1 ต่อเทิร์น
 - **ชนะการจั่วไม่ได้แต้มสกิลแล้ว** (patch 2.1.3.5) และ **การโดนโจมตีก็ไม่ได้แต้ม** — ไม่มี `addSkill` ให้เป้าหมายใน `doAttack()` เลย
 - บล็อกการฟื้นแต้ม: `stagger` (ชะงัก) · `manaSeal` · ตัวละคร mageslayer · ยูกิ (`maxSkillOf` = 0) · `skillDrain` (ค่าปรับ −1/เทิร์น)
 - `addSkill(p, n, src)` — `src` เป็น tag ของ "ช่องทางฟื้นฟู" (`"item"` / `"passive"` / `"card"`) ใส่เฉพาะจุดที่เป็น

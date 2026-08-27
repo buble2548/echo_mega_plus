@@ -5200,7 +5200,8 @@ function doAttack(byId, targetId) {
   if (CHAR_HOOKS.escanor.adjustOutgoingDamage) dmg = CHAR_HOOKS.escanor.adjustOutgoingDamage(engine, attacker, target, dmg);
   if (attacker.characterId === "satoru") dmg = 0; // ซาโตรุ: โจมตีธรรมดาดาเมจ 0 แล้วติด ObLa หลังโจมตี
   // เอจิ (characters/eiji.js): ดาบแห่งความทรงจำ — โอกาสคูณดาเมจ 2 เท่า (คิดท้ายสุดเพื่อให้คูณยอดสุทธิจริง)
-  dmg = CHAR_HOOKS.eiji.applySwordDouble(engine, attacker, dmg);
+  const eijiSwordFx = {};
+  dmg = CHAR_HOOKS.eiji.applySwordDouble(engine, attacker, dmg, eijiSwordFx);
 
   // ---------- ริต้า เบอร์นัล (characters/phenex.js): ฝันไปเถอะ — ตั้งรับ สะท้อนความเสียหายทั้งหมดกลับผู้โจมตีแทนที่จะรับเอง ----------
   if (CHAR_HOOKS.phenex.tryReflectHit(engine, attacker, target, dmg)) return;
@@ -5557,7 +5558,7 @@ function doAttack(byId, targetId) {
   //  / อย่าอยู่เลย แกน่ะ! (ริต้า เบอร์นัล patch 2.1.6) / ฉันยัง...มองเห็นอยู่!!! กันตาย + อย่างนายน่ะ จะไปเข้าใจอะไร (สึงาชิ ทาคุโตะ patch 2.2.4):
   //  เล่นวีดีโอที่ค้างคิวก่อน แล้วค่อยขึ้นสรุปความเสียหาย
   //  (ปกติทุกท่าอื่นจะขึ้นสรุปความเสียหายก่อนแล้วค่อยเล่นวีดีโอค้างคิวตอนจบ — ท่าเหล่านี้กลับลำดับเฉพาะตัว)
-  if ((yuukiAttackVideoQueued || isYuuki(target) || beamPlusAtk || (beam && attacker.characterId === "banagher") || unibeam2Atk || storiumAtk || phenexPurgeAtk || miyakoUltAtk || triggerMultiAtk || triggerZeperionAtk || escanorAttackVideoQueued || (beatSaveFired && target.characterId === "takuto") || takutoUlt2VideoQueued) && cutsceneQueue.length) runCutsceneQueue(showAttackFx);
+  if ((yuukiAttackVideoQueued || isYuuki(target) || beamPlusAtk || (beam && attacker.characterId === "banagher") || unibeam2Atk || storiumAtk || phenexPurgeAtk || miyakoUltAtk || triggerMultiAtk || triggerZeperionAtk || escanorAttackVideoQueued || (beatSaveFired && target.characterId === "takuto") || takutoUlt2VideoQueued || eijiSwordFx.videoQueued) && cutsceneQueue.length) runCutsceneQueue(showAttackFx);
   else showAttackFx();
 }
 
