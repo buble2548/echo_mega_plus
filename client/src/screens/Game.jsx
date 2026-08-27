@@ -1093,7 +1093,7 @@ const STATUS_INFO = {
   lance:      { icon: "🔱", label: "หอกผู้พิชิต", cls: "bg-echo-gold text-gray-900", desc: "ทั้งสองสิ่งรวมเป็นหนึ่ง: ดาบเอเมอโรดและแซฟไฟร์หลอมรวมเป็นหอกเดียว — การโจมตีปกติครั้งถัดไปดาเมจคงที่ 5 หน่วย และฟื้นพลังชีวิต +3 ใช้แล้วหอกจะถูกล้างออก ต้องรวมดาบทั้งคู่ใหม่อีกครั้ง" },
   takutoThirdAtk: { icon: "✨", label: "พิชิตแสงดาว", cls: "bg-echo-hp", desc: "อย่างนายน่ะ จะไปเข้าใจอะไร: การโจมตีคอมโบครั้งนี้มีโอกาส 50% ได้โจมตีเพิ่มเป็นครั้งที่ 3" },
   // ---------- เอจิ (patch 2.4 new) ----------
-  eijiSwift: { icon: "💨", label: "ความเร็วสูง", cls: "bg-echo-cyan text-gray-900", desc: "ว่องไว: อัตราหลบหลีก +10% (ใช้ได้ 1 ครั้งต่อเทิร์น ซ้อนทับกับท่าไม้ตายและ Ordinal Scale ได้) และฟื้นพลังชีวิต +1 ต่อเทิร์นระหว่างมีผล" },
+  eijiSwift: { icon: "💨", label: "ความเร็วสูง", cls: "bg-echo-cyan text-gray-900", desc: "ว่องไว: อัตราหลบหลีก +10% (ใช้ได้ 1 ครั้งต่อเทิร์น ซ้อนทับกับท่าไม้ตายและ Ordinal Scale +20%/ครั้ง ได้) และฟื้นพลังชีวิต +1 ต่อเทิร์นระหว่างมีผล" },
   eijiSword: { icon: "⚔️", label: "ดาบแห่งความทรงจำ", cls: "bg-echo-hp", desc: "ความแค้น: การโจมตีปกติมีโอกาสสร้างความเสียหาย 2 เท่า — คิดจากเกราะ + พลังชีวิตของเอจิรวมกัน (1 หน่วย = 10%)" },
   eijiUlt: { icon: "🔥", label: "ไม่ว่ายังก็ตาม", cls: "bg-echo-gold text-gray-900", desc: "ไม่ว่ายังก็ตาม: บังคับเปิดสนาม Break Beat Bark! — ทุกคนได้พลังโจมตีปกติ +1 · เวลาเฟสจั่วการ์ดเหลือ 40 วินาที · เอจิหลบหลีก +20% และได้แต้มสกิล +1 ต่อเทิร์น" },
   // ---------- ซาโตรุ อาเคฟุ (patch 2.0.8.2) ----------
@@ -1853,7 +1853,7 @@ function EijiDodgeBadge({ me, ch }) {
   return (
     <span
       className={`text-xs font-bold rounded-full px-2 py-0.5 whitespace-nowrap ${used ? "bg-black/55 opacity-60" : pct >= 50 ? "bg-echo-cyan text-gray-900" : pct > 0 ? "bg-black/55 text-echo-cyan" : "bg-black/55"}`}
-      title="อัตราหลบหลีกรวมของเทิร์นนี้ (ว่องไว +10% · ไม่ว่ายังก็ตาม +20% · กลโกง Ordinal Scale +10% ต่อครั้ง) — ใช้ได้ 1 ครั้งต่อเทิร์น กันได้ทั้งการโจมตีปกติและความเสียหายจากสกิล"
+      title="อัตราหลบหลีกรวมของเทิร์นนี้ (ว่องไว +10% · ไม่ว่ายังก็ตาม +20% · กลโกง Ordinal Scale +20% ต่อครั้ง) — ใช้ได้ 1 ครั้งต่อเทิร์น กันได้ทั้งการโจมตีปกติและความเสียหายจากสกิล"
     >
       💨 หลบหลีก {pct}%{used ? " (ใช้แล้ว)" : ""}
     </span>
@@ -1868,7 +1868,7 @@ function EijiOrdinalButton({ me, usable, onPress, className = "" }) {
     <button
       onClick={() => { if (usable) { clickSound(); onPress(); } }}
       disabled={!usable}
-      title="กลโกง Ordinal Scale — สละแต้มสกิล 1 แต้มแลกอัตราหลบหลีก +10% (สูงสุด 5 ครั้งต่อเทิร์น · มีผลเฉพาะเทิร์นนี้ · ไม่นับเป็นการใช้สกิล)"
+      title="กลโกง Ordinal Scale — สละแต้มสกิล 1 แต้มแลกอัตราหลบหลีก +20% (สูงสุด 5 ครั้งต่อเทิร์น · มีผลเฉพาะเทิร์นนี้ · ไม่นับเป็นการใช้สกิล)"
       className={`relative rounded-xl overflow-hidden border-2 border-echo-cyan shadow-lg transition ${
         usable ? "hover:scale-105 ring-2 ring-echo-cyan/60" : "opacity-60 grayscale cursor-not-allowed"
       } ${className}`}

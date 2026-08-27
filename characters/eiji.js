@@ -3,7 +3,7 @@
 //  + สกิลติดตัว 1 ผู้เล่นอันดับ 2 · 2 ฉันอยากเจอเธออีก · 3 กลโกง Ordinal Scale
 //
 //  แกนกลางของตัวละครคือ "อัตราหลบหลีก" ที่ซ้อนทับได้จาก 3 แหล่ง (ดู dodgeChance)
-//    ว่องไว (eijiSwift)  +10%   · ไม่ว่ายังก็ตาม (eijiUlt) +20%  · Ordinal Scale +10% ต่อสแตค (สูงสุด 5)
+//    ว่องไว (eijiSwift)  +10%   · ไม่ว่ายังก็ตาม (eijiUlt) +20%  · Ordinal Scale +20% ต่อสแตค (สูงสุด 5)
 //  ใช้ได้ 1 ครั้งต่อเทิร์น เท่านั้น (p.eijiDodgeUsedRound) — กันทั้งการโจมตีปกติและดาเมจจากสกิล
 //  UI ฝั่ง client โชว์ % ปัจจุบันเป็นป้ายเฉพาะตัว (แบบเกียร์ของทาคุมิ) ไม่ใช่สถานะสะสม
 //
@@ -44,7 +44,8 @@ const DODGE_SKILL_REFUND = 2;       // หลบสำเร็จ 1 ครั�
 // ---------- สกิลติดตัว 3: กลโกง Ordinal Scale ----------
 const ORDINAL_MAX = 5;              // กดสะสมได้สูงสุด 5 ครั้งต่อเทิร์น
 const ORDINAL_COST = 1;             // 1 ครั้ง = สละแต้มสกิล 1 แต้ม
-const ORDINAL_DODGE = 10;           // 1 ครั้ง = +10% (สูงสุด 50%)
+const ORDINAL_DODGE = 20;           // 1 ครั้ง = +20% (กด 5 ครั้ง = +100%)
+const DODGE_PCT_CAP = 100;          // เพดานอัตราหลบรวม — กัน UI โชว์เกิน 100% ตอนซ้อนกับว่องไว/ท่าไม้ตาย
 
 // ---------- เอฟเฟกต์เฉพาะตัวตอนยูนะทำงาน ----------
 const LONGING_PUNISH_DMG = 1;       // Longing ลงคนอื่น -> เอจิสวนใส่คนที่ฟื้นคืนชีพ 1 หน่วย + ปิดบัฟยูนะ
@@ -70,7 +71,8 @@ function ordinalStacks(p) { return isEiji(p) ? Math.min(ORDINAL_MAX, p.eijiOrdin
 // อัตราหลบหลีกรวมของเทิร์นนี้ (%) — ซ้อนทับได้ทั้ง 3 แหล่งตามสเปก
 function dodgeChance(p) {
   if (!isEiji(p)) return 0;
-  return (swiftOn(p) ? SWIFT_DODGE : 0) + (ultOn(p) ? ULT_DODGE : 0) + ordinalStacks(p) * ORDINAL_DODGE;
+  const raw = (swiftOn(p) ? SWIFT_DODGE : 0) + (ultOn(p) ? ULT_DODGE : 0) + ordinalStacks(p) * ORDINAL_DODGE;
+  return Math.min(DODGE_PCT_CAP, raw);
 }
 
 // เอจิที่ยังอยู่ในสนาม (ใช้กับกลไกที่ทำงานแม้เอจิไม่ใช่คนกด — สกิลติดตัว 1/2 และเอฟเฟกต์ยูนะ)
