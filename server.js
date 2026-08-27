@@ -33,6 +33,7 @@ const {
   BASIC_DEBUFF_CLEAR,
   SOFT_DEBUFF_STEP,
   cleanseDebuffs,
+  coolReduction,
   noHealActive,
   invertActive,
   tickBurn,
@@ -132,7 +133,25 @@ const GOLD_MAX = 30;             // เพดานเหรียญต่อ�
 const GOLD_PER_TURN = 1;         // เหรียญที่ได้ทุกจบเทิร์น (ทุกคน)
 const GOLD_WIN_BONUS = 1;        // เหรียญเพิ่มเมื่อชนะการจั่วไพ่
 const SHOP_INTERVAL_TURNS = 5;   // ร้านค้าเปิดทุกๆ 5 เทิร์น
-const SHOP_MAX_ITEMS = 9;        // จำนวนสินค้าสูงสุดต่อรอบร้านค้า (เดิม 6)
+// เพดานเหรียญรายบุคคล — กระปุกออมสินน้องหมูน้อย (ฟุจิตะ โคโตเนะ) ขยายเพดานของเจ้าตัวเป็น 45
+function goldCapOf(p) {
+  if (p && p.characterId === "kotone") return CHAR_HOOKS.kotone.GOLD_CAP;
+  return GOLD_MAX;
+}
+// จุดเดียวที่ "ได้รับเหรียญ" ผ่าน — คืนจำนวนที่เหลืออยู่ในกระเป๋าจริงหลังตัดตามเพดาน
+//  ต้องเรียกผ่านตัวนี้เสมอ ไม่งั้นกระปุกออมสินของโคโตเนะจะไม่ทำงาน (สกิลติดตัวผูกกับจังหวะได้รับเหรียญ)
+//  โคโตเนะ: กระปุกออมสิน "แบ่ง" เหรียญที่เพิ่งได้ไปเก็บ (หักออกจากกระเป๋า) จึงคืนยอดสุทธิ ไม่ใช่ยอดก่อนแบ่ง
+function addGold(p, n) {
+  if (!p || !(n > 0)) return 0;
+  const cap = goldCapOf(p);
+  const before = p.gold || 0;
+  if (before >= cap) return 0;
+  p.gold = Math.min(cap, before + n);
+  const gained = p.gold - before;
+  const saved = p.characterId === "kotone" ? (CHAR_HOOKS.kotone.onGoldGained(engine, p, gained) || 0) : 0;
+  return gained - saved;
+}
+const SHOP_MAX_ITEMS = 15;       // จำนวนสินค้าสูงสุดต่อรอบร้านค้า (เดิม 6 -> 9 -> 15 หลังรวมร้านลุงเท่งเข้ามา)
 const SHOP_CARD_COLOR_PRICE = 5; // ยาเปลี่ยนสีการ์ด: เลือกการ์ด 1 ใบในมือ เปลี่ยนเป็นสีที่ต้องการ
 const SHOP_FORTUNE_PRICE = 5;
 const SHOP_FORTUNE_AMOUNT = 2;   // ยาโชคลาภ: ได้โชคลาภ +2 หน่วยเมื่อใช้
@@ -142,17 +161,14 @@ const SHOP_ARMOR_PRICE = 3;
 const SHOP_ARMOR_AMOUNT = 1;     // ยาฟื้นเกราะ: ฟื้นเกราะ +1 หน่วย
 const SHOP_CARD_REMOVE_PRICE = 5; // ยาลดไพ่: ลดไพ่ใบล่าสุดของตัวเองออก 1 ใบ (กันแตกได้)
 const SHOP_SKILL_SIZES = [
-  { size: "small", amount: 1, price: 2 },
-  { size: "medium", amount: 4, price: 6 },
-  { size: "large", amount: 6, price: 10 },
+  { size: "small", amount: 1, price: 2, weight: 50 },   // สัดส่วนภายในกลุ่ม "ยาฟื้นแต้มสกิล"
+  { size: "medium", amount: 4, price: 6, weight: 35 },
+  { size: "large", amount: 6, price: 10, weight: 15 },
 ];
-// ---------- ร้านขายของลุงเท่ง + ปืนหน่วย GUTS Select ----------
-// ร้านที่ 2 สลับเข้าจากแถบในหน้าร้านค้า — รีสต็อกพร้อมร้านค้ามายาทุกๆ SHOP_INTERVAL_TURNS เทิร์น
+// ---------- ปืนหน่วย GUTS Select (เดิมอยู่ร้านลุงเท่ง — ยุบรวมเข้าร้านค้ามายาแล้ว) ----------
 // ปืนเป็นไอเทมถาวร (มีได้กระบอกเดียว) กระสุนซื้อแยกอิสระ แต่ยิงไม่ได้ถ้าไม่มีปืน — ยิงได้ 1 นัด/เทิร์น ช่วงจั่วไพ่เท่านั้น
 const ITEM_BASE = "/item";
-const UNCLE_SHOP_MAX_ITEMS = 9;   // จำนวนสินค้าต่อรอบ (เท่าร้านค้ามายา)
 const GUTS_GUN_PRICE = 15;
-const GUTS_GUN_CHANCE = 0.30;     // 30% ออกปืน / 70% ออกกระสุน (เฉลี่ยเท่ากันทุกแบบ = 17.5% ต่อแบบ)
 const GUTS_CHAA_TURNS = 2;       // Thunder Bullet: สภาพชาคงอยู่ 2 เทิร์น
 const GUTS_NURSE_DMG = 4;         // Nursedessei Cannon: ดาเมจ (ลดเกราะก่อน)
 const BLACK_SPARKLENCE_NURSE_COOLDOWN = 3; // Black Sparklence: หลังยิง Nursedessei ใช้ปืนไม่ได้ 3 เทิร์นถัดไป
@@ -165,7 +181,22 @@ const GUTS_AMMO = {
   trigger_dark_key: { id: "trigger_dark_key", name: "Trigger Dark Key", price: 10, img: `${ITEM_BASE}/guts_hyper_key/hyper_key_trigger_dark.jpg`, cut: "triggerDarkHenshin", transformDark: true },
 };
 const GUTS_AMMO_IDS = Object.keys(GUTS_AMMO).filter((id) => id !== "hyper_trigger" && id !== "trigger_dark_key");
-const UNCLE_SHOP_MAX_GUNS = 2;    // ปืนขึ้นได้สูงสุด 2 กระบอกต่อรอบที่ร้านรีสต็อก (ที่เกินสุ่มเป็นกระสุนแทน)
+const SHOP_MAX_GUNS = 2;          // ปืนขึ้นได้สูงสุด 2 กระบอกต่อรอบที่ร้านรีสต็อก (ที่เกินสุ่มเป็นกระสุนแทน)
+const SHOP_MAX_HYPER = 1;         // Hyper Key Trigger ขึ้นได้สูงสุด 1 ชิ้นต่อรอบ (ซื้อขาด — ที่เกินสุ่มเป็นกระสุนแทน)
+// น้ำหนักกระสุนธรรมดาภายในกลุ่ม "กระสุน" (รวม = SHOP_WEIGHTS.gutsAmmo)
+const SHOP_AMMO_WEIGHTS = { shockwave: 4, gargorgon: 4, thunder: 4, nurse: 2 };
+// ตารางโอกาสออกสินค้าต่อ 1 ช่องสุ่ม (รวม 100) — ช่องล็อกช่องแรก (Trigger Dark Key) ไม่ผ่านตารางนี้
+const SHOP_WEIGHTS = {
+  cardColor: 15,
+  fortune: 5,      // หายากสุด
+  resist: 15,
+  cardRemove: 12,
+  skillPoint: 14,  // แตกย่อยตาม SHOP_SKILL_SIZES.weight
+  armor: 14,
+  gutsGun: 8,      // จำกัด SHOP_MAX_GUNS ต่อรอบ ที่เกินตกไปรวมกับกระสุน
+  gutsAmmo: 14,    // แตกย่อยตาม SHOP_AMMO_WEIGHTS
+  hyperTrigger: 3, // Hyper Key Trigger: ของแพงสุด สุ่มออก จำกัด SHOP_MAX_HYPER ต่อรอบ
+};
 // ---------- DoomGuy (patch 2.2 full) ----------
 const DOOM_BASE = "/characters/doomguy";
 const DOOM_WEAPONS = {
@@ -244,12 +275,9 @@ const HIKARU_STORIUM_ATK_CAP = 4;     // ลำแสงสโตเรียม
 const HIKARU_STORIUM_TOTAL_CAP = 8;   // ลำแสงสโตเรียม: ดาเมจรวมสูงสุด 8 (doAttack's shared damage-sum — นอกขอบเขต Phase 1)
 const HIKARU_STRIUM_IMG = "/characters/hikaru/hikaru_update/ginga_strium.jpg"; // โปรไฟล์ระหว่างร่าง Ginga Strium (displayImg/TRANSFORMS)
 
-// ---------- ฟุจิตะ โคโตเนะ (patch 1.9.1 / rework 2.1.3) ----------
-// ค่าคงที่ของโคโตเนะส่วนใหญ่ย้ายไปอยู่ characters/kotone.js แล้ว — เหลือแค่ที่ shared infra ในไฟล์นี้ยังใช้อยู่
-const KOTONE_DANCE_COIN_COST = 3; // สกิลรอง: ต้องมี coin อย่างน้อยเท่านี้ถึงใช้ได้ (useSkill's gate)
-const KOTONE_DANCE_ATK_BONUS = 2; // สกิลรอง: บัฟพลังโจมตีพื้นฐาน +2 (fx log เท่านั้น — มีสำเนาใน kotone.js สำหรับผลจริง)
-// [โหมงานหนัก] ทำงานอยู่ไหม (ฟุจิตะ โคโตเนะ, characters/kotone.js) — wrapper รอบ CHAR_HOOKS.kotone.overworkActive
-// Sleeping time (patch 2.2.2): ถูกโจมตีระหว่างหลับจะไม่ปลุกโคโตเนะอีกต่อไป — หลับยาว 3 เทิร์นเต็มโดยไม่สะดุ้งตื่น
+// ---------- ฟุจิตะ โคโตเนะ (rework 2.3) ----------
+// ค่าคงที่ของโคโตเนะอยู่ที่ characters/kotone.js ทั้งหมดแล้ว (เพดานเหรียญ/กระปุกอ่านผ่าน CHAR_HOOKS.kotone.*)
+// Sleeping time: ถูกโจมตีระหว่างหลับจะไม่ปลุกโคโตเนะ — หลับยาว 3 เทิร์นเต็มโดยไม่สะดุ้งตื่น
 // (คงฟังก์ชัน/จุดเรียกไว้เผื่อใช้ในอนาคต — ตอนนี้ไม่มีผลอะไรแล้ว)
 function maybeWakeKotone(t) {
   return;
@@ -607,7 +635,7 @@ function yunaBeatBarkActive() {
 }
 // ท่าไม้ตายที่ยกเลิกย้อนหลังได้ (เจ้าของท่ามาตีชิกิระหว่างถือชาร์จ) — สถานะท่าไม้ตายที่กำลังมีผลอยู่
 const SHIKI_CANCELABLE_ULTS = ["gingastrium", "rachan", "paradise", "golden", "fourth", "chill",
-  "kawaii", "lai", "vortigern", "deatheye", "wither", "shradecharge",
+  "kready", "lai", "vortigern", "deatheye", "wither", "shradecharge",
   "anata",                  // patch 2.0.8: เพิ่ม ANATA WAAAAAAAA (เทมาริ) — ครอบคลุมท่าไม้ตายทุกตัวละครที่เก็บเป็นสถานะ
   "bloodDim", "soulDim",    // patch 2.0.8.1: มิติมายาบรรเลงทั้งสอง (คีตกวี) นับเป็นท่าไม้ตาย — ยกเลิกย้อนหลังได้
   "victorybeat", "ashen",   // patch 2.0.8.1: ท่าไม้ตายโอกูริ แคป ทั้งสองท่า
@@ -822,9 +850,8 @@ let oberonDevour = 0;     // ราตรีกลืนกิน: เปิด�
 let lastAttack = null;    // ข้อมูลการโจมตีล่าสุด (อนิเมชันใครตีใคร)
 let roundSkills = [];     // สกิลที่ใช้ในรอบ (เก็บประวัติ — instant เด้งตอนใช้ / หลังเปิดไพ่โชว์ตอนโจมตี)
 let allyWinFlag = false;  // ริดดี้ (patch 2.0.9): จบเกมแบบชนะทั้งคู่ (คงพันธมิตรตอนเหลือแค่คู่พันธมิตร)
-let shopItems = [];       // ร้านค้ามายา (patch 2.2 full): สินค้าส่วนกลางของรอบปัจจุบัน (สูงสุด 9 ชิ้น เปิดทุก 5 เทิร์น)
-let shopRoundSeq = 0;     // ลำดับรอบร้านค้า (ใช้สร้าง id สินค้าไม่ให้ซ้ำกันข้ามรอบ — ใช้ร่วมกันทั้ง 2 ร้าน)
-let uncleShopItems = [];  // ร้านขายของลุงเท่ง: สินค้าส่วนกลางของรอบปัจจุบัน (รีพร้อมร้านค้ามายา)
+let shopItems = [];       // ร้านค้ามายา (patch 2.3): สินค้าส่วนกลางของรอบปัจจุบัน (15 ชิ้น เปิดทุก 5 เทิร์น — ร้านเดียวรวมของลุงเท่งเดิม)
+let shopRoundSeq = 0;     // ลำดับรอบร้านค้า (ใช้สร้าง id สินค้าไม่ให้ซ้ำกันข้ามรอบ)
 
 // ---------- ยูนะ ไอดอลประจำสนาม (characters/yuna.js — ไม่ใช่ตัวละครที่เล่นได้ ไม่มี p เป็นของตัวเอง) ----------
 const YUNA_IMG = "/characters/yuna/yuna.png";
@@ -870,8 +897,11 @@ function withEffectSource(source, fn) {
   try { return fn(); }
   finally { effectSourceId = prev; }
 }
+// รีเฟรชเลือด/เกราะจากแฝดที่คุมอยู่ก่อนแตะค่าเหล่านั้น — ตั้งใจไม่แตะ p.statuses
+//  (p.statuses คือแหล่งความจริงระหว่างเทิร์น การ syncIn เต็มรูปแบบตรงนี้จะล้างสถานะที่ engine
+//   เขียนใส่ตรงๆ ทิ้ง เช่น nodraw/noskill/stagger ตอน dealRound, ไอเทมร้านค้า, freecast, dawn)
 function hisakawaSyncIn(p) {
-  if (p && p.characterId === "hisakawa_sister") CHAR_HOOKS.hisakawa_sister.syncIn(p);
+  if (p && p.characterId === "hisakawa_sister") CHAR_HOOKS.hisakawa_sister.syncVitals(p);
 }
 function hisakawaSyncOut(p) {
   if (p && p.characterId === "hisakawa_sister") CHAR_HOOKS.hisakawa_sister.syncOut(p);
@@ -1104,8 +1134,8 @@ function checkBlueTrigger(p) {
 function applySpecialCardEffect(p, card) {
   if (!card || !card.special) return;
   if (card.special === "king") {
-    p.gold = Math.min(GOLD_MAX, (p.gold || 0) + 10);
-    lastLog.push(`👑 ${p.name} จั่วได้การ์ดราชา — ได้เหรียญ +10!`);
+    const g = addGold(p, 10);
+    lastLog.push(`👑 ${p.name} จั่วได้การ์ดราชา — ได้เหรียญ +${g}!`);
   } else if (card.special === "queen") {
     p.statuses.freecast = 1; // ใช้สกิลครั้งถัดไปไม่เสียแต้ม — หายเมื่อจบเทิร์นถ้าไม่ได้ใช้
     lastLog.push(`👸 ${p.name} จั่วได้การ์ดราชินี — ใช้สกิลได้ฟรี 1 ครั้งในเทิร์นนี้!`);
@@ -1133,7 +1163,7 @@ function applyLockColorTriggers(p) {
       }
     } else if (color === "yellow") {
       const gain = n * YELLOW_CARD_SKILL_BONUS;
-      addSkill(p, gain);
+      addSkill(p, gain, "card"); // การ์ดรังสรร (ไพ่เหลืองครบชุด) — นับเป็นการฟื้นพลังงานสำหรับ [ดูดซับเวท]
       lastLog.push(`🟡 ${p.name} ครบไพ่เหลือง 3 ใบ — แต้มสกิล +${gain}`);
     }
   }
@@ -1304,9 +1334,9 @@ function songActive(p) {
 const TEMARI_ANATA_DRAWS = 3;    // ANATA WAAAAAAAA: บังคับจั่วเพิ่ม 3 ใบ (เพิ่มจาก 2)
 // สถานะผิดปกติที่ Song for you ล้างออกได้ทั้งหมด (patch 2.0.8: เพิ่มดีบัฟพื้นฐานใหม่
 //  และแยก ยามฟ้าสาง/เส้นชีวิต ออกไปลดทีละ 1 แทน — ดูใน st === "song")
-const DEBUFF_KEYS = ["discord", "sleep", "stun", "nodraw", "noskill", "sena",
-  "energy", "nohealing", "moonmark", "overwork", "unplug", "weak", "fragile", "spellburden",
-  "oblada", "hburn", "phenexBanUlt", "nanayaSeal", "miyakoSeal", "invert", "manaSeal", "manaRupture"];
+const DEBUFF_KEYS = ["discord", "sleep", "stun", "nodraw", "noskill",
+  "energy", "nohealing", "moonmark", "unplug", "weak", "fragile", "spellburden",
+  "oblada", "hburn", "phenexBanUlt", "nanayaSeal", "miyakoSeal", "invert", "manaSeal", "manaRupture", "manaLeech", "mageslayerMark"];
 // เกราะสูงสุดของผู้เล่น: ปกติ 2 — ระหว่างสวมเกราะราชัน (ท่าไม้ตายคุวากาตะ) เพิ่ม +3 เป็น 5
 // ระหว่างสกิลติดตัว 3 เอวา 13 (เลือด <= 3) เพิ่ม +1
 // ระหว่าง Lie Like Vortigern (โอเบรอน) เป้าหมายได้เพดานเกราะ +1
@@ -1324,6 +1354,8 @@ function maxArmorOf(p) {
   // คิชินามิ ฮาคุโนะ (patch 2.2.1): เพดานเกราะคงที่ตามเพศ (แทน MAX_ARMOR ปกติ) — ชาย 2 / หญิง 3
   // เอวานเกเลี่ยน หมายเลข 13 (patch 2.2 alpha): ไม่มีเกราะเลยตามปกติ (เพดาน 0) — ได้เพดาน +1 เฉพาะช่วงสกิลติดตัว 3 ทำงาน (ด้านล่าง)
   const escanorArmor = (p && p.characterId === "escanor" && CHAR_HOOKS.escanor.maxArmor) ? CHAR_HOOKS.escanor.maxArmor(p) : null;
+  // Last Stand: "เกราะ 0" เป็นค่าตายตัวของร่าง — คืนก่อนบวกโบนัสใดๆ ไม่งั้นบัฟเพดานเกราะจากเพื่อนร่วมทีมทะลุได้
+  if (escanorArmor === 0) return 0;
   const armorBase = (p && p.characterId === "hakuno")
     ? (p.hakunoGender === "female" ? HAKUNO_FEMALE_ARMOR_CAP : HAKUNO_MALE_ARMOR_CAP)
     : (p && p.characterId === "hisakawa_sister") ? CHAR_HOOKS.hisakawa_sister.maxArmor(p)
@@ -1476,6 +1508,8 @@ function displayImg(p) {
   if (p.characterId === "ultraman_trigger") return "/characters/ultraman_trigger/trigger.webp";
   if (p.characterId === "hisakawa_sister") return CHAR_HOOKS.hisakawa_sister.displayImg(p);
   if (p.characterId === "ignis" && CHAR_HOOKS.ignis.displayImg) return CHAR_HOOKS.ignis.displayImg(p);
+  // ฟุจิตะ โคโตเนะ: ระหว่างร่าง [พร้อมลุย] = ภาพ Kotone.png (null = ใช้ภาพปกติ)
+  if (p.characterId === "kotone") { const kimg = CHAR_HOOKS.kotone.displayImg(p); if (kimg) return kimg; }
   // โอเบรอน: ร่างสลับตามช่วงเวลากลางวัน/กลางคืนเสมอ
   if (p.characterId === "oberon") return isNightRound(roundNumber) ? OBERON_NIGHT_IMG : OBERON_MORNING_IMG;
   // ชเรด เอลัน: รวมร่างทำนองเพลงแล้ว = ร่างอควาเรียน สปาด้า ถาวร
@@ -1492,7 +1526,7 @@ function displayImg(p) {
   }
   // โอกูริ แคป: ระหว่างร่าง Zone (GrayBeast) = ภาพ zone_form
   if (p.characterId === "oguri" && (p.statuses.graybeast || 0) > 0) return OGURI_ZONE_IMG;
-  // ผู้สังหารจอมมหาเวทย์: เคยใช้ Witch Mark ไปแล้ว (ถาวร) = MS02.png แทน MS01.png ปกติ
+  // ผู้สังหารเมจ: เคยใช้ Witch Mark ไปแล้ว (ถาวร) = MS02.png แทน MS01.png ปกติ
   if (p.characterId === "mageslayer") return p.mageslayerHasMarked ? "/characters/mageslayer/MS02.png" : "/characters/mageslayer/MS01.png";
   // ทาคุมิ ฟุจิวาระ: ภาพเปลี่ยนตามเกียร์ธรรมดา — เกียร์ 1-2: takumi1.webp / เกียร์ 3-5: takumi3.jpg / เกียร์ 6: takumi6.jpg
   if (p.characterId === "takumi") {
@@ -1644,10 +1678,11 @@ function activeSkillMusic() {
     }
   }
   if (bestTepeu) return bestTepeu;
-  // Mana Burden (ผู้สังหารจอมมหาเวทย์): เพลง mageslayer_ult เล่นค้างตราบใดที่ตัวเองยังมีภาระเวทติดตัวอยู่ (ผูกอายุกับ spellburden 5 เทิร์นของตัวเอง)
+  // Mana Burden (ผู้สังหารเมจ): เพลง mageslayer_ult เล่นค้างตามอายุของ Mana Burden ที่ตัวเองร่ายไว้
+  //  (ผูกกับ p.statuses.mageslayerBurdenBgm ที่ตั้งตอนใช้สกิล — เดิมผูกกับ spellburden ของตัวเอง แต่สกิลไม่ใส่ให้ตัวเองแล้ว)
   let bestMageslayer = null;
   for (const p of alivePlayers()) {
-    if (p.characterId === "mageslayer" && (p.statuses.spellburden || 0) > 0) {
+    if (p.characterId === "mageslayer" && (p.statuses.mageslayerBurdenBgm || 0) > 0) {
       if (!bestMageslayer || (p.transformAt || 0) > bestMageslayer.at) bestMageslayer = { music: "mageslayer_ult", at: p.transformAt || 0 };
     }
   }
@@ -1679,7 +1714,7 @@ function activeSkillMusic() {
   }
   if (bestWou) return bestWou;
   let best = null;
-  for (const key of ["ginga", "gingastrium", "paradise", "rachan", "golden", "fourth", "graybeast", "doomCrucible", "apprivoise"]) {
+  for (const key of ["ginga", "gingastrium", "paradise", "rachan", "golden", "fourth", "graybeast", "doomCrucible", "apprivoise", "kready"]) {
     const t = TRANSFORMS[key];
     if (!t.music) continue;
     for (const p of alivePlayers()) {
@@ -1766,6 +1801,9 @@ function damageSoft(p) {
   if (p.shield > 0) { p.shield--; hisakawaSyncOut(p); return; }
   if (p.armor > 0) loseArmor(p);
   else loseHp(p);
+  // คู่แฝดฮิซากาว่า: ดาเมจแพ้จั่ว/แตกก็ต้องสลับให้แฝดอีกคนออกมาคุมทันทีเหมือนท่อดาเมจอื่น
+  //  ไม่งั้นจะยืนอยู่ด้วยแฝดที่เลือดหมดตลอดเฟส SUMMARY/ATTACK แล้วค่อยสลับตอน endTurn()
+  resolveHisakawaTwinDeath(p);
 }
 // ระเบิด Fourth Impact (เอวา 13 patch 2.2 alpha): เคารพ "หลบหลีก" ของเป้าหมาย (เดิมทะลุหลบหลีกเสมอ) — คืน true ถ้าหลบพ้น
 function evaBlastEvade(o, e) {
@@ -1781,7 +1819,19 @@ function evaBlastEvade(o, e) {
 }
 // RS-Hopper ทั้งสองแบบ (universal-dispatcher wrappers — ตรรกะจริงอยู่ characters/eva13.js)
 // isNormalAttack: true เฉพาะที่ doAttack() เรียก (การโจมตีจากการเลือกเป้าหมายในเทิร์นปกติ ไม่ว่าจะมีบัฟเสริมพลังหรือไม่)
+// ตราล่าเวท (characters/mageslayer.js): ดาเมจ "ทุกประเภท" ที่ผู้สังหารเมจสร้างใส่เป้าหมายที่ติดตรา
+//  (ปืน GUTS / ดาเมจสกิล / ระเบิดมานา / การโจมตีปกติ) จะขโมยพลังงานเท่าดาเมจ — เรียกจากท่อดาเมจกลางทั้ง 3 ตัว
+//  แทนการไปแปะทีละจุด โดยดูต้นตอจาก effectSourceId (ทุก handler ห่อด้วย withEffectSource อยู่แล้ว)
+function mageslayerMarkSteal(target, n) {
+  if (!(n > 0) || !target) return;
+  const src = effectSourceId && players[effectSourceId];
+  if (!src || src.characterId !== "mageslayer" || src.id === target.id) return;
+  CHAR_HOOKS.mageslayer.onDamageDealt(engine, src, target, n);
+}
 function adjustIncomingDamage(p, n, isNormalAttack) {
+  // เย็นชื่นใจ (escanorCool, WineBarrel ของเอสคานอร์): สถานะ Universal — ไวน์ถูกขโมยไปใช้ได้
+  //  ตรรกะจริงอยู่ characters/_universal_status.js (coolReduction)
+  if (n > 0) n = Math.max(0, n - coolReduction(p, isNormalAttack));
   const hook = CHAR_HOOKS[p && p.characterId];
   return hook && hook.adjustIncomingDamage ? hook.adjustIncomingDamage(engine, p, n, isNormalAttack) : n;
 }
@@ -1808,6 +1858,7 @@ function dealDirect(p, n, isNormalAttack) {
     if (p.shield > 0) { p.shield--; continue; }
     loseHp(p);
   }
+  mageslayerMarkSteal(p, n);
   resolveHisakawaTwinDeath(p);
 }
 function dealArmorOnly(p, n, isNormalAttack) {
@@ -1818,6 +1869,7 @@ function dealArmorOnly(p, n, isNormalAttack) {
     if (p.shield > 0) { p.shield--; continue; }
     if (p.armor > 0) loseArmor(p);
   }
+  mageslayerMarkSteal(p, n);
 }
 function dealMixed(p, n, isNormalAttack) { // เกราะก่อนแล้วเลือด (สำหรับ NT-D)
   if (sealActive(p) || friendlyEffectBlocked(p)) return;
@@ -1831,9 +1883,12 @@ function dealMixed(p, n, isNormalAttack) { // เกราะก่อนแล�
     if (p.armor > 0) loseArmor(p);
     else loseHp(p);
   }
+  mageslayerMarkSteal(p, n);
   resolveHisakawaTwinDeath(p);
 }
-function addSkill(p, n) {
+// src = แหล่งที่มาของการฟื้นพลังงาน ("item" / "passive" / "card") — ใส่เฉพาะช่องทาง "ฟื้นฟู" จริงๆ
+//  ที่ [ดูดซับเวท] (ผู้สังหารเมจ) ต้องตอบสนอง ไม่ใส่ให้แต้มพื้นฐานจบเทิร์น/ค่าชดเชยการแพ้/การโอนแต้มระหว่างผู้เล่น
+function addSkill(p, n, src) {
   if (isYuuki(p)) return;
   // ชะงัก (โอกูริ Rework): ฟื้นฟูแต้มสกิลไม่ได้ทุกช่องทาง ระหว่างติดสถานะนี้
   if (((p.statuses && p.statuses.stagger) || 0) > 0) return;
@@ -1842,6 +1897,8 @@ function addSkill(p, n) {
   const before = p.skillPoints;
   p.skillPoints = Math.min(maxSkillOf(p), p.skillPoints + n); // Bard: เพดานพลังงาน 9
   p.gainedSkill += p.skillPoints - before;
+  // ดูดซับเวท (characters/mageslayer.js): ฟื้นพลังงานจากไอเทม/พาสซีฟ/การ์ดรังสรร -> 35% ถูกผู้สังหารเมจขโมย 1 หน่วย
+  if (src && p.skillPoints > before) CHAR_HOOKS.mageslayer.onEnergyAction(engine, p);
 }
 
 function applyEffect(p, effect) {
@@ -1853,7 +1910,7 @@ function applyOne(p, e) {
   switch (e.type) {
     case "heal": healHp(p, e.amount); break;
     case "armor": healArmor(p, e.amount); break;
-    case "points": addSkill(p, e.amount); break;
+    case "points": addSkill(p, e.amount, "passive"); break;
     case "shield": p.shield += e.amount || 1; break;
     case "draw": for (let i = 0; i < (e.amount || 1); i++) { const c = drawCardFor(p); if (c) { p.cards.push(c); onCardDrawn(p, c); } } break;
     case "redraw": {
@@ -1921,6 +1978,16 @@ function voidUltimateOnBust(p) {
     if ((p.statuses[key] || 0) > 0 && !p.seen[key]) {
       delete p.statuses[key];
       lastLog.push(`💥 ${p.name} ไพ่แตก! ท่าไม้ตาย ${TRANSFORMS[key].title} ใช้งานไม่ได้ — แต้มสกิลเสียฟรี`);
+    }
+  }
+  // ฟุจิตะ โคโตเนะ: ท่าไม้ตายในร่าง [พร้อมลุย] (kawaii/kcampus/kshuki) ทำงานที่ resolveRound ไม่ใช่ลูป afterReveal
+  //  จึงต้องลบเองที่นี่ — แต้มสกิล/เหรียญที่จ่ายไปเสียฟรี (ร่างถูกถอดไปตั้งแต่ตอนกดแล้ว)
+  if (p.characterId === "kotone") {
+    for (const key of CHAR_HOOKS.kotone.FORM_ULT_KEYS) {
+      if ((p.statuses[key] || 0) > 0 && !p.seen[key]) {
+        delete p.statuses[key];
+        lastLog.push(`💥 ${p.name} ไพ่แตก! ท่าไม้ตาย ${TRANSFORMS[key].title} ใช้งานไม่ได้ — แต้มสกิลและเหรียญเสียฟรี`);
+      }
     }
   }
   // ANATA WAAAAAAAA (เทมาริ): ผู้ใช้ไพ่แตกเอง = ท่าไม้ตายเป็นโมฆะ
@@ -1992,11 +2059,10 @@ function resetCombat(p) {
   p.appleAtkBuffs = [];  // Apple guy: บัฟพลังโจมตีจากการมอบของ — 1 หน่วย/ครั้ง (สูงสุด 2 หน่วย) นับถอยหลังแยกกัน 5 เทิร์น/หน่วย
   p.chillDodge = 100;    // Apple guy: อัตราหลบขณะชิวๆครับน้องๆ (%) — รีเซ็ตเมื่อเปิดท่าไม้ตายใหม่
   p.appleGiveUses = CHAR_HOOKS.appleguy.GIVE_USES; // Apple guy: จำนวนใช้ เอาไปสิ (เติมจากสกิลติดตัวเมื่อหลบสำเร็จ — ไม่สามารถซ้อนทับได้ เกินเพดานตัดทิ้ง)
-  // ---------- ฟุจิตะ โคโตเนะ (patch 1.9.1) ----------
-  p.coins = 0;            // กระปุกออมสินน้องหมูน้อย: coin สะสม (สูงสุด 6)
-  p.nightWork = 0;        // จำนวนครั้งที่ทำงาน Part-time ในเฟสกลางคืนนี้ (>1 = โหมงานหนัก)
-  p.overworkNext = false; // ติด [โหมงานหนัก] ตอนเริ่มเทิร์นถัดไป
-  p.senaNext = false;     // เจอท่านประธานเซนะจัง -> เทิร์นถัดไปทำอะไรไม่ได้เลย
+  // ---------- ฟุจิตะ โคโตเนะ (rework 2.3) ----------
+  p.piggy = 0;              // กระปุกออมสินน้องหมูน้อย: เงินที่หยอดไว้ (สูงสุด 15 — แปลงเป็นดาเมจผ่าน รัก รักที่สุดเลย)
+  p.senaNext = false;       // โดนท่านประธานเซนะจังเจอตัว -> เทิร์นถัดไปสตั้น 1 เทิร์น
+  p.kotoneExtraAtk = false; // Self-affirmation Explosion! Love Love: รอ postAttackFollowup อ่านเพื่อโจมตีเพิ่มอีก 1 ครั้ง
   // ---------- เจ้าแห่งเน็ตบ้าน (patch 1.9) ----------
   p.contractPartner = null; // เจ้าแห่งเน็ตบ้าน: id คู่สัญญาปัจจุบัน (มีได้ 1 คน)
   p.contractWith = null;    // ฝั่งคู่สัญญา: id เจ้าแห่งเน็ตบ้านที่ทำสัญญาด้วย
@@ -2021,14 +2087,14 @@ function resetCombat(p) {
   p.kaiLinkWith = null;     // เชื่อมต่อ (Overhaul#1): id คู่เชื่อม (มิเรอร์กัน — แยกจาก linkedWith ของ Bard)
   p.kaiRivalId = null;      // โทสะระงับด้วยโทสะ (Overhaul#3): id คู่ปรับที่ถูกบังคับโจมตี
   p.kaiSkillUsesRound = 0;   // มือซ้ายแห่งการรังสรรค์/มือขวาแห่งการลงทัณฑ์: งบรวม 2 ครั้งต่อเทิร์น ผสมกันได้อิสระ (เช่น รังสรรค์ 2 ครั้ง, หรือ 1+1)
-  // ---------- ผู้สังหารจอมมหาเวทย์ (mageslayer) ----------
+  // ---------- ผู้สังหารเมจ (mageslayer) ----------
   p.mageslayerMarkedId = null;      // ตราล่าเวท: id เป้าหมายที่มาร์กอยู่ (เคลื่อนย้ายได้)
   p.mageslayerMarks = {};
   p.kaiMarksBy = {};
   p.moonMarksBy = {};
   p.mageslayerHasMarked = false;    // เคยใช้ Witch Mark หรือยัง (ถาวร — ขับเคลื่อนภาพโปรไฟล์ MS01→MS02)
   p.mageslayerWitchMarkReadyRound = 0; // Witch Mark: รอบที่กลับมาใช้ได้หลังคูลดาวน์ 2 เทิร์น
-  p.mageslayerLockedBurden = false; // Mana Burden: Bard ที่ติดตราล่าเวทตอนโดน — ล้าง spellburden ไม่ได้แม้ต้านสถานะ
+  p.mageslayerMarkTick = 0;         // ตราล่าเวท: ตัวนับ "ทุก 2 เทิร์นขโมย 1 หน่วย"
   // ---------- ทาคุมิ ฟุจิวาระ (takumi) ----------
   p.takumiGear = 1;             // เกียร์ธรรมดา: 1-6 เริ่มเกม 1
   p.takumiSkillUsesRound = 0;   // งบสกิลรวม 5 ครั้ง/เทิร์น (พื้นฐาน/รอง/ท่าไม้ตาย ผสมกันได้อิสระ)
@@ -2250,8 +2316,7 @@ function buildStateFor(viewerId) {
     cutscene: gameState === "CUTSCENE" ? cutsceneInfo : null,
     attack: gameState === "ATTACKING" ? lastAttack : null,
     log: (gameState === "SUMMARY" || gameState === "TRANSITION" || gameState === "GAMEOVER") ? lastLog : [],
-    shop: shopItems, // ร้านค้ามายา (patch 2.2 full): สินค้าส่วนกลาง เห็นเหมือนกันทุกคน
-    uncleShop: uncleShopItems, // ร้านขายของลุงเท่ง: สินค้าส่วนกลาง (แถบที่ 2 ในหน้าร้านค้า)
+    shop: shopItems, // ร้านค้ามายา (patch 2.3): สินค้าส่วนกลางร้านเดียว เห็นเหมือนกันทุกคน
     deckLedger, // สมุดการ์ด 43 ใบ + สถานะจั่วแล้ว/ยัง (ของรอบปัจจุบัน) — กดที่กองการ์ดกลางเพื่อดู
     players: Object.values(players).map((p) => {
       const mine = p.id === viewerId;
@@ -2304,6 +2369,12 @@ function buildStateFor(viewerId) {
         basicPub = pub(CHAR_HOOKS.ignis.dynamicSkillFor(p, ch, "basic"));
         secondaryPub = pub(CHAR_HOOKS.ignis.dynamicSkillFor(p, ch, "secondary"));
         ultimatePub = pub(CHAR_HOOKS.ignis.dynamicSkillFor(p, ch, "ultimate"));
+      }
+      // ฟุจิตะ โคโตเนะ (rework 2.3): ร่าง [พร้อมลุย] ทับปุ่มทั้ง 3 ช่องด้วยท่าไม้ตาย 3/4/5 (ทับทั้งกลางวัน/กลางคืน)
+      if (ch.id === "kotone") {
+        basicPub = pub(CHAR_HOOKS.kotone.dynamicSkillFor(p, ch, "basic", nightNow));
+        secondaryPub = pub(CHAR_HOOKS.kotone.dynamicSkillFor(p, ch, "secondary", nightNow));
+        ultimatePub = pub(CHAR_HOOKS.kotone.dynamicSkillFor(p, ch, "ultimate", nightNow));
       }
       // โอกูริ แคป (Rework): ยุคทองครบ 3 + Stamina ชาร์จ 75 ขึ้นไป — ท่าไม้ตายกลายเป็น Ashen Trail
       if (ch.id === "oguri") {
@@ -2389,6 +2460,7 @@ function buildStateFor(viewerId) {
         beamAmmo: p.beamAmmo,
         puddingCount: p.puddingCount || 0,
         gold: p.gold || 0, // ร้านค้ามายา (patch 2.2 full): เหรียญสะสม — ทุกคนเห็นของกันและกันได้
+        goldMax: goldCapOf(p), // เพดานเหรียญรายบุคคล (โคโตเนะ 45 จากกระปุกออมสินน้องหมูน้อย)
         inventory: mine ? (p.inventory || []) : null, // ของในคลัง — เห็นแค่ของตัวเอง
         gutsShotTurn: mine ? (p.gutsShotTurn || 0) : undefined, // ปืน GUTS Select: ยิงไปแล้วเทิร์นไหน (เทียบกับ roundNumber = ยิงครบโควตาแล้ว)
         blackSparklenceCooldown: mine ? Math.max(0, (p.blackSparklenceReadyRound || 0) - roundNumber) : undefined,
@@ -2406,7 +2478,12 @@ function buildStateFor(viewerId) {
         appleGiveUses: p.appleGiveUses != null ? p.appleGiveUses : CHAR_HOOKS.appleguy.GIVE_USES, // Apple guy: จำนวนใช้ เอาไปสิ คงเหลือ
         tepeuCookTurns: p.tepeuCookTurns || 0,     // เทเปา: วันนี้อากาศดีจัง — เทิร์นที่เหลือก่อนได้ "มื้อที่สุข" (0 = กดใช้ได้)
         tepeuPonderTurns: p.tepeuPonderTurns || 0, // เทเปา: เป็นแบบนี้นี่เอง — ครุ่นคิดเหลือกี่เทิร์น (0 = กดใช้ได้/จั่วไพ่ได้)
-        coins: p.coins || 0,               // โคโตเนะ: coin ในกระปุกออมสิน (สูงสุด 6)
+        // ---------- ฟุจิตะ โคโตเนะ (rework 2.3) ----------
+        piggy: p.characterId === "kotone" ? (p.piggy || 0) : undefined,          // เงินในกระปุกออมสิน (สูงสุด 15)
+        piggyMax: p.characterId === "kotone" ? CHAR_HOOKS.kotone.PIGGY_MAX : undefined,
+        kotoneReady: p.characterId === "kotone" ? CHAR_HOOKS.kotone.readyStacks(p) : undefined, // [ความพร้อม] ที่สะสมอยู่
+        kotoneReadyNeed: p.characterId === "kotone" ? CHAR_HOOKS.kotone.READY_NEED : undefined,
+        kotoneForm: p.characterId === "kotone" ? CHAR_HOOKS.kotone.formActive(p) : undefined,   // อยู่ในร่าง [พร้อมลุย] หรือไม่
         shradeForm: !!p.shradeForm,        // ชเรด เอลัน: รวมร่างทำนองเพลงแล้ว (อควาเรียน สปาด้า — ถาวร)
         bardNotes: p.bardNotes || [],      // Bard: โน้ตในช่องประพันธ์เพลง (ทุกคนเห็นได้)
         bardNotesUsed: p.bardNotesUsed || 0, // Bard: โน้ตที่เติมไปแล้วเทิร์นนี้ (จำกัด 2)
@@ -2415,7 +2492,7 @@ function buildStateFor(viewerId) {
         bardPending: p.bardPending ? { name: p.bardPending.name, need: p.bardPending.need, allowSelf: p.bardPending.allowSelf } : null, // Bard: บทเพลงรอเลือกเป้าหมาย
         // ไค ชิซากิ: สรุป Overhaul tracker (ชื่อผู้ถือ+ประเภทสถานะ) — เฉพาะผู้เล่นไคเท่านั้น (ตัวอื่นเห็น undefined)
         kaiOverhaulSlots: p.characterId === "kai" ? kaiOverhaulSlots.filter((s) => s.ownerId === p.id).map((s) => ({ playerId: s.playerId, name: (players[s.playerId] && players[s.playerId].name) || "", status: s.status, img: players[s.playerId] ? displayImg(players[s.playerId]) : null })) : undefined,
-        mageslayerHasMarked: p.characterId === "mageslayer" ? !!p.mageslayerHasMarked : undefined, // ผู้สังหารจอมมหาเวทย์: เคยใช้ Witch Mark หรือยัง
+        mageslayerHasMarked: p.characterId === "mageslayer" ? !!p.mageslayerHasMarked : undefined, // ผู้สังหารเมจ: เคยใช้ Witch Mark หรือยัง
         mageslayerWitchMarkCooldown: p.characterId === "mageslayer" ? Math.max(0, (p.mageslayerWitchMarkReadyRound || 0) - roundNumber) : undefined,
         escanorCharge: p.characterId === "escanor" ? (p.escanorCharge || 0) : undefined,
         escanorChargeMax: p.characterId === "escanor" ? CHAR_HOOKS.escanor.ESCANOR_CHARGE_MAX : undefined,
@@ -2484,12 +2561,14 @@ function broadcastPositions() {
 // ============================================================
 // ครั้งแรกต่อเกม/ต่อคน = เล่นวีดีโอเต็ม (หยุดกระดาน), ครั้งต่อไป = แค่การ์ดแจ้งเตือนเล็กๆ ไม่หยุดเกม
 function triggerCutscene(p, key) {
+  // ท่าที่ไม่มีวีดีโอ (มีแต่ภาพ+เพลง เช่น kready ของโคโตเนะ) = แจ้งเตือนบนกระดานอย่างเดียว ไม่ตัดเข้าเฟส CUTSCENE
+  if (!TRANSFORMS[key] || !TRANSFORMS[key].video) { notifyTransform(p, key); return; }
   if (p.cutsceneShown[key]) notifyTransform(p, key);
   else { p.cutsceneShown[key] = true; queueCutscene(p, key); }
 }
 function queueCutscene(p, key) {
   const t = TRANSFORMS[key];
-  if (!t) return;
+  if (!t || !t.video) return;
   cutsceneQueue.push({
     seconds: t.seconds,
     info: {
@@ -2575,9 +2654,10 @@ function startMatch() {
   yunaLongingUsed = false; yunaWindowEnd = 0; yunaEffect = null; yunaTargetId = null; yunaMusicSeq = 0; yunaLongingPendingId = null; yunaPity = 0;
   overloadForceActive = false;
   overloadForceCount = 0; yuukiSpawned = false; yuukiTurns = 0; yuukiAttackTargets = [];
+  clearTurnSnapshot();
   yuukiLowShown = false; yuukiWinShown = false; yuukiDefeated = false; yuukiReactiveDrawCredits = 0;
   allyWinFlag = false;
-  shopItems = []; uncleShopItems = []; // ล้างสต็อกร้านค้าเก่าค้างจากแมตช์ก่อน (รอเปิดใหม่ตอนเทิร์นที่ 5)
+  shopItems = []; // ล้างสต็อกร้านค้าเก่าค้างจากแมตช์ก่อน (รอเปิดใหม่ตอนเทิร์นที่ 5)
   kaiOverhaulSlots = []; // ไค ชิซากิ: ล้าง tracker Overhaul ทุกครั้งที่เริ่มแมตช์ใหม่
   // อาริมะ มิยาโกะ (characters/miyako.js): เจอ โทโนะ ชิกิ หรือ นานายะ ชิกิ ในเกมเดียวกัน -> เล่นวีดีโอ arima_shiki.mp4 ก่อนเริ่มเทิร์นแรก
   cutsceneQueue = [];
@@ -2598,18 +2678,38 @@ function startMatch() {
   }
 }
 
-// ---------- ร้านค้ามายา (patch 2.2 full) ----------
-// สุ่มสินค้า 1 ชิ้น ตามน้ำหนัก: เปลี่ยนสีการ์ด 20% / โชคลาภ 5% (หายากสุด) / ต้านสถานะ 20% / ยาลดไพ่ 15% (ทั่วไป แต่ไม่หายากเท่าโชคลาภ) / ฟื้นแต้มสกิล 20% (สุ่มขนาดย่อยอีกที) / ฟื้นเกราะ 20%
-function rollShopItem() {
-  const roll = Math.random();
-  if (roll < 0.20) return { type: "cardColor", price: SHOP_CARD_COLOR_PRICE };
-  if (roll < 0.25) return { type: "fortune", price: SHOP_FORTUNE_PRICE };
-  if (roll < 0.45) return { type: "resist", price: SHOP_RESIST_PRICE };
-  if (roll < 0.60) return { type: "cardRemove", price: SHOP_CARD_REMOVE_PRICE };
-  if (roll < 0.80) {
-    const s = SHOP_SKILL_SIZES[Math.floor(Math.random() * SHOP_SKILL_SIZES.length)];
+// ---------- ร้านค้ามายา (patch 2.3: ยุบร้านลุงเท่งเข้ามาเป็นร้านเดียว) ----------
+// สุ่มสินค้า 1 ชิ้นตามน้ำหนักใน SHOP_WEIGHTS (รวม 100):
+//   เปลี่ยนสีการ์ด 15 / โชคลาภ 5 / ต้านสถานะ 15 / ยาลดไพ่ 12 / ฟื้นแต้มสกิล 14 / ฟื้นเกราะ 14 / ปืน GUTS 8 / กระสุน GUTS 14 / Hyper Key 3
+//   allowGun = false (ปืนครบ SHOP_MAX_GUNS แล้ว) / allowHyper = false (Hyper Key ครบ SHOP_MAX_HYPER แล้ว)
+//   -> น้ำหนักของที่เต็มโควตาตกไปรวมกับกระสุนธรรมดา
+function pickWeighted(entries) {
+  const total = entries.reduce((n, e) => n + e.w, 0);
+  let r = Math.random() * total;
+  for (const e of entries) { r -= e.w; if (r <= 0) return e.key; }
+  return entries[entries.length - 1].key;
+}
+function rollShopAmmo() {
+  const ammoId = pickWeighted(GUTS_AMMO_IDS.map((id) => ({ key: id, w: SHOP_AMMO_WEIGHTS[id] || 1 })));
+  return { type: "gutsAmmo", ammo: ammoId, price: GUTS_AMMO[ammoId].price };
+}
+function rollShopItem(allowGun = true, allowHyper = true) {
+  const weights = { ...SHOP_WEIGHTS };
+  if (!allowGun) { weights.gutsAmmo += weights.gutsGun; weights.gutsGun = 0; }
+  if (!allowHyper) { weights.gutsAmmo += weights.hyperTrigger; weights.hyperTrigger = 0; }
+  const type = pickWeighted(Object.entries(weights).map(([key, w]) => ({ key, w })));
+  if (type === "cardColor") return { type: "cardColor", price: SHOP_CARD_COLOR_PRICE };
+  if (type === "fortune") return { type: "fortune", price: SHOP_FORTUNE_PRICE };
+  if (type === "resist") return { type: "resist", price: SHOP_RESIST_PRICE };
+  if (type === "cardRemove") return { type: "cardRemove", price: SHOP_CARD_REMOVE_PRICE };
+  if (type === "skillPoint") {
+    const size = pickWeighted(SHOP_SKILL_SIZES.map((s) => ({ key: s.size, w: s.weight })));
+    const s = SHOP_SKILL_SIZES.find((x) => x.size === size);
     return { type: "skillPoint", size: s.size, value: s.amount, price: s.price };
   }
+  if (type === "gutsGun") return { type: "gutsGun", price: GUTS_GUN_PRICE };
+  if (type === "hyperTrigger") return { type: "gutsAmmo", ammo: "hyper_trigger", price: GUTS_AMMO.hyper_trigger.price };
+  if (type === "gutsAmmo") return rollShopAmmo();
   return { type: "armor", value: SHOP_ARMOR_AMOUNT, price: SHOP_ARMOR_PRICE };
 }
 function shopItemName(item) {
@@ -2624,34 +2724,23 @@ function shopItemName(item) {
   if (item.type === "gutsAmmo") return (GUTS_AMMO[item.ammo] || {}).name || "กระสุน";
   return "สินค้า";
 }
-// ---------- ร้านขายของลุงเท่ง ----------
-// สุ่มสินค้า 1 ชิ้น: ปืน 30% / กระสุน 70% (เฉลี่ยเท่ากันทุกแบบ)
-//  allowGun = false เมื่อรอบนี้มีปืนครบเพดานแล้ว -> สุ่มเป็นกระสุนแทนเสมอ
-function rollUncleShopItem(allowGun = true) {
-  if (allowGun && Math.random() < GUTS_GUN_CHANCE) return { type: "gutsGun", price: GUTS_GUN_PRICE };
-  const ammo = GUTS_AMMO[GUTS_AMMO_IDS[Math.floor(Math.random() * GUTS_AMMO_IDS.length)]];
-  return { type: "gutsAmmo", ammo: ammo.id, price: ammo.price };
-}
-// เปิดร้านทั้ง 2 ร้านพร้อมกัน: สุ่มสินค้าใหม่ทั้งหมด (ร้านละ 9 ชิ้น สินค้าประเภทเดียวกันขึ้นซ้ำได้)
+// เปิดร้านค้ามายา: สุ่มสินค้าใหม่ทั้งหมด 15 ช่อง (สินค้าประเภทเดียวกันขึ้นซ้ำได้)
+//  ช่องแรกช่องเดียวเป็นช่องล็อก — Trigger Dark Key โผล่แน่นอน 1 ชิ้นทุกรอบ (อิกนิสต้องมีของซื้อเสมอ) และไม่ถูกสุ่มซ้ำในช่องอื่น
+//  ที่เหลือ 14 ช่องสุ่มล้วน — Hyper Key Trigger ก็สุ่มออกเหมือนของอื่น (ไม่การันตีแล้ว) จำกัด 1 ชิ้น/รอบ
 function openShop() {
   shopRoundSeq++;
-  shopItems = [];
-  for (let i = 0; i < SHOP_MAX_ITEMS; i++) {
-    shopItems.push({ id: `shop_${shopRoundSeq}_${i}`, ...rollShopItem(), sold: false, soldTo: null });
-  }
-  // Hyper Key Trigger โผล่แน่นอน 1 ชิ้นต่อรอบร้านค้า และไม่ถูกสุ่มซ้ำในช่องอื่น
-  uncleShopItems = [
-    { id: `ushop_${shopRoundSeq}_hyper`, type: "gutsAmmo", ammo: "hyper_trigger", price: GUTS_AMMO.hyper_trigger.price, sold: false, soldTo: null },
-    { id: `ushop_${shopRoundSeq}_dark`, type: "gutsAmmo", ammo: "trigger_dark_key", price: GUTS_AMMO.trigger_dark_key.price, sold: false, soldTo: null },
+  shopItems = [
+    { id: `shop_${shopRoundSeq}_dark`, type: "gutsAmmo", ammo: "trigger_dark_key", price: GUTS_AMMO.trigger_dark_key.price, sold: false, soldTo: null },
   ];
   let guns = 0;
-  for (let i = 2; i < UNCLE_SHOP_MAX_ITEMS; i++) {
-    const rolled = rollUncleShopItem(guns < UNCLE_SHOP_MAX_GUNS);
+  let hypers = 0;
+  for (let i = 1; i < SHOP_MAX_ITEMS; i++) {
+    const rolled = rollShopItem(guns < SHOP_MAX_GUNS, hypers < SHOP_MAX_HYPER);
     if (rolled.type === "gutsGun") guns++;
-    uncleShopItems.push({ id: `ushop_${shopRoundSeq}_${i}`, ...rolled, sold: false, soldTo: null });
+    if (rolled.ammo === "hyper_trigger") hypers++;
+    shopItems.push({ id: `shop_${shopRoundSeq}_${i}`, ...rolled, sold: false, soldTo: null });
   }
   lastLog.push(`🏪 ร้านค้ามายาเปิดแล้ว! มีสินค้า ${shopItems.length} ชิ้น: ${shopItems.map(shopItemName).join(", ")}`);
-  lastLog.push(`🛒 ร้านขายของลุงเท่งเปิดแล้ว! มีสินค้า ${uncleShopItems.length} ชิ้น: ${uncleShopItems.map(shopItemName).join(", ")}`);
 }
 // ผู้เล่นมีปืนหน่วย GUTS Select อยู่ในกระเป๋าหรือยัง (มีได้กระบอกเดียว)
 function hasGutsGun(p) {
@@ -2664,11 +2753,10 @@ function hasGutsWeapon(p) {
   return hasGutsGun(p) || hasBlackSparklence(p);
 }
 // ซื้อสินค้า: ใครกดก่อนได้ก่อน (Node เป็น single-thread — ประมวลผลทีละ event จึงไม่มี race condition จริง)
-//  หาจากทั้ง 2 ร้าน (id ไม่ซ้ำกันข้ามร้าน: shop_* กับ ushop_*)
 function buyShopItem(id, itemId) {
   const p = players[id];
   if (!p || !p.alive) return;
-  const item = shopItems.find((it) => it.id === itemId) || uncleShopItems.find((it) => it.id === itemId);
+  const item = shopItems.find((it) => it.id === itemId);
   if (!item || item.sold) return;
   if ((p.gold || 0) < item.price) return;
   p.inventory = p.inventory || [];
@@ -2679,8 +2767,7 @@ function buyShopItem(id, itemId) {
   item.soldTo = p.id;
   p.gold -= item.price;
   p.inventory.push({ uid: `${item.id}_${p.inventory.length}_${Date.now()}`, type: item.type, value: item.value, size: item.size, ammo: item.ammo });
-  const shopName = item.id.startsWith("ushop_") ? "ร้านขายของลุงเท่ง" : "ร้านค้ามายา";
-  lastLog.push(`🛍️ ${p.name} ซื้อ ${shopItemName(item)} จาก${shopName} (-${item.price} เหรียญ)`);
+  lastLog.push(`🛍️ ${p.name} ซื้อ ${shopItemName(item)} จากร้านค้ามายา (-${item.price} เหรียญ)`);
   broadcastState();
 }
 // ใช้ของในคลัง
@@ -2722,7 +2809,7 @@ function useInventoryItem(id, uid, opts = {}) {
     p.busted = bustedOf(p);
     lastLog.push(`✂️ ${p.name} ใช้ยาลดไพ่ — ลดไพ่ใบล่าสุด (${cardLabel(removed)}) ออก คืนเข้ากองกลาง${p.busted ? "" : " — ไพ่ไม่แตกแล้ว!"}`);
   } else if (item.type === "skillPoint") {
-    addSkill(p, item.value);
+    addSkill(p, item.value, "item");
     lastLog.push(`⚡ ${p.name} ใช้ยาฟื้นแต้มสกิล +${item.value} จากคลัง (เพดาน ${maxSkillOf(p)})`);
   } else if (item.type === "armor") {
     const healed = healArmor(p, item.value);
@@ -2732,7 +2819,9 @@ function useInventoryItem(id, uid, opts = {}) {
     p.statuses.heroSword = 2;
     lastLog.push(`⚔️ ${p.name} ใช้ “ดาบผู้กล้า” — พลังโจมตีปกติ +2 เป็นเวลา 2 เทิร์น`);
   } else if (item.type === "wineBarrel") {
+    if (gameState !== "PLAYING" || p.locked) return; // ของกดใช้: ใช้ได้เฉพาะช่วงกำลังจั่วไพ่อยู่เท่านั้น
     if (!CHAR_HOOKS.escanor.useWineBarrel(engine, p, item)) return;
+    lastLog.push(`🍷 ${p.name} ดื่ม ${item.name || `WineBarrel Lv.${item.level || 1}`} จากคลัง`);
   } else if (item.type === "tepeuMeal") {
     const healed = healHp(p, item.value);
     lastLog.push(`🍲 ${p.name} ใช้ "มื้อที่สุข" — ฟื้นพลังชีวิต +${healed} จากคลัง`);
@@ -2925,9 +3014,6 @@ function dealRound() {
     p.hakunoGenderSwitched = false; // เธอ/นาย คือฉันหรอ?: สลับเพศได้อีก 1 ครั้งในเทิร์นใหม่นี้
     CHAR_HOOKS.hakuno.onRoundStartRest(engine, p);
 
-    // [โหมงานหนัก] (ฟุจิตะ โคโตเนะ, characters/kotone.js): ติดสถานะตอนเริ่มเทิร์นถัดจากที่โหมงานกะดึก
-    CHAR_HOOKS.kotone.onRoundStartOverworkTrigger(engine, p);
-
     // รุ่งอรุณแห่งวันใหม่ (โอเบรอน): เสียพลังชีวิตเทิร์นละ 1 หน่วยแบบไม่สนเกราะ (รวม 2 เทิร์น)
     //  ผลด้านลบจากสกิลหักเลือดได้เรื่อยๆ แต่ห้ามตาย — ค้างที่พลังชีวิต 1 หน่วย
     if ((p.sunriseDrop || 0) > 0) {
@@ -2977,7 +3063,7 @@ function dealRound() {
     // เครื่องดื่มชูกำลัง (Apple guy): เพิ่มแต้มสกิล 1 แต่เสียพลัง 1 หน่วยต่อเทิร์น
     //  ความเสียหายธรรมดา (โดนโล่/เกราะก่อน ไม่เจาะเกราะ) และไม่ถึงตาย — เลือดค้างที่ 1
     if ((p.statuses.energy || 0) > 0) {
-      addSkill(p, 1);
+      addSkill(p, 1, "item");
       if (p.shield > 0 || p.armor > 0 || (p.tempHp || 0) > 0 || p.hp > 1) {
         damageSoft(p);
         lastLog.push(`🥤 ${p.name} เครื่องดื่มชูกำลังออกฤทธิ์ — แต้มสกิล +1 เสียพลัง 1 หน่วย (เกราะก่อน)`);
@@ -3054,7 +3140,7 @@ function dealRound() {
     CHAR_HOOKS.bat_ben.onRoundStartTick(engine, p);
     // ---------- เจ้าหญิงราก (characters/princess_shiki.js): แต้มสกิลฟื้นเองทุกเทิร์น ----------
     CHAR_HOOKS.princess_shiki.onRoundStartTick(engine, p);
-    // ---------- ฟุจิตะ โคโตเนะ (characters/kotone.js): Sleeping time / [เช้าที่สดใส] / ท่านประธานเซนะจัง / [โหมงานหนัก] สุ่มสตั้น ----------
+    // ---------- ฟุจิตะ โคโตเนะ (characters/kotone.js): Sleeping time (ฮีล/แต้มสกิลต่อเทิร์น) + สตั้นจากท่านประธานเซนะจัง ----------
     CHAR_HOOKS.kotone.onRoundStartTick(engine, p);
     // Gargorgon Ray (ปืนหน่วย GUTS Select): ผลหน่วง 1 เทิร์น — เช็คต้านสถานะตอนนี้ (เป้าหมายซื้อยาต้านมากันไว้ทัน)
     //  ต้องอยู่ "ก่อน" บล็อกเช็คสตั้นด้านล่าง ไม่งั้นสตั้นจะข้ามไปมีผลอีกเทิร์นหนึ่ง
@@ -3095,6 +3181,7 @@ function dealRound() {
 
   const yuukiUltimateDue = !!yuukiBoss() && yuukiTurns > 0 && yuukiTurns % 5 === 0;
   if (yuukiUltimateDue) queueYuukiCutscene(YUUKI_VIDEO.ultimate, "STAR OF FALL", 7, "yuukiUltimate");
+  captureTurnSnapshot(); // จุดย้อนเวลาของเทิร์นนี้ (เอฟเฟกต์ต้นเทิร์นทำงานครบแล้ว ยังไม่มีใครกดอะไร)
   gameState = "PLAYING";
   startPhaseTimer(CARD_TIME, resolveRound);
   if (cutsceneQueue.length) { pausePlayingForCutscene(yuukiUltimateDue ? applyYuukiUltimate : undefined); return; } // วีดีโอทำงานก่อนผล Star of Fall
@@ -3301,6 +3388,9 @@ function useSkill(id, tier, targets, item) {
   if (tier === "ultimate" && ch.ultimateNight && isNightRound(roundNumber)) skill = ch.ultimateNight;
   if (tier === "secondary" && ch.secondaryNight && isNightRound(roundNumber)) skill = ch.secondaryNight;
   if (tier === "basic" && ch.basicNight && isNightRound(roundNumber)) skill = ch.basicNight;
+  // ฟุจิตะ โคโตเนะ (rework 2.3): ร่าง [พร้อมลุย] ทับปุ่มทั้ง 3 ช่อง — ต้องอยู่ "หลัง" การสลับกลางคืนด้านบน
+  if (ch.id === "kotone") skill = CHAR_HOOKS.kotone.dynamicSkillFor(p, ch, tier, isNightRound(roundNumber));
+  if (!skill) return;
   if ((p.statuses.noskill || 0) > 0) return; // โดนหอกลองกินัสปัก: เทิร์นนี้ใช้สกิลไม่ได้
   if (isTriggerSkill && tier === "secondary" && (!(p.statuses.triggerCircle > 0) || p.statuses.triggerMulti > 0 || p.statuses.triggerZeperion > 0)) return;
   if (isTriggerSkill && tier === "ultimate" && (!(p.statuses.triggerCircle > 0) || p.statuses.triggerMulti > 0 || p.statuses.triggerZeperion > 0)) return;
@@ -3314,8 +3404,6 @@ function useSkill(id, tier, targets, item) {
   if (isGambler && goldenOn && (tier === "basic" || tier === "secondary")) cost = Math.ceil(cost / 2);
   // กลางคืน (patch 2.1.7): สกิลที่สุ่มโดนคืนนี้ (พื้นฐาน/รอง อย่างใดอย่างหนึ่ง) ใช้แต้มมากขึ้น +1 — ไม่เกิน 8 ไม่มีผลกับท่าไม้ตาย
   if (p.nightTaxTier === tier && cost < 8) cost += 1;
-  // [โหมงานหนัก] (โคโตเนะ): ใช้แต้มสกิลเพิ่มขึ้น 1 แต้มทุกสกิล
-  if (p.characterId === "kotone" && CHAR_HOOKS.kotone.overworkActive(p)) cost += 1;
   // ---------- โอกูริ แคป (Rework): เงื่อนไข Energy / Stamina ชาร์จ ----------
   const isOguri = p.characterId === "oguri";
   const isBreakfast = isOguri && tier === "basic";
@@ -3448,20 +3536,12 @@ function useSkill(id, tier, targets, item) {
     appleTarget = CHAR_HOOKS.appleguy.prepareGiveTarget(engine, p, targets);
     if (!appleTarget) return;
   }
-  // ---------- ฟุจิตะ โคโตเนะ (patch 1.9.1 / rework 2.1.3) ----------
+  // ---------- ฟุจิตะ โคโตเนะ (rework 2.3, characters/kotone.js) ----------
+  //  ทุกท่าไม่ต้องเลือกเป้าหมาย (ตีหมู่/ใส่ตัวเอง) — เงื่อนไขการกดทั้งหมดอยู่ที่ canUseSkill()
   const isKotone = p.characterId === "kotone";
   const kotoneNight = isNightRound(roundNumber);
-  const isPartTime = isKotone && tier === "basic";                    // Part-time (กลางวัน/กะดึก)
-  const isDance = isKotone && tier === "secondary" && !kotoneNight;   // สกิลรอง (คอส coin ล้วน — แทน Dance Lession เดิม)
-  const isKSleep = isKotone && tier === "secondary" && kotoneNight;   // สกิลรอง 2 — Sleeping time
-  const isKawaii = isKotone && tier === "ultimate";                   // Sekai ichi kawaii watashi
-  if (isPartTime && CHAR_HOOKS.kotone.overworkActive(p)) return;                        // โหมงานหนัก: Part-time ใช้ไม่ได้
-  if (isDance && CHAR_HOOKS.kotone.overworkActive(p)) return;                           // โหมงานหนัก: สกิลรอง ใช้ไม่ได้
-  if (isDance && (p.coins || 0) < KOTONE_DANCE_COIN_COST) return;    // สกิลรอง (patch 2.2.2): ต้องมี coin อย่างน้อย 3 เหรียญ
-  if (isKawaii && (CHAR_HOOKS.kotone.overworkActive(p) || kotoneNight)) return;         // ท่าไม้ตาย: ใช้ไม่ได้ตอนกลางคืน/โหมงานหนัก
-  if (isKSleep && (p.statuses.ksleep || 0) > 0) return;               // หลับอยู่แล้ว กดซ้ำไม่ได้
-  // Sekai ichi kawaii watashi (โคโตเนะ patch 2.2.2): ตีหมู่ทุกคนแล้ว ไม่ต้องเลือกเป้าหมายอีกต่อไป
-  // Dance Lession (patch พิเศษ): ใช้ใส่ตัวเองเท่านั้น — ไม่ต้องเลือกเป้าหมายอีกต่อไป
+  const kotoneWasForm = isKotone && CHAR_HOOKS.kotone.formActive(p); // อยู่ร่าง [พร้อมลุย] ตอนกด (ท่าจะถอดร่างทีหลัง)
+  if (isKotone && !CHAR_HOOKS.kotone.canUseSkill(engine, p, tier, skill, kotoneNight)) return;
   // ---------- ชเรด เอลัน (patch พิเศษ) ----------
   const isShrade = p.characterId === "shrade_elan";
   const isShradeBasic = isShrade && tier === "basic";                        // เชิญรับฟัง
@@ -3574,7 +3654,7 @@ function useSkill(id, tier, targets, item) {
     kaiMarkTarget = CHAR_HOOKS.kai.prepareMarkTarget(engine, p, targets);
     if (!kaiMarkTarget) return;
   }
-  // ---------- ผู้สังหารจอมมหาเวทย์ (characters/mageslayer.js): Witch Mark / Mana Rupture / Mana Burden ----------
+  // ---------- ผู้สังหารเมจ (characters/mageslayer.js): Witch Mark / Mana Rupture / Mana Burden ----------
   const isMsWitchMark = p.characterId === "mageslayer" && tier === "basic";
   let msWitchMarkTarget = null;
   if (isMsWitchMark) {
@@ -3665,9 +3745,11 @@ function useSkill(id, tier, targets, item) {
     flashSuffix = CHAR_HOOKS.appleguy.applyGiveEffect(engine, p, appleTarget, skill.name);
   }
   // ---------- ฟุจิตะ โคโตเนะ (characters/kotone.js) ----------
-  if (isPartTime) flashSuffix = CHAR_HOOKS.kotone.applyPartTimeEffect(engine, p);
-  if (isDance) CHAR_HOOKS.kotone.applyDanceEffect(engine, p);
-  if (isKSleep) CHAR_HOOKS.kotone.applyKSleepEffect(engine, p);
+  //  ท่าไม้ตายในร่าง [พร้อมลุย] จ่าย 6 เหรียญเพิ่มจากแต้มสกิล (ผลจริงทำงานหลังเปิดไพ่ที่ resolveFormUlts)
+  if (isKotone) {
+    flashSuffix = CHAR_HOOKS.kotone.payFormUltGold(engine, p, skill) || flashSuffix;
+    flashSuffix = CHAR_HOOKS.kotone.applyInstantSkill(engine, p, tier, kotoneNight) || flashSuffix;
+  }
   // ---------- ชเรด เอลัน (characters/shrade_elan.js) ----------
   if (isShradeBasic) flashSuffix = CHAR_HOOKS.shrade_elan.applyBasicEffect(engine, p);
   if (isShradeMoon && shradeMoonTarget) flashSuffix = CHAR_HOOKS.shrade_elan.applyMoonEffect(engine, p, shradeMoonTarget, skill.name);
@@ -3697,7 +3779,7 @@ function useSkill(id, tier, targets, item) {
   // ---------- ไค ชิซากิ (characters/kai.js) ----------
   if (isKaiCreation && kaiMarkTarget) flashSuffix = CHAR_HOOKS.kai.applyMark(engine, p, kaiMarkTarget, "kaiCreation", "รังสรรค์");
   if (isKaiPunishment && kaiMarkTarget) flashSuffix = CHAR_HOOKS.kai.applyMark(engine, p, kaiMarkTarget, "kaiPunishment", "ลงทัณฑ์");
-  // ---------- ผู้สังหารจอมมหาเวทย์ (characters/mageslayer.js) ----------
+  // ---------- ผู้สังหารเมจ (characters/mageslayer.js) ----------
   if (isTriggerSkill) CHAR_HOOKS.ultraman_trigger.applySkill(engine, p, tier);
   if (isHisakawaSkill) flashSuffix = CHAR_HOOKS.hisakawa_sister.applySkill(engine, p, tier, skill) || flashSuffix;
   if (isIgnisSteal && ignisStealTarget) flashSuffix = CHAR_HOOKS.ignis.applySteal(engine, p, ignisStealTarget) || flashSuffix;
@@ -3707,6 +3789,7 @@ function useSkill(id, tier, targets, item) {
   if (isMsRupture && msRuptureTarget) flashSuffix = CHAR_HOOKS.mageslayer.applyRuptureEffect(engine, p, msRuptureTarget, skill.name);
   if (isMsBurden) {
     p.transformAt = ++transformCounter; // Mana Burden: BGM mageslayer_ult ใช้ลำดับนี้ตัดสินว่าใครล่าสุด
+    p.statuses.mageslayerBurdenBgm = 5;  // ตัวจับเวลาเพลงพื้นหลัง (อายุเท่าภาระเวท/ดูดซับเวทที่แจกออกไป)
     CHAR_HOOKS.mageslayer.applyManaBurden(engine, p);
   }
   // ---------- ทาคุมิ ฟุจิวาระ (characters/takumi.js) ----------
@@ -3837,11 +3920,11 @@ function useSkill(id, tier, targets, item) {
   // ---------- โอเบรอน: Lie Like Vortigern (Rework 2 — ทำงานทันทีก่อนเปิดการ์ด, characters/oberon.js) ----------
   if (st === "vortigern") CHAR_HOOKS.oberon.applyVortigernEffect(engine, p);
 
-  // ข้อเสียโคโตเนะ (characters/kotone.js): 40% เมื่อใช้สกิลใดๆ จะเจอท่านประธานเซนะจัง -> เทิร์นถัดไปทำอะไรไม่ได้เลย
-  if (isKotone) CHAR_HOOKS.kotone.maybeTriggerSena(engine, p);
+  // ข้อเสียโคโตเนะ (characters/kotone.js): 20% เมื่อใช้สกิลพื้นฐาน/พื้นฐาน 2/สกิลรอง -> โดนท่านประธานเซนะจังเจอตัว สตั้นตัวเอง 1 เทิร์น
+  if (isKotone) CHAR_HOOKS.kotone.maybeTriggerSena(engine, p, tier, kotoneWasForm);
 
-  // ผู้สังหารจอมมหาเวทย์ (characters/mageslayer.js): ทุกครั้งที่ผู้เล่นคนใดใช้สกิลสำเร็จ — เช็คว่าถูกตราล่าเวทมาร์กอยู่ไหม
-  CHAR_HOOKS.mageslayer.onTargetUsedSkill(engine, p);
+  // ดูดซับเวท (characters/mageslayer.js): ทุกครั้งที่ผู้เล่นคนใดกดสกิลสำเร็จ — ถ้าติด [ดูดซับเวท] 35% ถูกขโมยพลังงาน 1
+  CHAR_HOOKS.mageslayer.onEnergyAction(engine, p);
   CHAR_HOOKS.escanor.onSkillUsed(engine, p);
 
   // สกิลช่วงจั่วการ์ด (instant): เด้งโชว์ทันทีบนกระดานของทุกคน ไม่ต้องรอเปิดไพ่/ไม่ตัดจอดำ
@@ -4181,6 +4264,55 @@ function checkAllLocked() {
   if (humans.every((p) => p.locked) && !pendingAnswer) resolveRound();
 }
 
+// ---------- ย้อนเทิร์น (Overload Force) ----------
+// สแนปช็อตสภาพผู้เล่นทั้งหมด ณ "ต้นช่วงจั่วไพ่" ของเทิร์นปัจจุบัน (หลังเอฟเฟกต์ต้นเทิร์นทำงานครบแล้ว)
+// ใช้ตอนเกิด Overload Force เพื่อย้อนทุกการกระทำในเทิร์นนั้นทิ้ง — คืนแต้มสกิล/โควตาสกิลที่กดไป/ไอเทม/เหรียญ
+// ให้ครบ เพราะ Overload Force แจกไพ่ใหม่ในเทิร์นเดิม ถ้าไม่ย้อน คนที่กดสกิล "หลังเปิดไพ่" จะเสียของฟรี
+let turnSnapshot = null;
+
+function captureTurnSnapshot() {
+  try {
+    turnSnapshot = {
+      players: structuredClone(players),
+      roundSkills: structuredClone(roundSkills),
+      shopItems: structuredClone(shopItems),
+      kaiOverhaulSlots: structuredClone(kaiOverhaulSlots),
+      g: {
+        cycleShift, nightResetPending, oberonDevour, dayForceUntil, transformCounter,
+        yunaLongingUsed, yunaWindowEnd, yunaEffect, yunaTargetId, yunaLongingPendingId, yunaPity,
+      },
+    };
+  } catch { turnSnapshot = null; }
+}
+
+function clearTurnSnapshot() { turnSnapshot = null; }
+
+function restoreTurnSnapshot() {
+  const snap = turnSnapshot;
+  turnSnapshot = null;
+  if (!snap) return false;
+  for (const [id, saved] of Object.entries(snap.players)) {
+    const live = players[id];
+    if (!live) continue; // ออกจากเกมไปแล้วระหว่างเทิร์น — ไม่ปลุกกลับ
+    // ข้อมูลการเชื่อมต่อเป็นของ "ปัจจุบัน" เสมอ ห้ามย้อน ไม่งั้น reconnect/disconnect กลางเทิร์นจะพัง
+    const keep = {
+      socketId: live.socketId, connected: live.connected,
+      sessionToken: live.sessionToken, ready: live.ready,
+    };
+    for (const k of Object.keys(live)) delete live[k];
+    Object.assign(live, structuredClone(saved), keep);
+  }
+  roundSkills = snap.roundSkills;
+  shopItems = snap.shopItems;
+  kaiOverhaulSlots = snap.kaiOverhaulSlots;
+  ({
+    cycleShift, nightResetPending, oberonDevour, dayForceUntil, transformCounter,
+    yunaLongingUsed, yunaWindowEnd, yunaEffect, yunaTargetId, yunaLongingPendingId, yunaPity,
+  } = snap.g);
+  lastAttack = null;
+  return true;
+}
+
 function beginOverloadForceDraw() {
   centralDeck = buildCentralDeck();
   roundWinnerId = null;
@@ -4226,7 +4358,13 @@ function triggerOverloadForce() {
   overloadForceCount++;
   overloadForceActive = true;
   overloadForceSeq++;
-  if (overloadForceCount === 3 && !yuukiSpawned) {
+  // ย้อนทุกการกระทำในเทิร์นนี้ก่อนแจกไพ่ใหม่ — สกิลที่กดไป/แต้มสกิล/ไอเทม/เหรียญ ได้คืนทั้งหมด
+  //  (บั๊กเดิม: สกิลที่ทำงาน "หลังเปิดไพ่" ถูกล้างทิ้งพร้อมมือไพ่ เจ้าของเสียแต้มกับสกิลไปฟรีๆ)
+  if (restoreTurnSnapshot()) {
+    lastLog.push("↩️ Overload Force ย้อนเวลาเทิร์นนี้กลับไปก่อนทุกการกระทำ — แต้มสกิล สกิลที่ใช้ และไอเทมถูกคืนทั้งหมด");
+  }
+  // ยูกิ Overload เกิดได้เฉพาะโหมด Over Load เท่านั้น — ffa/duo/trio ไม่มีทางเจอบอส
+  if (gameMode === "overload" && overloadForceCount === 3 && !yuukiSpawned) {
     createYuukiBoss();
     yuukiTurns = 1;
     cutsceneQueue = [];
@@ -4334,6 +4472,10 @@ function resolveRound() {
     u.anataTargets = null;
   }
 
+  // ฟุจิตะ โคโตเนะ (characters/kotone.js): ท่าไม้ตายในร่าง [พร้อมลุย] — ทำงานหลังเปิดไพ่ แต่ต้องอยู่ "ก่อน"
+  //  การหาผู้ชนะ เพราะผล "บังคับแตก" เปลี่ยนผู้ชนะของรอบนี้ (เหตุผลเดียวกับ ANATA ด้านบน)
+  CHAR_HOOKS.kotone.resolveFormUlts(engine);
+
   // ตอนสรุปรอบยูกิจั่วแก้มือได้อีกไม่เกิน 2 ใบ แล้วจึงล็อกมือ
   yuukiReactiveDrawCredits = 0;
   autoPlayYuuki(true, 2);
@@ -4377,7 +4519,7 @@ function resolveRound() {
     // เทเปา (characters/tepeu.js): รีเซ็ตเคาน์เตอร์แพ้ติดกัน + สมองอันชาญฉลาด
     CHAR_HOOKS.tepeu.onRoundWin(engine, w, combatants);
     // ระบบเหรียญ (patch 2.2 full): ชนะการจั่วได้เหรียญเพิ่ม +1 (เพดาน 30)
-    if (!isYuuki(w) && (w.gold || 0) < GOLD_MAX) w.gold = Math.min(GOLD_MAX, (w.gold || 0) + GOLD_WIN_BONUS);
+    if (!isYuuki(w)) addGold(w, GOLD_WIN_BONUS);
     // patch 2.1.3.5: ชนะจั่วการ์ดไม่ได้แต้มสกิลอีกต่อไป
     firePassive(w, "win");
     if (tied.length > 1) {
@@ -4409,6 +4551,13 @@ function resolveRound() {
         addSkill(l, 1);
         firePassive(l, "lose");
         lastLog.push(`🦖 ${l.name} ร่างไคจู — ไม่รับความเสียหายจากการแพ้`);
+        continue;
+      }
+      if (bustedOf(l) && CHAR_HOOKS.escanor.bustDamageImmune(l)) {
+        // เอสคานอร์ร่าง Last Stand: ไม่รับความเสียหายจากการที่ไพ่แตก (ยังได้แต้มสกิลจากการแพ้ตามปกติ)
+        addSkill(l, 1);
+        firePassive(l, "lose");
+        lastLog.push(`🔥 ${l.name} Last Stand — ไม่รับความเสียหายจากการที่ไพ่แตก`);
         continue;
       }
       if (CHAR_HOOKS.eva13.isLossImmune(engine, l)) {
@@ -4518,9 +4667,9 @@ function afterResolve() {
         p.seen[key] = true;
         p.transformAt = ++transformCounter;
         // สวมเกราะราชัน: เพิ่มแค่เพดานเกราะ +3 (ไม่ฟื้นเกราะให้ — เกราะที่มีคงเดิม รอฟื้นฟูเองต้นรอบ)
-        // Sekai ichi kawaii watashi (โคโตเนะ patch 2.2.2): ตีหมู่ทุกคน (ยกเว้นตัวเอง) ดาเมจ 3 หน่วย + สตั้น 2 เทิร์น
-        //  ไม่ใช้ coin แล้ว (เดิมต้องมี 3 coin + หักตอนกด)
-        if (key === "kawaii") CHAR_HOOKS.kotone.activateKawaii(engine, p);
+        // หนูพร้อมแล้วคะ โปรดิวเซอร์ (โคโตเนะ rework 2.3): หัก [ความพร้อม] 4 หน่วยเข้าสู่ร่าง [พร้อมลุย]
+        //  (ท่าไม้ตาย 3/4/5 ในร่างนี้ไม่ผ่านลูปนี้ — ต้องบังคับแตกก่อนตัดสินผู้ชนะ ดู resolveFormUlts ใน resolveRound)
+        if (key === "kready") CHAR_HOOKS.kotone.activateReady(engine, p);
         // Lai Rhyme Goodfellow (โอเบรอน, characters/oberon.js) — Lie Like Vortigern ย้ายไปทำงานทันทีก่อนเปิดการ์ดแล้ว (ดู useSkill()'s st === "vortigern")
         if (key === "lai") CHAR_HOOKS.oberon.applyLaiEffect(engine, p);
         {
@@ -4571,7 +4720,6 @@ function afterSummary() {
   if (winner && winner.alive && (
     (winner.statuses.ksleep || 0) > 0 ||
     (winner.statuses.stun || 0) > 0 || // สตั้น (สถานะพื้นฐาน patch 2.0.8) — รวม kstun (โคโตเนะ [โหมงานหนัก]) เข้ามาแล้ว
-    (winner.statuses.sena || 0) > 0 ||
     (winner.statuses.riddheguard || 0) > 0 // ฉันจะไม่ยอมสูญเสียใครไปอีก (ริดดี้): แม้ชนะการจั่วก็ตีไม่ได้
   )) {
     lastLog.push(`💤 ${winner.name} ไม่อยู่ในสภาพจะโจมตีใคร — ไม่มีเทิร์นโจมตี`);
@@ -4662,6 +4810,10 @@ function postAttackFollowup(attacker) {
   // สึงาชิ ทาคุโตะ (characters/takuto.js): อย่างนายน่ะ จะไปเข้าใจอะไร (พิชิตแสงดาว) — หลังคอมโบ Saphir+Emeraude โอกาส 50% ได้โจมตีต่อเป็นครั้งที่ 3
   if (attacker && attacker.alive && attacker.characterId === "takuto") {
     if (CHAR_HOOKS.takuto.startThirdAttack(engine, attacker)) return;
+  }
+  // ฟุจิตะ โคโตเนะ (characters/kotone.js): Self-affirmation Explosion! Love Love — โจมตีเพิ่มอีก 1 ครั้ง
+  if (attacker && attacker.alive && attacker.characterId === "kotone") {
+    if (CHAR_HOOKS.kotone.startExtraAttack(engine, attacker)) return;
   }
   if (CHAR_HOOKS.hisakawa_sister.startHayateAssistAttack(engine, attacker)) {
     gameState = "ATTACK";
@@ -4801,13 +4953,12 @@ function doAttack(byId, targetId) {
     if (Math.random() * 100 < evadePct) {
       // patch 2.1.3.5: ถูกโจมตีไม่ได้แต้มสกิลอีกต่อไป (แม้หลบพ้น)
       target.wasAttacked = true;
-      CHAR_HOOKS.mageslayer.onAttackDodgeSteal(engine, attacker, target); // ตราล่าเวท: หลบหลีกได้ยังถูกขโมยพลังงาน 1 หน่วยเสมอ
       lastLog.push(`💨 หลบหลีก! ${target.name} หลบการโจมตีของ ${attacker.name} ได้ (${evadePct}%) — เหลือหลบหลีกอีก ${target.statuses.evade || 0} ครั้ง`);
       lastAttack = {
         id: ++attackSeq,
         byName: attacker.name, byImg: displayImg(attacker), byColor: POSITION_COLORS[attacker.position] || "#888",
         byDoomWeapon: attacker.characterId === "doomguy" ? attacker.doomWeapon : undefined, // DoomGuy: อาวุธที่ใช้ยิงตอนนี้ (เสียงยิงฝั่ง client)
-        byAttackSound: attacker.characterId === "mageslayer" ? "mageslayer_attack" : undefined, // ผู้สังหารจอมมหาเวทย์: เสียงโจมตีปกติเฉพาะตัว (BA.mp3)
+        byAttackSound: attacker.characterId === "mageslayer" ? "mageslayer_attack" : undefined, // ผู้สังหารเมจ: เสียงโจมตีปกติเฉพาะตัว (BA.mp3)
         targetName: target.name, targetImg: displayImg(target), targetColor: POSITION_COLORS[target.position] || "#888",
         dmg: 0, dodge: true, fxMs: ATTACKFX_TIME * 1000,
         skills: [{ name: `หลบหลีก (${evadePct}%)`, img: BARD_CRIMSON_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888", side: "def" }],
@@ -4901,7 +5052,7 @@ function doAttack(byId, targetId) {
         id: ++attackSeq,
         byName: attacker.name, byImg: displayImg(attacker), byColor: POSITION_COLORS[attacker.position] || "#888",
         byDoomWeapon: attacker.characterId === "doomguy" ? attacker.doomWeapon : undefined, // DoomGuy: อาวุธที่ใช้ยิงตอนนี้ (เสียงยิงฝั่ง client)
-        byAttackSound: attacker.characterId === "mageslayer" ? "mageslayer_attack" : undefined, // ผู้สังหารจอมมหาเวทย์: เสียงโจมตีปกติเฉพาะตัว (BA.mp3)
+        byAttackSound: attacker.characterId === "mageslayer" ? "mageslayer_attack" : undefined, // ผู้สังหารเมจ: เสียงโจมตีปกติเฉพาะตัว (BA.mp3)
         targetName: target.name, targetImg: displayImg(target), targetColor: POSITION_COLORS[target.position] || "#888",
         dmg: 0, dodge: true, fxMs: ATTACKFX_TIME * 1000,
         skills: [{ name: "อย่าได้ไล่ตามหัวหน้า (การโจมตีถูกลบล้าง)", img: SATORU_PROFILE_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888", side: "def" }],
@@ -4921,7 +5072,7 @@ function doAttack(byId, targetId) {
     base,
     gingastriumAtk, ginga, storiumAtk, beam, paradiseAtk, ohger, spearAtk, profitAtk,
     isRevenge, isRival, ntdBonus, unibeam2Atk, lastStanding, veilAtk, empowerAtk, oberonZero,
-    oberonDayAtk, appleAtk, tigerAtk, partnerAtk, pigDmg, kotoneExhausted, kotoneAtk, shradeAtk,
+    oberonDayAtk, appleAtk, tigerAtk, partnerAtk, kotoneLove, kotoneLoveDmg, shradeAtk,
     shradeDayOff, oguriGoldAtk, victoryAtk, beamPlusAtk, riddheNtdOn, riddheUltBonus, riddheP1Atk,
     riddheAvAtk, phenexPurgeAtk, miyakoUltAtk, hakunoInvertAtk, hakunoNoRegenAtk,
     rachanAtk, fourthAtk, doomLockonAtk, cardAtkBonus, heroSwordAtk,
@@ -4930,8 +5081,7 @@ function doAttack(byId, targetId) {
   } = computeAttackBase(engine, attacker, target);
   // ผกผัน (สถานะ Universal patch 2.2.1): โบนัสพลังโจมตีที่ควรได้ กลับกลายเป็นลดพลังโจมตีแทน (คำนวณรอบเพดานฐาน 1 หน่วย)
   if (invertActive(attacker)) base = Math.max(0, 1 - (base - 1));
-  if (kotoneExhausted) base = 0;
-  let dmg = base + (kotoneExhausted ? 0 : ntdBonus);
+  let dmg = base + ntdBonus;
   // เสริมพลัง / อ่อนแอ (สถานะพื้นฐาน patch 2.0.8): เพิ่ม/ลดดาเมจที่ทำได้ตามจำนวนที่ระบุ
   const mightAtk = attacker.characterId === "ultraman_trigger" ? 0 : statusAmtOf(attacker, "might");
   if (mightAtk > 0) dmg += mightAtk;
@@ -4959,8 +5109,6 @@ function doAttack(byId, targetId) {
     dmg = Math.min(HIKARU_STORIUM_TOTAL_CAP, storiumAtkPart + storiumBurnPart);
     delete attacker.statuses.storium;
   }
-  CHAR_HOOKS.kotone.onAttackConsumeCoins(engine, attacker, pigDmg);
-  if (kotoneExhausted) lastLog.push(`🥱 ${attacker.name} พักผ่อนไม่พอจาก [โหมงานหนัก] — พลังโจมตีช่วงเช้าเหลือ 0`);
   // ชำระค่าบริการ (สกิลติดตัวเจ้าแห่งเน็ตบ้าน): คู่สัญญาโจมตีใส่ตัวละครนี้ ความเสียหายลด 1
   const contractGuard = target.characterId === "broadband_man" && target.contractPartner === attacker.id && attacker.contractWith === target.id;
   if (contractGuard) dmg = Math.max(0, dmg - 1);
@@ -5038,13 +5186,14 @@ function doAttack(byId, targetId) {
   if (attackerBeat || profitAtk > 0 || phenexPurgeAtk || doomPierceAtk) dealDirect(target, dmg, true); // ประกายเขี้ยวปฏิปักษ์ / กำไรเท่าตัวโว้ย / อย่าอยู่เลย แกน่ะ!: ทะลุเกราะเข้าเลือดจริง
   else dealMixed(target, dmg, true);               // กฎปกติ: ลดเกราะก่อน ถ้าไม่มีเกราะจึงเข้าเลือดจริง
   CHAR_HOOKS.escanor.onNormalAttackReceived(engine, attacker, target, escanorFormBeforeHit);
-  // ผู้สังหารจอมมหาเวทย์ (characters/mageslayer.js): ขโมยพลังงาน (min1/max4) / ผนึกพลังงานถ้าเป้าหมายพลังงาน 0 / เคลียร์ Fury stack
+  // ผู้สังหารเมจ (characters/mageslayer.js): Fury — สูบพลังชีวิตและมอบ [ดูดซับเวท] ตามขั้น แล้วเคลียร์สต็อก
+  //  (การขโมยพลังงานจากตราล่าเวททำที่ท่อดาเมจกลาง mageslayerMarkSteal ไปแล้ว)
   CHAR_HOOKS.mageslayer.onAttackPostDamage(engine, attacker, target, dmg);
   CHAR_HOOKS.ultraman_trigger.onAttackLanded(engine, attacker, target, {
     triggerCircleAtk, triggerMultiAtk, triggerZeperionAtk, triggerLightBonus,
   });
-  // สกิลรอง (ฟุจิตะ โคโตเนะ, characters/kotone.js): บัฟพลังโจมตีพื้นฐาน +2 ใช้แล้วหมดไปทันทีเมื่อได้โจมตี
-  CHAR_HOOKS.kotone.onAttackConsumeDanceBuff(engine, attacker);
+  // (รัก รักที่สุดเลย) (ฟุจิตะ โคโตเนะ, characters/kotone.js): ใช้แล้วหมดไปทันที และล้างกระปุกออมสินทั้งหมด
+  CHAR_HOOKS.kotone.onAttackConsumeLove(engine, attacker);
   // Ginga Strium (ฮิคารุ, characters/hikaru.js): โจมตีโดนเป้าหมาย -> ติดลุกไหม้ให้เป้าหมาย / ถูกโจมตีขณะอยู่ในร่างนี้ -> ผู้โจมตีติดลุกไหม้สวนกลับ
   CHAR_HOOKS.hikaru.onAttackBurnApply(engine, attacker, target);
   const escanorAttackVideoQueued = CHAR_HOOKS.escanor.onAttackLanded(engine, attacker, target);
@@ -5259,9 +5408,7 @@ function doAttack(byId, targetId) {
   if (profitAtk > 0) addFx({ name: `กำไรเท่าตัวโว้ย +${profitAtk} (ทะลุเกราะ)`, img: "/characters/gambler/gambler_skill2.jpg", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
   if (appleAtk > 0) addFx({ name: `เอาไปสิ +${appleAtk} (บัฟมอบของ)`, img: "/characters/appleguy/appleguy_skill2.jpg", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
   if (tigerAtk) addFx({ name: "เสือนอนกิน +1", img: "/characters/broadband_man/broadband_man_skill1.jpg", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (pigDmg > 0) addFx({ name: `กระปุกออมสินน้องหมูน้อย +${pigDmg}`, img: "/characters/kotone/kotone.jpg", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (kotoneAtk) addFx({ name: `เพลงฝึกซ้อม +${KOTONE_DANCE_ATK_BONUS}`, img: "/characters/kotone/kotone_skill2.jpg", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (kotoneExhausted) addFx({ name: "โหมงานหนัก (พลังโจมตี 0)", img: "/characters/kotone/kotone.jpg", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
+  if (kotoneLove) addFx({ name: `รัก รักที่สุดเลย +${kotoneLoveDmg} (กระปุกออมสิน)`, img: "/characters/kotone/rework/KotonePFP.png", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
   if (partnerAtk) addFx({ name: "คู่สัญญา +1 (สนใจใช้บริการเราไหม)", img: "/characters/broadband_man/broadband_man_skill3.jpg", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
   if (contractGuard) addFx({ name: "ชำระค่าบริการ (ความเสียหายลด 1)", img: "/characters/broadband_man/broadband_man.jpg", by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
   if (paradiseAtk && !isRevenge) addFx(skillByStatus(attacker, "paradise"), "atk");
@@ -5329,7 +5476,7 @@ function doAttack(byId, targetId) {
     id: ++attackSeq,
     byName: attacker.name, byImg: displayImg(attacker), byColor: POSITION_COLORS[attacker.position] || "#888",
         byDoomWeapon: attacker.characterId === "doomguy" ? attacker.doomWeapon : undefined, // DoomGuy: อาวุธที่ใช้ยิงตอนนี้ (เสียงยิงฝั่ง client)
-        byAttackSound: attacker.characterId === "mageslayer" ? "mageslayer_attack" : undefined, // ผู้สังหารจอมมหาเวทย์: เสียงโจมตีปกติเฉพาะตัว (BA.mp3)
+        byAttackSound: attacker.characterId === "mageslayer" ? "mageslayer_attack" : undefined, // ผู้สังหารเมจ: เสียงโจมตีปกติเฉพาะตัว (BA.mp3)
     targetName: target.name, targetImg: displayImg(target), targetColor: POSITION_COLORS[target.position] || "#888",
     dmg, aoe: ginga || beamPlusAtk || unibeam2Atk || storiumAtk, revenge: isRevenge, skills: fxSkills,
     fxMs: (fxSkills.length ? ATTACKFX_TIME + 2 : ATTACKFX_TIME) * 1000,
@@ -5420,12 +5567,14 @@ function endTurn() {
       if (k === "empower") continue; // เสริมพลัง (Rejuvenation): คงอยู่จนกว่าจะได้โจมตี (ไม่ซ้อนทับ)
       if (k === "miyakoHeal" || k === "miyakoCombo" || k === "miyakoUlt") continue; // อาริมะ มิยาโกะ: คงอยู่จนกว่าจะได้โจมตี (ไม่ลดเทิร์น) — miyakoUlt เดิมหลุดหายไปเองหลัง 1 เทิร์นถ้ายังไม่ได้โจมตี (บัค)
       if (k === "hakunoInvertReady" || k === "hakunoNoRegenReady") continue; // คิชินามิ ฮาคุโนะ: คงอยู่จนกว่าจะได้โจมตี (ไม่ลดเทิร์น)
-      if (k === "kotoneAtk") continue; // โคโตเนะ: คงอยู่จนกว่าจะได้โจมตี (ไม่ลดเทิร์น — เหมือน empower)
+      if (k === "kotoneLove") continue;  // โคโตเนะ (รัก รักที่สุดเลย): คงอยู่จนกว่าจะได้โจมตี (ไม่ลดเทิร์น — เหมือน empower)
+      if (k === "kotoneReady") continue;  // โคโตเนะ [ความพร้อม]: สแตคถาวร สะสมจนครบ 4 เพื่อเข้าร่าง [พร้อมลุย]
+      if (k === "kready") continue;       // โคโตเนะ ร่าง [พร้อมลุย]: อยู่จนกว่าจะปล่อยท่าไม้ตายในร่าง (ไม่ลดเทิร์น)
       if (k === "deathline") continue; // เส้นตาย (ชิกิ): สแตคถาวร จนกว่าจะถูกชิกิโจมตีปกติระหว่างท่าไม้ตาย
       if (k === "tepeuCook" || k === "tepeuPonder") continue; // เทเปา: ป้ายสถานะแสดงผลเฉยๆ — engine ลบเองตาม tepeuCookTurns/tepeuPonderTurns (ดูด้านล่าง)
       // ---------- ไค ชิซากิ (kai) ----------
       if (k === "kaiCreation" || k === "kaiPunishment") continue; // รังสรรค์/ลงทัณฑ์: มาร์กถาวร ไม่ลดเทิร์น — หายเฉพาะผ่าน Overhaul หรือถูกล้าง
-      // ---------- ผู้สังหารจอมมหาเวทย์ (mageslayer) ----------
+      // ---------- ผู้สังหารเมจ (mageslayer) ----------
       if (k === "mageslayerMark") continue; // ตราล่าเวท: ถาวรจนกว่าจะย้าย/ถูกล้าง
       if (k === "mageslayerFury") continue; // Fury: สแตคพลังโกรธ ไม่ใช่ตัวนับเทิร์น — ใช้หมดพร้อมกันตอนโจมตี
       // ---------- Ultraman Trigger ----------
@@ -5435,7 +5584,7 @@ function endTurn() {
       if (k === "triggerLight") continue; // แสงสว่างคงอยู่จนเจ้าของ Trigger คืนร่างหรือโดน Zeperion ล้าง
       if (k === "hisakawaTempo") continue;
       if (k === "triggerDarkWail") continue; // อวดครวญ: สแตคถาวรจนกว่า Impact จะล้างทั้งสนาม
-      if (k === "escanorMorning" || k === "escanorNight" || k === "escanorNoon" || k === "escanorLastStand" || k === "escanorSolar" || k === "escanorSpear" || k === "escanorFlare" || k === "escanorFlareNoon" || k === "escanorPunch" || k === "escanorRhitta" || k === "escanorRhittaNoon" || k === "escanorSun") continue;
+      if (k === "escanorMorning" || k === "escanorNight" || k === "escanorNoon" || k === "escanorLastStand" || k === "escanorSolar" || k === "escanorFlare" || k === "escanorFlareNoon" || k === "escanorPunch" || k === "escanorRhitta" || k === "escanorRhittaNoon" || k === "escanorSun") continue;
       // ---------- โอกูริ แคป (patch 2.0.8.1) ----------
       if (k === "graybeast") continue;  // ร่าง Zone: ถาวรจนกว่าจะเข้าร่างหมดแรง
       // burnout (ร่างหมดแรง): เดิมถูกยกเว้นไม่ลดเทิร์นตรงนี้ แต่ไม่มีจุดไหนในโค้ดเคลียร์ทิ้งเองเลย (ไม่มี delete p.statuses.burnout ที่ไหนทั้งไฟล์)
@@ -5457,8 +5606,6 @@ function endTurn() {
         // ไค ชิซากิ: เชื่อมต่อ/คู่ปรับ หมดอายุ -> ล้าง mirror ทั้งสองฝั่ง (โค้ดแยกจาก Resonance ของ Bard)
         if (k === "kaiLink") CHAR_HOOKS.kai.onExpireKaiLink(p);
         if (k === "kaiRival1" || k === "kaiRival2") CHAR_HOOKS.kai.onExpireKaiRival(p);
-        // ผู้สังหารจอมมหาเวทย์: ภาระเวทหมดอายุตามธรรมชาติ -> ล้างล็อก Mana Burden (ถ้ามี)
-        if (k === "spellburden") delete p.mageslayerLockedBurden;
         // ทาคุมิ ฟุจิวาระ: ถึงจะมองไม่เห็น แต่ฉันยังอยู่ หมดเวลาเองตามธรรมชาติ (ไม่มีใครไพ่แตกใน 5 เทิร์น) -> รีเซ็ต guard ให้ใช้ท่าไม้ตายรอบหน้าได้ปกติ
         if (k === "takumiBlackout") {
           p.takumiBlackoutFired = false;
@@ -5467,10 +5614,9 @@ function endTurn() {
         // ไม่อยากให้ใครต้องเจ็บปวด (ริต้า เบอร์นัล patch 2.1.7): หมดเวลาพอดีเทิร์นนี้ — ยังนับว่า "ตายขณะท่าไม้ตายทำงาน"
         //  ต่อไปอีก 1 จังหวะจบเทิร์น เผื่อตายจากผลติกท้ายเทิร์นเดียวกัน (ล้างค่านี้ทิ้งตอนเริ่มเทิร์นถัดไปใน dealRound)
         if (k === "phenexTaunt") p.phenexTauntGrace = true;
-        // Sleeping time หมดเวลาเอง (โคโตเนะ patch 2.1.3): ตื่นนอนอย่างสดชื่น รับ [เช้าที่สดใส] 3 เทิร์น
+        // Sleeping time หมดเวลาเอง (โคโตเนะ rework 2.3): ตื่นนอนอย่างสดชื่น (ไม่มีผลต่อเนื่องแล้ว)
         if (k === "ksleep" && p.characterId === "kotone") {
-          CHAR_HOOKS.kotone.onSleepExpire(p);
-          lastLog.push(`🌅 ${p.name} ตื่นนอนอย่างสดชื่น — ได้รับ [เช้าที่สดใส] 3 เทิร์น (แต้มสกิล +1 และโล่ +1 ทุกเทิร์น)`);
+          lastLog.push(`🌅 ${p.name} ตื่นนอนอย่างสดชื่น — พร้อมลุยต่อแล้ว!`);
         }
         // เร้นเงาหมดเวลา (แบทแมน patch 2.2.7, characters/bat_ben.js): เล่นวีดีโอ -> ระเบิดใส่ทุกคน + ใบ้สกิลคนอื่น
         //  patch 2.2.7.1: ทำงานเสมอเมื่อครบ 3 เทิร์น — โดนโจมตีระหว่างทางไม่ทำให้สถานะหลุดอีกแล้ว
@@ -5506,8 +5652,6 @@ function endTurn() {
       p.tempHpTurns--;
       if (p.tempHpTurns <= 0) { p.tempHp = 0; p.tempHpTurns = 0; }
     }
-    // [โหมงานหนัก] (โคโตเนะ patch 2.2.2): โล่พังและฟื้นไม่ได้ — ล้างโล่ที่ได้มาระหว่างเทิร์นทิ้ง (เดิมเป็นเกราะ)
-    CHAR_HOOKS.kotone.onEndTurnOverworkShieldWipe(p);
     p.armor = Math.min(p.armor, maxArmorOf(p)); // กันเกราะเกินเพดาน
     hisakawaSyncOut(p);
   }
@@ -5574,16 +5718,19 @@ function endTurn() {
   for (const p of alivePlayers()) {
     if (isYuuki(p)) { p.gold = 0; continue; }
     const goldGain = GOLD_PER_TURN + (p.characterId === "hisakawa_sister" ? CHAR_HOOKS.hisakawa_sister.extraGoldRegen(p) : 0) + (p.characterId === "ignis" ? CHAR_HOOKS.ignis.extraGoldRegen(engine, p) : 0);
-    if ((p.gold || 0) < GOLD_MAX) p.gold = Math.min(GOLD_MAX, (p.gold || 0) + goldGain);
+    addGold(p, goldGain);
   }
 
   // ชิวๆครับน้องๆ (Apple guy): จบเทิร์นได้แต้มสกิลเพิ่ม +1 จนกว่าจะถูกโจมตี
   for (const p of alivePlayers()) {
     if ((p.statuses.chill || 0) > 0) {
-      addSkill(p, 1);
+      addSkill(p, 1, "passive");
       lastLog.push(`🏖️ ${p.name} ชิวๆครับน้องๆ — จบเทิร์นได้แต้มสกิลเพิ่ม +1`);
     }
   }
+
+  // ตราล่าเวท (characters/mageslayer.js): ทุก 2 เทิร์นขโมยพลังงานเป้าหมายที่มาร์กไว้ 1 หน่วย
+  CHAR_HOOKS.mageslayer.tickWitchMark(engine);
 
   // เทเปา (characters/tepeu.js): ครุ่นคิด (+แต้มสกิล) / ทำอาหาร (ส่ง "มื้อที่สุข" เข้าคลังเมื่อครบ) / ฉากหลังท่าไม้ตายนับถอยหลัง
   CHAR_HOOKS.tepeu.onTurnEndTick(engine);
@@ -5767,6 +5914,7 @@ function backToLobby() {
   yunaLongingUsed = false; yunaWindowEnd = 0; yunaEffect = null; yunaTargetId = null; yunaMusicSeq = 0; yunaLongingPendingId = null; yunaPity = 0;
   overloadForceActive = false;
   overloadForceCount = 0; yuukiSpawned = false; yuukiTurns = 0; yuukiAttackTargets = [];
+  clearTurnSnapshot();
   yuukiLowShown = false; yuukiWinShown = false; yuukiDefeated = false; yuukiReactiveDrawCredits = 0;
   kaiOverhaulSlots = []; // ไค ชิซากิ: ล้าง tracker Overhaul เมื่อกลับล็อบบี้
   lastLog = [];
@@ -5943,7 +6091,7 @@ io.on('connection', (socket) => {
       sunriseDrop: 0, sleepFresh: false,
       appleItem: "drink", appleAtkBuffs: [], chillDodge: 100, appleGiveUses: CHAR_HOOKS.appleguy.GIVE_USES,
       tepeuCookTurns: 0, tepeuPonderTurns: 0, tepeuEyeTurns: 0, tepeuLoseStreak: 0, tepeuKillTargetId: null,
-      coins: 0, nightWork: 0, overworkNext: false, senaNext: false,
+      piggy: 0, senaNext: false, kotoneExtraAtk: false,
       contractPartner: null, contractWith: null, contractOffer: null,
       contractTurns: 0, renewPending: false, skillDrain: 0, skillDrainPending: 0,
       healNextTurn: 0, unplugHold: null,
@@ -5951,7 +6099,7 @@ io.on('connection', (socket) => {
       bardNotes: [], bardNotesUsed: 0, bardPending: null,
       bloodSection: 0, soulSection: 0, bardLinks: {},
       kaiLinkWith: null, kaiRivalId: null, kaiMarksBy: {},
-      mageslayerMarkedId: null, mageslayerMarks: {}, mageslayerHasMarked: false, mageslayerWitchMarkReadyRound: 0, mageslayerLockedBurden: false,
+      mageslayerMarkedId: null, mageslayerMarks: {}, mageslayerHasMarked: false, mageslayerWitchMarkReadyRound: 0, mageslayerMarkTick: 0,
       shikiUlt: shikiUlt === "wither" ? "wither" : "deatheye", witherAddedBy: {},
       oguriEnergy: OGURI_ENERGY_START, stamina: 0, oguriChargeCapBonus: 0, oguriZoneTurns: 0, staggerNext: 0,
       maxHpPenalty: 0, wouGuardCd: 0, calamityDraw: 0, locaOffer: null,
@@ -6226,6 +6374,8 @@ const engine = {
   tryYunaLongingForTwin,
   pushCutsceneRaw(entry) { cutsceneQueue.push(entry); },
   log(msg) { lastLog.push(msg); },
+  // การ์ดสกิลเด้งบนกระดาน (ไม่หยุดเกม) — payload.sound = คีย์ใน client/src/audio.js ให้เล่นพร้อมการ์ด
+  skillFlash(payload) { io.emit("skillFlash", payload); },
   colorOf(p) { return POSITION_COLORS[p.position] || "#888"; },
   nextTransformCounter() { return ++transformCounter; },
   startMatch,
@@ -6238,7 +6388,9 @@ const engine = {
   isNightRound,
   nightCycleIndex,
   GOLD_MAX,
-  // ---------- ร้านค้ามายา + ร้านขายของลุงเท่ง (เปิดไว้ให้ tests/shop.test.js เรียกตรงๆ) ----------
+  goldCapOf,
+  addGold,
+  // ---------- ร้านค้ามายา (เปิดไว้ให้ tests/shop.test.js เรียกตรงๆ) ----------
   shopItemName,
   GUTS_AMMO,
   GUTS_GUN_PRICE,
@@ -6246,7 +6398,6 @@ const engine = {
   GUTS_NURSE_DMG,
   BLACK_SPARKLENCE_NURSE_COOLDOWN,
   rollShopItem,
-  rollUncleShopItem,
   openShop,
   buyShopItem,
   useInventoryItem,
@@ -6258,8 +6409,6 @@ const engine = {
   hit,
   get shopItems() { return shopItems; },
   setShopItems(v) { shopItems = v; },
-  get uncleShopItems() { return uncleShopItems; },
-  setUncleShopItems(v) { uncleShopItems = v; },
   NETRAMANA_KILL_CHANCE,
   netramanaActive,
   statusAmtOf,
@@ -6267,10 +6416,14 @@ const engine = {
   scoreCap,
   get overloadForceActive() { return overloadForceActive; },
   setOverloadForceActive(v) { overloadForceActive = !!v; },
+  get overloadForceCount() { return overloadForceCount; },
+  setOverloadForceCount(v) { overloadForceCount = Number(v) || 0; },
+  triggerOverloadForce,
   applyOverloadOverdrawPenalty,
   applyBuff: rawApplyBuff,
   applyDebuff,
   cleanseDebuffs,
+  coolReduction,
   BASIC_DEBUFF_CLEAR,
   SOFT_DEBUFF_STEP,
   noHealActive,
@@ -6330,6 +6483,9 @@ module.exports = {
   yuukiCanSafelyDraw,
   resetOverloadDrawCounter,
   autoPlayYuuki,
+  captureTurnSnapshot,
+  restoreTurnSnapshot,
+  clearTurnSnapshot,
 };
 
 if (require.main === module) {

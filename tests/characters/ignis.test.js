@@ -10,6 +10,7 @@ function mkEngine(over = {}) {
   return Object.assign({
     roundNumber: 1,
     GOLD_MAX: 30,
+    addGold: (p, n) => { const before = p.gold || 0; p.gold = Math.min(30, before + n); return p.gold - before; },
     players: {},
     logs,
     log: (msg) => logs.push(msg),

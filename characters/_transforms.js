@@ -91,11 +91,17 @@ module.exports = function buildTransforms(img) {
     appleguyDodge: { img: "/characters/appleguy/appleguy.jpg", video: "/characters/appleguy/appleguy_final.mp4", title: "ชิวๆครับน้องๆ", label: "หลบหลีกสบายใจ", seconds: 14, music: null, afterReveal: false },
     // broadbandBill: สกิลติดตัวเจ้าแห่งเน็ตบ้าน — ขึ้นต้นเทิร์นที่คู่สัญญาต้องจ่ายค่าต่อสัญญา (วีดีโอ 6 วิ — ครั้งแรกต่อเกม ครั้งถัดไปแจ้งเตือนเล็กๆ)
     broadbandBill: { img: "/characters/broadband_man/broadband_man.jpg", video: "/characters/broadband_man/broadband_man_final.mp4", title: "ชำระค่าบริการ", label: "สกิลติดตัวทำงาน", seconds: 7, music: null, afterReveal: false },
-    // ---------- ฟุจิตะ โคโตเนะ (patch 1.9.1) ----------
-    // kotoneSena: ข้อเสียสกิลติดตัว — เจอท่านประธานเซนะจัง (วีดีโอ 5 วิ ครั้งแรกต่อเกม ครั้งถัดไปแจ้งเตือนเล็กๆ)
+    // ---------- ฟุจิตะ โคโตเนะ (rework 2.3) ----------
+    // kotoneSena: ข้อเสียสกิลติดตัว — โดนท่านประธานเซนะจังเจอตัว (วีดีโอเดิม 5 วิ ครั้งแรกต่อเกม ครั้งถัดไปแจ้งเตือนเล็กๆ)
     kotoneSena: { img: "/characters/kotone/kotone.jpg", video: "/characters/kotone/kotone_passive.mp4", title: "ท่านประธานเซนะจัง!?", label: "สกิลติดตัวทำงาน", seconds: 6, music: null, afterReveal: false },
-    // kawaii: ท่าไม้ตายโคโตเนะ (หลังเปิดไพ่) — วีดีโอ 15 วิ
-    kawaii: { img: "/characters/kotone/kotone_skill3.jpg", video: "/characters/kotone/kotone_final.mp4", title: "SEKAI ICHI KAWAII WATASHI", label: "ปล่อยท่าไม้ตาย", seconds: 16, music: null, afterReveal: true },
+    // kready: ท่าไม้ตาย 1 หนูพร้อมแล้วคะ โปรดิวเซอร์ (หลังเปิดไพ่) — ไม่มีวีดีโอ มีแต่ภาพ + เพลง ULT1 ที่ค้างตลอดร่าง [พร้อมลุย]
+    //  (music ของ key นี้ถูกสแกนใน skillMusicFor() — ดังนั้นต้องมีสถานะ kready ค้างอยู่ถึงจะเล่น)
+    kready: { img: "/characters/kotone/rework/สกิลอัลติเมติ1/Kotone.png", video: null, title: "หนูพร้อมแล้วคะ โปรดิวเซอร์", label: "เข้าสู่ร่าง [พร้อมลุย]", seconds: 5, music: "kotone_ult1", afterReveal: true },
+    // ท่าไม้ตายในร่าง [พร้อมลุย] — ทำงานหลังเปิดไพ่ (resolveFormUlts() เรียก triggerCutscene เอง
+    //  ไม่ผ่านลูป afterReveal อัตโนมัติ เพราะต้องบังคับแตกก่อนตัดสินผู้ชนะ) — voice = เพลงประกอบที่เล่นทับวีดีโอ
+    kawaii:  { img: "/characters/kotone/rework/สกิลอัลติเมต3/Kotone Sekaii.png", video: "/characters/kotone/rework/สกิลอัลติเมต3/ULT3.mp4", title: "SEKAI ICHI KAWAII WATASHI", label: "ปล่อยท่าไม้ตาย", seconds: 15, music: null, voice: "kotone_ult3", afterReveal: false },
+    kcampus: { img: "/characters/kotone/rework/สกิลอัลติเมต4/Kotone Campus.png", video: "/characters/kotone/rework/สกิลอัลติเมต4/ULT4.mp4", title: "CAMPUS MODE!", label: "ปล่อยท่าไม้ตาย", seconds: 12, music: null, voice: "kotone_ult4", afterReveal: false },
+    kshuki:  { img: "/characters/kotone/rework/สกิลอัลติเมต5/Kotone Shuki.png", video: "/characters/kotone/rework/สกิลอัลติเมต5/ULT5.mp4", title: "SELF-AFFIRMATION EXPLOSION! LOVE LOVE", label: "ปล่อยท่าไม้ตาย", seconds: 17, music: null, voice: "kotone_ult5", afterReveal: false },
     // ---------- ชเรด เอลัน (patch พิเศษ) ----------
     // shradeMoon: สกิลรอง แสงจันทร์ส่องวิญญาณ (ก่อนเปิดไพ่ — เล่นทันทีตอนกดสกิล) วีดีโอ 4.1 วิ
     shradeMoon: { img: "/characters/shrade_elan/skill2/shrade_skill2.jpg", video: "/characters/shrade_elan/skill2/shrade_skill2.mp4", title: "แสงจันทร์ส่องวิญญาณ", label: "ใช้สกิล", seconds: 5, music: null, afterReveal: false },
@@ -176,7 +182,7 @@ module.exports = function buildTransforms(img) {
     phenexRebirth: { img: img.PHENEX_NTD_IMG, video: "/characters/rita/phenex_passive.mp4", title: "ถ้าเลือกได้ อยากเกิดเป็นอะไรหรอ?", label: "สกิลติดตัวทำงาน", seconds: 11, music: null, afterReveal: false },
     // phenexRelease: สกิลติดตัว 2 ขอแค่ได้พบกันอีก — ตกรอบจริง ปลดปล่อยความเจ็บปวดสะสมใส่เป้าหมาย (วีดีโอจริง 5.69 วิ)
     phenexRelease: { img: img.PHENEX_BASE_IMG, video: "/characters/rita/phenex_passive2.mp4", title: "ขอแค่ได้พบกันอีก", label: "ปลดปล่อยความเจ็บปวด", seconds: 6, music: null, afterReveal: false },
-    // ---------- ผู้สังหารจอมมหาเวทย์ ----------
+    // ---------- ผู้สังหารเมจ ----------
     // mageslayerWitchMark: สกิลพื้นฐาน Witch Mark — เล่นทันทีตอนกด (ก่อนเปิดการ์ด)
     mageslayerWitchMark: { img: "/characters/mageslayer/Pic_skill_1.jpg", video: "/characters/mageslayer/VDO_Skill_1.mp4", title: "WITCH MARK", label: "ใช้สกิล", seconds: 6, music: null, afterReveal: false },
     // ---------- ทาคุมิ ฟุจิวาระ ----------
@@ -197,7 +203,7 @@ module.exports = function buildTransforms(img) {
     // pshikiKill: สกิลติดตัว Mystical Eye of Death Perception (Truth) — สังหารทันทีสำเร็จตอนได้โจมตีปกติ
     //  ยังไม่มีวีดีโอเฉพาะตัว (ผู้ใช้ยังไม่ได้ส่งมา) — ใช้วีดีโอสังหารของเรียวกิ ชิกิ ตัวเดียวกันไปก่อน
     pshikiKill: { img: "/characters/princess_shiki/p_shiki_skill3.jpg", video: "/characters/shiki/shiki_skill3.2_hit.mp4", title: "ทุกอย่างจะต้องราบรื่น", label: "สังหารด้วยเนตรมณะ", seconds: 9, music: null, afterReveal: false },
-    // ---------- ปืนหน่วย GUTS Select (ร้านขายของลุงเท่ง) ----------
+    // ---------- ปืนหน่วย GUTS Select (ร้านค้ามายา) ----------
     //  ไม่ใช่ของตัวละครไหน — เป็นไอเทมที่ใครซื้อก็ยิงได้ เล่นวีดีโอทุกครั้งที่ยิง (queueCutscene ตรงๆ ไม่ผ่าน triggerCutscene)
     //  seconds วัดจาก mvhd atom จริง (+buffer ~0.5-1 วิ กันตัดก่อนจบ)
     gutsShockwave: { img: "/item/guts_key/gomora_key.webp",    video: "/item/guts_key/shockwave_boost.mp4",    title: "SHOCKWAVE BULLET",   label: "ยิงปืนหน่วย GUTS Select", seconds: 11, music: null, afterReveal: false }, // shockwave_boost.mp4 ~9.51s

@@ -1,4 +1,4 @@
-// ระบบร้านค้า: ร้านค้ามายา + ร้านขายของลุงเท่ง (ปืนหน่วย GUTS Select)
+// ระบบร้านค้า: ร้านค้ามายา (ร้านเดียว รวมปืนหน่วย GUTS Select ที่เดิมอยู่ร้านลุงเท่ง)
 //  ทดสอบเงื่อนไขการซื้อ/การยิง (gutsFireTargetOf) แยกจากผลของกระสุน (applyGutsBullet) เพราะการยิงจริง
 //  ผ่าน useInventoryItem จะตัดเข้าคัตซีน (ตั้ง timer) — ผลของกระสุนเกิดหลังวีดีโอจบเสมอ
 const test = require('node:test');
@@ -8,7 +8,6 @@ const { engine } = require('../server.js');
 test.beforeEach(() => {
   for (const k of Object.keys(engine.players)) delete engine.players[k];
   engine.setShopItems([]);
-  engine.setUncleShopItems([]);
   engine.setGameState('PLAYING');
   engine.setRoundNumber(1);
 });
@@ -27,9 +26,9 @@ function mkPlayer(over = {}) {
   engine.players[id] = p;
   return p;
 }
-function stockUncle(...items) {
-  engine.setUncleShopItems(items.map((it, i) => ({ id: `ushop_1_${i}`, sold: false, soldTo: null, ...it })));
-  return engine.uncleShopItems;
+function stockShop(...items) {
+  engine.setShopItems(items.map((it, i) => ({ id: `shop_1_${i}`, sold: false, soldTo: null, ...it })));
+  return engine.shopItems;
 }
 function giveGun(p) { p.inventory.push({ uid: `gun_${p.id}`, type: 'gutsGun' }); }
 function giveAmmo(p, ammo) {
@@ -39,43 +38,45 @@ function giveAmmo(p, ammo) {
 }
 
 // ---------- การสุ่มสินค้า ----------
-test('rollUncleShopItem: ออกได้แค่ปืนกับกระสุนที่มีจริง และราคาตรงกับตาราง GUTS_AMMO', () => {
-  for (let i = 0; i < 400; i++) {
-    const it = engine.rollUncleShopItem();
-    if (it.type === 'gutsGun') {
-      assert.equal(it.price, engine.GUTS_GUN_PRICE);
-    } else {
-      assert.equal(it.type, 'gutsAmmo');
+const SHOP_TYPES = ['cardColor', 'fortune', 'resist', 'cardRemove', 'skillPoint', 'armor', 'gutsGun', 'gutsAmmo'];
+test('rollShopItem: ออกได้เฉพาะชนิดที่มีจริง และราคาปืน/กระสุนตรงกับตาราง', () => {
+  for (let i = 0; i < 800; i++) {
+    const it = engine.rollShopItem();
+    assert.ok(SHOP_TYPES.includes(it.type), `สินค้าชนิดที่ไม่รู้จัก: ${it.type}`);
+    if (it.type === 'gutsGun') assert.equal(it.price, engine.GUTS_GUN_PRICE);
+    if (it.type === 'gutsAmmo') {
       assert.ok(engine.GUTS_AMMO[it.ammo], `กระสุนที่ไม่รู้จัก: ${it.ammo}`);
       assert.equal(it.price, engine.GUTS_AMMO[it.ammo].price);
+      assert.notEqual(it.ammo, 'trigger_dark_key'); // Trigger Dark Key อยู่ช่องล็อกเท่านั้น ไม่สุ่มออก
     }
   }
 });
 
-test('rollUncleShopItem: allowGun=false บังคับให้ออกกระสุนเสมอ', () => {
-  for (let i = 0; i < 200; i++) assert.equal(engine.rollUncleShopItem(false).type, 'gutsAmmo');
+test('rollShopItem: allowGun=false ไม่ออกปืนเลย / allowHyper=false ไม่ออก Hyper Key เลย', () => {
+  for (let i = 0; i < 400; i++) assert.notEqual(engine.rollShopItem(false).type, 'gutsGun');
+  for (let i = 0; i < 400; i++) assert.notEqual(engine.rollShopItem(true, false).ammo, 'hyper_trigger');
 });
 
-test('openShop: เติมของทั้ง 2 ร้าน ร้านละ 9 ชิ้น id คนละ prefix', () => {
+test('openShop: ร้านเดียว 15 ชิ้น id ขึ้นต้น shop_ ทั้งหมด', () => {
   engine.openShop();
-  assert.equal(engine.shopItems.length, 9);
-  assert.equal(engine.uncleShopItems.length, 9);
+  assert.equal(engine.shopItems.length, 15);
   assert.ok(engine.shopItems.every((it) => it.id.startsWith('shop_')));
-  assert.ok(engine.uncleShopItems.every((it) => it.id.startsWith('ushop_')));
 });
 
-test('openShop: ปืนขึ้นได้สูงสุด 2 กระบอกต่อรอบที่รี', () => {
+test('openShop: ปืนขึ้นได้สูงสุด 2 กระบอก และ Hyper Key ได้สูงสุด 1 ชิ้นต่อรอบที่รี', () => {
   for (let i = 0; i < 200; i++) {
     engine.openShop();
-    const guns = engine.uncleShopItems.filter((it) => it.type === 'gutsGun').length;
+    const guns = engine.shopItems.filter((it) => it.type === 'gutsGun').length;
+    const hypers = engine.shopItems.filter((it) => it.ammo === 'hyper_trigger').length;
     assert.ok(guns <= 2, `รอบนี้มีปืน ${guns} กระบอก`);
+    assert.ok(hypers <= 1, `รอบนี้มี Hyper Key ${hypers} ชิ้น`);
   }
 });
 
 // ---------- การซื้อ ----------
-test('buyShopItem: ซื้อของจากร้านลุงเท่งได้ หักเหรียญ และของเข้ากระเป๋าพร้อมชนิดกระสุน', () => {
+test('buyShopItem: ซื้อปืน/กระสุนจากร้านค้ามายาได้ หักเหรียญ และของเข้ากระเป๋าพร้อมชนิดกระสุน', () => {
   const p = mkPlayer({ gold: 20 });
-  const [gun, ammo] = stockUncle({ type: 'gutsGun', price: 15 }, { type: 'gutsAmmo', ammo: 'thunder', price: 5 });
+  const [gun, ammo] = stockShop({ type: 'gutsGun', price: 15 }, { type: 'gutsAmmo', ammo: 'thunder', price: 5 });
   engine.buyShopItem(p.id, gun.id);
   engine.buyShopItem(p.id, ammo.id);
   assert.equal(p.gold, 0);
@@ -87,7 +88,7 @@ test('buyShopItem: ซื้อของจากร้านลุงเท่�
 
 test('buyShopItem: มีปืนแล้วซื้อปืนอีกกระบอกไม่ได้ (ไม่เสียเหรียญ ของไม่ถูกทำเครื่องหมายว่าขายแล้ว)', () => {
   const p = mkPlayer({ gold: 40 });
-  const [g1, g2] = stockUncle({ type: 'gutsGun', price: 15 }, { type: 'gutsGun', price: 15 });
+  const [g1, g2] = stockShop({ type: 'gutsGun', price: 15 }, { type: 'gutsGun', price: 15 });
   engine.buyShopItem(p.id, g1.id);
   engine.buyShopItem(p.id, g2.id);
   assert.equal(p.gold, 25);
@@ -98,7 +99,7 @@ test('buyShopItem: มีปืนแล้วซื้อปืนอีกก�
 test('buyShopItem: เหรียญไม่พอ / ของขายไปแล้ว = ซื้อไม่ได้', () => {
   const poor = mkPlayer({ gold: 14 });
   const rich = mkPlayer({ gold: 30 });
-  const [gun] = stockUncle({ type: 'gutsGun', price: 15 });
+  const [gun] = stockShop({ type: 'gutsGun', price: 15 });
   engine.buyShopItem(poor.id, gun.id);
   assert.equal(poor.inventory.length, 0);
   engine.buyShopItem(rich.id, gun.id);
@@ -293,17 +294,19 @@ test('สภาพชา: กดจั่ว 1 ครั้ง ได้ไพ�
   assert.equal(chaa.cards.length, 2);
 });
 
-test('openShop: Hyper Key and Trigger Dark Key are locked shop items', () => {
-  engine.openShop();
-  assert.equal(engine.uncleShopItems[0].ammo, 'hyper_trigger');
-  assert.equal(engine.uncleShopItems[1].ammo, 'trigger_dark_key');
+test('openShop: Trigger Dark Key is the only locked shop item and always appears exactly once', () => {
+  for (let i = 0; i < 50; i++) {
+    engine.openShop();
+    assert.equal(engine.shopItems[0].ammo, 'trigger_dark_key');
+    assert.equal(engine.shopItems.filter((it) => it.ammo === 'trigger_dark_key').length, 1);
+  }
 });
 
 test('Ignis: Black Sparklence uses ammo without a GUTS gun and Trigger Dark Key is consumed on transform', () => {
   const p = mkPlayer({ characterId: 'ignis', hp: 2, maxHp: 5, gold: 40 });
   const t = mkPlayer();
   engine.CHAR_HOOKS.ignis.ensureBlackSparklence(p);
-  const [gun, hyper, dark, ammo] = stockUncle(
+  const [gun, hyper, dark, ammo] = stockShop(
     { type: 'gutsGun', price: 15 },
     { type: 'gutsAmmo', ammo: 'hyper_trigger', price: 20 },
     { type: 'gutsAmmo', ammo: 'trigger_dark_key', price: 10 },
@@ -333,7 +336,7 @@ test('Ignis: Black Sparklence uses ammo without a GUTS gun and Trigger Dark Key 
 });
 
 
-test('Ignis: useInventoryItem fires Uncle Shop ammo through Black Sparklence', () => {
+test('Ignis: useInventoryItem fires shop ammo through Black Sparklence', () => {
   const p = mkPlayer({ characterId: 'ignis', inventory: [{ uid: 'black_sparklence_p', type: 'blackSparklence' }], cutsceneShown: { gutsThunder: true } });
   const t = mkPlayer();
   const ammo = giveAmmo(p, 'thunder');

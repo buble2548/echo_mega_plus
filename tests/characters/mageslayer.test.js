@@ -1,6 +1,7 @@
-// Direct unit tests for characters/mageslayer.js — Witch Mark energy-steal math, dodge-steal, mark move,
-// Mana Rupture damage tiers (incl. the Bard 2-turn stun special case), Mana Burden + Bard uncleansable
-// exception, Song's Curse (addSkill gate on the engine itself), and Fury stack all-at-once consumption.
+// Direct unit tests for characters/mageslayer.js (ผู้สังหารเมจ / Mage Slayer 25/8/69 rework) —
+// Song's Curse (addSkill gate + damage bonus + Fury), Witch Mark energy-steal math / over-steal weaken /
+// every-2-turn tick / mark move, ดูดซับเวท (manaLeech) 35% drain, Mana Rupture damage+seal tiers,
+// and Mana Burden hitting everyone EXCEPT the caster.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { engine } = require('../../server.js');
@@ -16,92 +17,86 @@ function mkPlayer(over = {}) {
   const p = Object.assign({
     id, name: id, alive: true, characterId: 'mageslayer', hp: 5, armor: 2, skillPoints: 4,
     statuses: {}, statusAmt: {}, cutsceneShown: {}, seen: {},
-    mageslayerMarkedId: null, mageslayerHasMarked: false,
+    mageslayerMarkedId: null, mageslayerHasMarked: false, mageslayerMarkTick: 0,
   }, over);
   engine.players[id] = p;
   return p;
 }
 
+// เรียก fn โดยบังคับให้ Math.random() คืนค่า v (ใช้บังคับ/กันโรล 35%)
+function withRandom(v, fn) {
+  const orig = Math.random;
+  Math.random = () => v;
+  try { return fn(); } finally { Math.random = orig; }
+}
+
+// ---------- Song's Curse ----------
+
 test('Song\'s Curse: engine.addSkill() is a permanent no-op for mageslayer (any amount, any source)', () => {
   const p = mkPlayer({ skillPoints: 2 });
   engine.addSkill(p, 5);
+  engine.addSkill(p, 5, 'item');
   assert.equal(p.skillPoints, 2, 'no regen from the shared addSkill() choke point');
 });
 
-test('stealEnergy: direct-assignment transfer bypasses Song\'s Curse (target loses, attacker gains, clamped to what target has)', () => {
-  const ms = mkPlayer({ skillPoints: 0 });
-  const target = mkPlayer({ characterId: 'tohno', skillPoints: 3 });
-  const stolen = mageslayer.stealEnergy(engine, ms, target, 4);
-  assert.equal(stolen, 3, 'clamped to what target actually had');
-  assert.equal(target.skillPoints, 0);
-  assert.equal(ms.skillPoints, 3, 'direct assignment — reaches mageslayer despite Song\'s Curse');
-});
-
-test('onAttackPostDamage: steals energy clamped to [1,4] based on damage dealt', () => {
-  const ms = mkPlayer({ skillPoints: 0 });
-  const target = mkPlayer({ characterId: 'tohno', skillPoints: 10 });
-  mageslayer.applyWitchMark(engine, ms, target);
-  mageslayer.onAttackPostDamage(engine, ms, target, 2); // dmg=2 -> steal 2
-  assert.equal(ms.skillPoints, 2);
-  assert.equal(target.skillPoints, 8);
-});
-
-test('onAttackPostDamage: damage below 1 still steals a minimum of 1', () => {
-  const ms = mkPlayer({ skillPoints: 0 });
-  const target = mkPlayer({ characterId: 'tohno', skillPoints: 10 });
-  mageslayer.applyWitchMark(engine, ms, target);
-  mageslayer.onAttackPostDamage(engine, ms, target, 0);
-  assert.equal(ms.skillPoints, 1, 'min 1 even at 0 damage');
-});
-
-test('onAttackPostDamage: damage above 4 is capped at stealing 4', () => {
-  const ms = mkPlayer({ skillPoints: 0 });
-  const target = mkPlayer({ characterId: 'tohno', skillPoints: 10 });
-  mageslayer.applyWitchMark(engine, ms, target);
-  mageslayer.onAttackPostDamage(engine, ms, target, 9);
-  assert.equal(ms.skillPoints, 4, 'max 4 even at 9 damage');
-});
-
-test('onAttackPostDamage: target at 0 energy BEFORE the steal gets sealed 2 turns (checked before the steal itself)', () => {
-  const ms = mkPlayer({ skillPoints: 0 });
-  const target = mkPlayer({ characterId: 'tohno', skillPoints: 0 });
-  mageslayer.applyWitchMark(engine, ms, target);
-  mageslayer.onAttackPostDamage(engine, ms, target, 3);
-  assert.equal(target.statuses.manaSeal, 2);
-  assert.equal(target.skillPoints, 0, 'nothing to steal — steal is a no-op');
-});
-
-test('onAttackPostDamage: target with energy > 0 before the hit does not get sealed even if the steal drains them to 0', () => {
-  const ms = mkPlayer({ skillPoints: 0 });
-  const target = mkPlayer({ characterId: 'tohno', skillPoints: 1 });
-  mageslayer.applyWitchMark(engine, ms, target);
-  mageslayer.onAttackPostDamage(engine, ms, target, 3);
-  assert.equal(target.statuses.manaSeal || 0, 0, 'had energy before the hit — seal check happens pre-steal');
-});
-
-test('onAttackPostDamage: consumes all Fury stacks at once — heals attacker by the stack count and clears it', () => {
-  const ms = mkPlayer({ skillPoints: 0, hp: 3, statuses: { mageslayerFury: 3 } });
-  const target = mkPlayer({ characterId: 'tohno', skillPoints: 10 });
-  mageslayer.onAttackPostDamage(engine, ms, target, 2);
-  assert.equal(ms.hp, 6, 'healed by 3 (all stacks used at once)');
-  assert.equal(ms.statuses.mageslayerFury || 0, 0, 'stack fully cleared, not decremented by 1');
-});
-
-test('onAttackDodgeSteal: target dodging the attack still gets 1 energy stolen', () => {
-  const ms = mkPlayer({ skillPoints: 0 });
+test('damageBonus: +1 vs a target holding more energy than she does, plus the full Fury stack count', () => {
+  const ms = mkPlayer({ skillPoints: 2, statuses: { mageslayerFury: 2 } });
   const target = mkPlayer({ characterId: 'tohno', skillPoints: 5 });
-  mageslayer.applyWitchMark(engine, ms, target);
-  mageslayer.onAttackDodgeSteal(engine, ms, target);
-  assert.equal(ms.skillPoints, 1);
-  assert.equal(target.skillPoints, 4);
+  assert.equal(mageslayer.damageBonus(engine, ms, target), 3, '+1 song bonus + 2 fury stacks');
+  const lowEnergyTarget = mkPlayer({ characterId: 'tohno', skillPoints: 0 });
+  assert.equal(mageslayer.damageBonus(engine, ms, lowEnergyTarget), 2, 'no song bonus, just 2 fury stacks');
+  assert.equal(mageslayer.damageBonus(engine, mkPlayer({ characterId: 'tohno' }), target), 0, 'zero for non-mageslayer attackers');
 });
 
-test('onAttackDodgeSteal: no-op for non-mageslayer attackers', () => {
-  const other = mkPlayer({ characterId: 'tohno', skillPoints: 0 });
-  const target = mkPlayer({ characterId: 'riddhe', skillPoints: 5 });
-  mageslayer.onAttackDodgeSteal(engine, other, target);
-  assert.equal(target.skillPoints, 5);
+// ---------- Fury ----------
+
+test('onBustOrLoseRoll: 35% roll grants 1 Fury stack, capped at 3 stages', () => {
+  const ms = mkPlayer({ statuses: { mageslayerFury: 1 } });
+  withRandom(0, () => {
+    mageslayer.onBustOrLoseRoll(engine, ms);
+    assert.equal(ms.statuses.mageslayerFury, 2);
+    mageslayer.onBustOrLoseRoll(engine, ms);
+    assert.equal(ms.statuses.mageslayerFury, 3, 'reaches the new max of 3');
+  });
+  const other = mkPlayer({ characterId: 'tohno' });
+  withRandom(0, () => mageslayer.onBustOrLoseRoll(engine, other));
+  assert.equal(other.statuses.mageslayerFury || 0, 0, 'no-op for non-mageslayer');
 });
+
+test('onBustOrLoseRoll: at 3 Fury stacks the effect switches to granting โชคลาภ +1 instead', () => {
+  const ms = mkPlayer({ statuses: { mageslayerFury: 3 } });
+  withRandom(0, () => mageslayer.onBustOrLoseRoll(engine, ms));
+  assert.equal(ms.statuses.mageslayerFury, 3, 'Fury stays capped');
+  assert.equal(ms.statuses.fortune, 1, 'gains fortune instead');
+});
+
+test('onBustOrLoseRoll: a failed 35% roll grants nothing at all', () => {
+  const ms = mkPlayer();
+  withRandom(0.9, () => mageslayer.onBustOrLoseRoll(engine, ms));
+  assert.equal(ms.statuses.mageslayerFury || 0, 0);
+  assert.equal(ms.statuses.fortune || 0, 0);
+});
+
+test('onAttackPostDamage: Fury is spent all at once — heals by the stage and applies ดูดซับเวท for 1/3/5 turns', () => {
+  for (const [stage, turns] of [[1, 1], [2, 3], [3, 5]]) {
+    const ms = mkPlayer({ hp: 1, statuses: { mageslayerFury: stage } });
+    const target = mkPlayer({ characterId: 'tohno', skillPoints: 10 });
+    mageslayer.onAttackPostDamage(engine, ms, target, 2);
+    assert.equal(ms.hp, 1 + stage, `stage ${stage} lifesteal heals ${stage}`);
+    assert.equal(ms.statuses.mageslayerFury || 0, 0, 'stack fully cleared, not decremented by 1');
+    assert.equal(target.statuses.manaLeech, turns, `stage ${stage} grants ${turns} turns of ดูดซับเวท`);
+  }
+});
+
+test('onAttackPostDamage: with no Fury stacks nothing happens (no heal, no ดูดซับเวท)', () => {
+  const ms = mkPlayer({ hp: 3 });
+  const target = mkPlayer({ characterId: 'tohno' });
+  mageslayer.onAttackPostDamage(engine, ms, target, 4);
+  assert.equal(ms.hp, 3);
+  assert.equal(target.statuses.manaLeech || 0, 0);
+});
+
+// ---------- ตราล่าเวท (Witch Mark) ----------
 
 test('applyWitchMark: marks the target, records mageslayerMarkedId, sets mageslayerHasMarked permanently', () => {
   const ms = mkPlayer();
@@ -110,6 +105,7 @@ test('applyWitchMark: marks the target, records mageslayerMarkedId, sets magesla
   assert.equal(t.statuses.mageslayerMark, 999);
   assert.equal(ms.mageslayerMarkedId, t.id);
   assert.equal(ms.mageslayerHasMarked, true);
+  assert.equal(ms.mageslayerWitchMarkReadyRound, engine.roundNumber + 2, '2-turn cooldown');
 });
 
 test('applyWitchMark: casting again moves the mark — clears it from the old target first', () => {
@@ -131,135 +127,210 @@ test('applyWitchMark: a resisted target is not marked (mageslayerMarkedId stays 
   assert.equal(ms.mageslayerMarkedId, null);
 });
 
-test('onTargetUsedSkill: marked target has a chance to be drained 1 energy (force via Math.random stub)', () => {
+test('cleanseDebuffs: ต้านทานสถานะผิดปกติ wipes ตราล่าเวท and ดูดซับเวท off the target', () => {
+  const universal = require('../../characters/_universal_status.js');
+  const t = mkPlayer({ characterId: 'tohno', statuses: { mageslayerMark: 999, manaLeech: 5, resist: 1 }, mageslayerMarks: { x: true } });
+  universal.cleanseDebuffs(t);
+  assert.equal(t.statuses.mageslayerMark || 0, 0);
+  assert.equal(t.statuses.manaLeech || 0, 0);
+  assert.equal(t.mageslayerMarks, undefined, 'caster map cleared with the status');
+});
+
+test('stealEnergy: direct-assignment transfer bypasses Song\'s Curse (target loses, attacker gains, clamped to what target has)', () => {
   const ms = mkPlayer({ skillPoints: 0 });
-  const t = mkPlayer({ characterId: 'tohno', skillPoints: 3 });
-  mageslayer.applyWitchMark(engine, ms, t);
-  const orig = Math.random;
-  Math.random = () => 0; // force the 35% roll to succeed
-  try {
-    mageslayer.onTargetUsedSkill(engine, t);
-  } finally {
-    Math.random = orig;
+  const target = mkPlayer({ characterId: 'tohno', skillPoints: 3 });
+  const stolen = mageslayer.stealEnergy(engine, ms, target, 4);
+  assert.equal(stolen, 3, 'clamped to what target actually had');
+  assert.equal(target.skillPoints, 0);
+  assert.equal(ms.skillPoints, 3, 'direct assignment — reaches mageslayer despite Song\'s Curse');
+});
+
+test('onDamageDealt: steals energy equal to the damage, clamped to [1,5]', () => {
+  for (const [dmg, want] of [[1, 1], [3, 3], [5, 5], [9, 5]]) {
+    const ms = mkPlayer({ skillPoints: 0 });
+    const target = mkPlayer({ characterId: 'tohno', skillPoints: 8 });
+    mageslayer.applyWitchMark(engine, ms, target);
+    mageslayer.onDamageDealt(engine, ms, target, dmg);
+    assert.equal(ms.skillPoints, want, `damage ${dmg} -> steal ${want}`);
+    assert.equal(target.skillPoints, 8 - want);
   }
+});
+
+test('onDamageDealt: only fires for the mageslayer who owns the mark, and only on real damage', () => {
+  const ms = mkPlayer({ skillPoints: 0 });
+  const other = mkPlayer({ skillPoints: 0 });
+  const target = mkPlayer({ characterId: 'tohno', skillPoints: 8 });
+  mageslayer.applyWitchMark(engine, ms, target);
+  mageslayer.onDamageDealt(engine, other, target, 3);
+  assert.equal(other.skillPoints, 0, 'another mageslayer without a mark on this target steals nothing');
+  mageslayer.onDamageDealt(engine, ms, target, 0);
+  assert.equal(ms.skillPoints, 0, 'zero damage steals nothing');
+  const unmarked = mkPlayer({ characterId: 'riddhe', skillPoints: 8 });
+  mageslayer.onDamageDealt(engine, ms, unmarked, 3);
+  assert.equal(ms.skillPoints, 0, 'unmarked target is untouched');
+});
+
+test('onDamageDealt: stealing more than the target has left applies อ่อนแอ -1 for 2 turns', () => {
+  const ms = mkPlayer({ skillPoints: 0 });
+  const target = mkPlayer({ characterId: 'tohno', skillPoints: 3 });
+  mageslayer.applyWitchMark(engine, ms, target);
+  mageslayer.onDamageDealt(engine, ms, target, 4); // ต้องการ 4 แต่เหลือ 3
+  assert.equal(target.skillPoints, 0);
+  assert.equal(ms.skillPoints, 3, 'only what was actually there gets transferred');
+  assert.equal(target.statuses.weak, 2);
+  assert.equal(target.statusAmt.weak, 1, '-1 damage');
+});
+
+test('onDamageDealt: an exact-drain (steal == remaining energy) does NOT weaken the target', () => {
+  const ms = mkPlayer({ skillPoints: 0 });
+  const target = mkPlayer({ characterId: 'tohno', skillPoints: 3 });
+  mageslayer.applyWitchMark(engine, ms, target);
+  mageslayer.onDamageDealt(engine, ms, target, 3);
+  assert.equal(target.statuses.weak || 0, 0);
+});
+
+test('tickWitchMark: steals 1 energy from the marked target every 2 turns', () => {
+  const ms = mkPlayer({ skillPoints: 0 });
+  const target = mkPlayer({ characterId: 'tohno', skillPoints: 5 });
+  mageslayer.applyWitchMark(engine, ms, target);
+  mageslayer.tickWitchMark(engine);
+  assert.equal(ms.skillPoints, 0, 'turn 1 — nothing yet');
+  mageslayer.tickWitchMark(engine);
+  assert.equal(ms.skillPoints, 1, 'turn 2 — 1 energy siphoned');
+  assert.equal(target.skillPoints, 4);
+  mageslayer.tickWitchMark(engine);
+  assert.equal(ms.skillPoints, 1, 'turn 3 — nothing');
+  mageslayer.tickWitchMark(engine);
+  assert.equal(ms.skillPoints, 2, 'turn 4 — siphons again');
+});
+
+test('tickWitchMark: reconciles a mark that was cleansed away (mageslayerMarkedId is released)', () => {
+  const ms = mkPlayer();
+  const target = mkPlayer({ characterId: 'tohno' });
+  mageslayer.applyWitchMark(engine, ms, target);
+  delete target.statuses.mageslayerMark; // ถูกต้านทานสถานะผิดปกติล้างทิ้ง
+  mageslayer.tickWitchMark(engine);
+  assert.equal(ms.mageslayerMarkedId, null);
+  assert.equal(ms.mageslayerMarkTick, 0);
+});
+
+// ---------- ดูดซับเวท (manaLeech) ----------
+
+test('onEnergyAction: a manaLeech target has a 35% chance to be drained 1 energy', () => {
+  const ms = mkPlayer({ skillPoints: 0 });
+  const t = mkPlayer({ characterId: 'tohno', skillPoints: 3, statuses: { manaLeech: 5 } });
+  withRandom(0, () => mageslayer.onEnergyAction(engine, t));
   assert.equal(t.skillPoints, 2);
   assert.equal(ms.skillPoints, 1);
 });
 
-test('onTargetUsedSkill: marked target with 0 energy gets sealed instead of drained (on a successful roll)', () => {
+test('onEnergyAction: no manaLeech status = no drain, and a failed roll drains nothing', () => {
   const ms = mkPlayer({ skillPoints: 0 });
-  const t = mkPlayer({ characterId: 'tohno', skillPoints: 0 });
-  mageslayer.applyWitchMark(engine, ms, t);
-  const orig = Math.random;
-  Math.random = () => 0;
-  try {
-    mageslayer.onTargetUsedSkill(engine, t);
-  } finally {
-    Math.random = orig;
+  const clean = mkPlayer({ characterId: 'tohno', skillPoints: 3 });
+  withRandom(0, () => mageslayer.onEnergyAction(engine, clean));
+  assert.equal(clean.skillPoints, 3);
+  const leeched = mkPlayer({ characterId: 'riddhe', skillPoints: 3, statuses: { manaLeech: 5 } });
+  withRandom(0.9, () => mageslayer.onEnergyAction(engine, leeched));
+  assert.equal(leeched.skillPoints, 3);
+  assert.equal(ms.skillPoints, 0);
+});
+
+test('addSkill: a tagged restore on a manaLeech target routes through the leech (untagged engine grants do not)', () => {
+  const ms = mkPlayer({ skillPoints: 0 });
+  const t = mkPlayer({ characterId: 'tohno', skillPoints: 0, statuses: { manaLeech: 5 } });
+  withRandom(0, () => engine.addSkill(t, 2)); // แต้มพื้นฐานจบเทิร์น — ไม่มี src
+  assert.equal(ms.skillPoints, 0, 'untagged grants never trigger ดูดซับเวท');
+  withRandom(0, () => engine.addSkill(t, 2, 'item'));
+  assert.equal(ms.skillPoints, 1, 'tagged restore (item/passive/card) triggers the 35% drain');
+});
+
+// ---------- Mana Rupture ----------
+
+test('ruptureDamageForEnergy / ruptureSealForEnergy: 7-8 = 1 dmg no seal, 2-6 = 3 dmg + seal 2, 0-1 = 5 dmg + seal 3', () => {
+  for (const e of [7, 8]) {
+    assert.equal(mageslayer.ruptureDamageForEnergy(e), 1);
+    assert.equal(mageslayer.ruptureSealForEnergy(e), 0);
   }
-  assert.equal(t.statuses.manaSeal, 2);
-});
-
-test('onBustOrLoseRoll: 35% chance to gain 1 Fury stack, capped at 2, no-op for non-mageslayer', () => {
-  const ms = mkPlayer({ statuses: { mageslayerFury: 1 } });
-  const orig = Math.random;
-  Math.random = () => 0;
-  try {
-    mageslayer.onBustOrLoseRoll(engine, ms);
-    assert.equal(ms.statuses.mageslayerFury, 2);
-    mageslayer.onBustOrLoseRoll(engine, ms);
-    assert.equal(ms.statuses.mageslayerFury, 2, 'capped at 2');
-  } finally {
-    Math.random = orig;
+  for (const e of [2, 4, 6]) {
+    assert.equal(mageslayer.ruptureDamageForEnergy(e), 3);
+    assert.equal(mageslayer.ruptureSealForEnergy(e), 2);
   }
-  const other = mkPlayer({ characterId: 'tohno' });
-  mageslayer.onBustOrLoseRoll(engine, other);
-  assert.equal(other.statuses.mageslayerFury || 0, 0);
+  for (const e of [0, 1]) {
+    assert.equal(mageslayer.ruptureDamageForEnergy(e), 5);
+    assert.equal(mageslayer.ruptureSealForEnergy(e), 3);
+  }
 });
 
-test('resolveManaRupture: damage tiers use the energy snapshot captured when the debuff was applied', () => {
-  const caster = mkPlayer({ skillPoints: 0 });
-  const t1 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 8 });
-  mageslayer.resolveManaRupture(engine, caster, t1, { energy: 8, dmg: 1 });
-  assert.equal(t1.hp, 9, 'tier 7-8 -> 1 damage');
-
-  const t2 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 2 });
-  mageslayer.resolveManaRupture(engine, caster, t2, { energy: 2, dmg: 3 });
-  assert.equal(t2.hp, 7, 'tier 2-6 (low end, energy=2) -> 3 damage');
-
-  const t3 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 6 });
-  mageslayer.resolveManaRupture(engine, caster, t3, { energy: 6, dmg: 3 });
-  assert.equal(t3.hp, 7, 'tier 2-6 (high end, energy=6) -> 3 damage');
-
-  const t4 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 1 });
-  mageslayer.resolveManaRupture(engine, caster, t4, { energy: 1, dmg: 5 });
-  assert.equal(t4.hp, 5, 'tier 0-1 (energy=1) -> 5 damage');
-  assert.equal(t4.statuses.stun || 0, 0, 'reworked Mana Rupture no longer stuns');
-
-  const t5 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 0 });
-  mageslayer.resolveManaRupture(engine, caster, t5, { energy: 0, dmg: 5 });
-  assert.equal(t5.hp, 5, 'tier 0-1 (energy=0) -> 5 damage');
-  assert.equal(t5.statuses.stun || 0, 0, 'no stun');
-
-  const bard = mkPlayer({ characterId: 'bard', hp: 10, armor: 0, skillPoints: 0 });
-  mageslayer.resolveManaRupture(engine, caster, bard, { energy: 0, dmg: 5 });
-  assert.equal(bard.hp, 5);
-  assert.equal(bard.statuses.stun || 0, 0, 'Bard no longer receives a special stun');
-});
-
-test('resolveManaRupture: caster\'s energy is unchanged (no more +2 energy back — removed to respect Song\'s Curse)', () => {
-  const caster = mkPlayer({ skillPoints: 0 });
-  const t = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 5 });
-  mageslayer.resolveManaRupture(engine, caster, t, { energy: 5, dmg: 3 });
-  assert.equal(caster.skillPoints, 0, 'no energy return anymore');
-});
-
-test('applyManaBurden: every alive player (including the caster) gains +1 spellburden stack, 5 turns, resist blocks it', () => {
+test('applyRuptureEffect: tags the target for 2 turns and schedules the blast 2 rounds out', () => {
   const caster = mkPlayer();
-  const ally = mkPlayer({ characterId: 'tohno' });
+  const t = mkPlayer({ characterId: 'tohno', skillPoints: 4 });
+  mageslayer.applyRuptureEffect(engine, caster, t, 'Mana Rupture');
+  assert.equal(t.statuses.manaRupture, 2, 'status lasts 2 turns per the spec');
+  assert.equal(t.manaRuptures.length, 1);
+  assert.equal(t.manaRuptures[0].round, engine.roundNumber + 2, 'detonates when the status expires, not next turn');
+  assert.equal(t.manaRuptures[0].dmg, 3);
+  assert.equal(t.manaRuptures[0].seal, 2);
+});
+
+test('resolveManaRupture: applies the snapshot damage and the matching ผนึกพลังเวทย์ duration', () => {
+  const caster = mkPlayer({ skillPoints: 0 });
+
+  const t1 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 8 });
+  mageslayer.resolveManaRupture(engine, caster, t1, { energy: 8, dmg: 1, seal: 0 });
+  assert.equal(t1.hp, 9, 'tier 7-8 -> 1 damage');
+  assert.equal(t1.statuses.manaSeal || 0, 0, 'no seal on the top tier');
+
+  const t2 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 6 });
+  mageslayer.resolveManaRupture(engine, caster, t2, { energy: 6, dmg: 3, seal: 2 });
+  assert.equal(t2.hp, 7, 'tier 2-6 -> 3 damage');
+  assert.equal(t2.statuses.manaSeal, 2);
+
+  const t3 = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 0 });
+  mageslayer.resolveManaRupture(engine, caster, t3, { energy: 0, dmg: 5, seal: 3 });
+  assert.equal(t3.hp, 5, 'tier 0-1 -> 5 damage');
+  assert.equal(t3.statuses.manaSeal, 3);
+
+  assert.equal(caster.skillPoints, 0, 'Mana Rupture returns no energy to the caster');
+});
+
+test('resolveDueRuptures: only fires once the scheduled round arrives, then clears the status', () => {
+  const caster = mkPlayer();
+  const t = mkPlayer({ characterId: 'tohno', hp: 10, armor: 0, skillPoints: 4 });
+  mageslayer.applyRuptureEffect(engine, caster, t, 'Mana Rupture');
+  const base = engine.roundNumber;
+  try {
+    engine.setRoundNumber(base + 1);
+    mageslayer.resolveDueRuptures(engine);
+    assert.equal(t.hp, 10, 'still armed after 1 turn');
+    engine.setRoundNumber(base + 2);
+    mageslayer.resolveDueRuptures(engine);
+    assert.equal(t.hp, 7, 'detonates on the 2nd turn');
+    assert.equal(t.statuses.manaRupture || 0, 0, 'status cleared afterwards');
+  } finally {
+    engine.setRoundNumber(base);
+  }
+});
+
+// ---------- Mana Burden ----------
+
+test('applyManaBurden: everyone EXCEPT the caster gets +1 ภาระเวท and 5 turns of ดูดซับเวท', () => {
+  const caster = mkPlayer();
+  const other = mkPlayer({ characterId: 'tohno' });
   const resistant = mkPlayer({ characterId: 'riddhe', statuses: { resist: 1 } });
   mageslayer.applyManaBurden(engine, caster);
-  assert.equal(caster.statuses.spellburden, 5);
-  assert.equal(caster.statusAmt.spellburden, 1);
-  assert.equal(ally.statuses.spellburden, 5);
-  assert.equal(ally.statusAmt.spellburden, 1);
+  assert.equal(caster.statuses.spellburden || 0, 0, 'caster is excluded');
+  assert.equal(caster.statuses.manaLeech || 0, 0, 'caster is excluded');
+  assert.equal(other.statuses.spellburden, 5);
+  assert.equal(other.statusAmt.spellburden, 1);
+  assert.equal(other.statuses.manaLeech, 5);
   assert.equal(resistant.statuses.spellburden || 0, 0, 'resist blocks Mana Burden entirely');
+  assert.equal(resistant.statuses.manaLeech || 0, 0);
 });
 
-test('applyManaBurden: a Bard currently marked by this player\'s Witch Mark gets mageslayerLockedBurden set', () => {
+test('applyManaBurden: ภาระเวท stacks up to the shared SPELLBURDEN_MAX cap', () => {
   const caster = mkPlayer();
-  const bard = mkPlayer({ characterId: 'bard' });
-  mageslayer.applyWitchMark(engine, caster, bard);
+  const other = mkPlayer({ characterId: 'tohno', statusAmt: { spellburden: engine.SPELLBURDEN_MAX } });
+  other.statuses.spellburden = 5;
   mageslayer.applyManaBurden(engine, caster);
-  assert.equal(bard.mageslayerLockedBurden, true);
-});
-
-test('applyManaBurden: an unmarked Bard does not get the uncleansable lock', () => {
-  const caster = mkPlayer();
-  const bard = mkPlayer({ characterId: 'bard' });
-  mageslayer.applyManaBurden(engine, caster);
-  assert.equal(bard.mageslayerLockedBurden || false, false);
-});
-
-test('cleanseDebuffs: spellburden survives cleanse when mageslayerLockedBurden is set, even though resist normally clears it', () => {
-  const universal = require('../../characters/_universal_status.js');
-  const bard = mkPlayer({ characterId: 'bard', statuses: { spellburden: 5, resist: 1 }, statusAmt: { spellburden: 1 }, mageslayerLockedBurden: true });
-  universal.cleanseDebuffs(bard);
-  assert.equal(bard.statuses.spellburden, 5, 'locked — survives cleanse despite being in BASIC_DEBUFF_CLEAR');
-});
-
-test('cleanseDebuffs: without the lock, spellburden clears normally', () => {
-  const universal = require('../../characters/_universal_status.js');
-  const bard = mkPlayer({ characterId: 'bard', statuses: { spellburden: 5, resist: 1 }, statusAmt: { spellburden: 1 } });
-  universal.cleanseDebuffs(bard);
-  assert.equal(bard.statuses.spellburden || 0, 0);
-});
-
-test('damageBonus: +1 vs a target with more energy than the attacker, plus the full Fury stack count', () => {
-  const ms = mkPlayer({ skillPoints: 2, statuses: { mageslayerFury: 2 } });
-  const target = mkPlayer({ characterId: 'tohno', skillPoints: 5 });
-  assert.equal(mageslayer.damageBonus(engine, ms, target), 3, '+1 song bonus + 2 fury stacks');
-  const lowEnergyTarget = mkPlayer({ characterId: 'tohno', skillPoints: 0 });
-  assert.equal(mageslayer.damageBonus(engine, ms, lowEnergyTarget), 2, 'no song bonus, just 2 fury stacks');
-  assert.equal(mageslayer.damageBonus(engine, mkPlayer({ characterId: 'tohno' }), target), 0, 'zero for non-mageslayer attackers');
+  assert.equal(other.statusAmt.spellburden, engine.SPELLBURDEN_MAX, 'capped, never exceeds');
 });

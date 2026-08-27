@@ -61,7 +61,7 @@ const FILES = {
   kaiVoice3: "/characters/kai/voice/kai_voice3.m4a",
   kaiVoice4: "/characters/kai/voice/kai_voice4.m4a",
   kaiVoice5: "/characters/kai/voice/kai_voice5.m4a",
-  // ผู้สังหารจอมมหาเวทย์: เสียงโจมตีปกติเฉพาะตัว / เสียงหลัง Mana Rupture / เพลงระหว่างมี Mana Burden (spellburden) ติดตัวเอง
+  // ผู้สังหารเมจ: เสียงโจมตีปกติเฉพาะตัว / เสียงหลัง Mana Rupture / เพลงระหว่างมี Mana Burden (spellburden) ติดตัวเอง
   mageslayer_attack: "/characters/mageslayer/BA.mp3",
   mageslayer_skill2: "/characters/mageslayer/SFX_Skill_2.mp3",
   mageslayer_ult: "/characters/mageslayer/BGM_Ult.mp3",
@@ -90,6 +90,11 @@ const FILES = {
   p_shiki: "/characters/princess_shiki/p_shiki_theme.m4a",
   trigger: "/characters/ultraman_trigger/trigger_theme.mp3",
   hisakawa_sunday: "/characters/hisakawa_sister/skill3/O-Ku-Ri-Mo-No.mp3",
+  // ฟุจิตะ โคโตเนะ (rework 2.3): เพลงประจำร่าง [พร้อมลุย] + เพลงประกอบท่าไม้ตาย 3/4/5 (เล่นทับวีดีโอผ่าน cs.voice)
+  kotone_ult1: "/characters/kotone/rework/สกิลอัลติเมติ1/ULT1.mp3",
+  kotone_ult3: "/characters/kotone/rework/สกิลอัลติเมต3/ULT3.mp3",
+  kotone_ult4: "/characters/kotone/rework/สกิลอัลติเมต4/ULT4.mp3",
+  kotone_ult5: "/characters/kotone/rework/สกิลอัลติเมต5/ULT5.mp3",
   hisakawa_nagi_1: "/characters/hisakawa_sister/voice/nagi/nagi_voice.m4a",
   hisakawa_nagi_2: "/characters/hisakawa_sister/voice/nagi/nagi_voice2.m4a",
   hisakawa_nagi_3: "/characters/hisakawa_sister/voice/nagi/nagi_voice3.m4a",
@@ -218,11 +223,13 @@ export function resetMusicPositions() {
   for (const k of Object.keys(musicSeq)) delete musicSeq[k];
   currentMusic = null;
 }
+// คืน element ที่เล่นอยู่ ให้ผู้เรียกหยุดเองได้ (เช่น เพลงประกอบคัตซีนที่ต้องหยุดตอนฉากจบ)
 export function playSfx(name) {
-  if (!FILES[name]) return;
+  if (!FILES[name]) return null;
   const a = new Audio(FILES[name]);
   a.volume = (name === "action_button" ? CLICK_BASE : SFX_BASE) * vcurve();
   a.play().catch(() => {});
+  return a;
 }
 export function clickSound() { playSfx("action_button"); }
 

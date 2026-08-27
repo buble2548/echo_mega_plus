@@ -61,7 +61,7 @@ module.exports = {
     // อัศวินรัตติกาล: กลางคืนได้เหรียญ +1 ต่อเทิร์น
     if (engine.isNightRound(engine.roundNumber) && !engine.passiveSealed(p)) {
       const before = p.gold || 0;
-      p.gold = Math.min(engine.GOLD_MAX, before + BAT_NIGHT_GOLD);
+      engine.addGold(p, BAT_NIGHT_GOLD);
       if (p.gold > before) engine.log(`🦇🌙 ${p.name} อัศวินรัตติกาล — ราตรีคือถิ่นของเขา เหรียญ +${p.gold - before} (มี ${p.gold})`);
     }
     // เร้นเงา: ฟื้นพลังชีวิต +1 ทุกเทิร์นที่ยังซ่อนอยู่ (patch 2.2.7.1: ไม่มีเงื่อนไข "ต้องไม่โดนตี" แล้ว)

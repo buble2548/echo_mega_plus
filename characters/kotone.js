@@ -1,147 +1,314 @@
 // ============================================================
-//  ฟุจิตะ โคโตเนะ (patch 1.9.1 / rework 2.1.3 / 2.2.2) — Part-time (กระปุกออมสิน) / สกิลรอง (เพลงฝึกซ้อม) /
-//  Sleeping time (สกิลรอง 2 กลางคืน) / [โหมงานหนัก] / ท่านประธานเซนะจัง / Sekai ichi kawaii watashi (ท่าไม้ตาย)
-//  ย้ายออกมาจาก server.js — ดู characters/index.js สำหรับไฟล์มัดรวม
-//  หมายเหตุ: `maybeWakeKotone(t)` ใน server.js เป็นฟังก์ชันที่ไม่ทำอะไรแล้ว (no-op ถาวรตาม comment เดิม
-//  "คงฟังก์ชัน/จุดเรียกไว้เผื่อใช้ในอนาคต") — จงใจไม่ย้าย/ไม่ลบ เพราะมีตัวละครอื่นอีก ~9 จุดเรียกผ่าน
-//  engine.maybeWakeKotone(...) เป็นส่วนหนึ่งของ post-damage hook chain มาตรฐาน (maybeBeatSave/Mode/Eva3/
-//  WakeKotone) — ลบออกจะกระทบไฟล์ตัวละครอื่นที่แยกไปแล้วหลายตัว ความเสี่ยงไม่คุ้มกับการลบโค้ดที่ตายไปแล้ว
-//  หมายเหตุ 2: `p.overworkNext` มีแค่จุดอ่าน/เคลียร์ (ตอนต้นเทิร์น + ตอนใช้ Sleeping time) แต่ไม่มีจุดไหนตั้งเป็น
-//  true เลยในโค้ดปัจจุบัน — ดูเหมือนกลไกที่เคยตั้งค่านี้ถูกถอดออกไปแล้วในแพตช์ก่อนหน้า (โค้ดกำพร้า) — ย้ายมาตามเดิม
-//  โดยไม่แก้ พฤติกรรมเดิม (ไม่เคยทำงาน) ยังคงเหมือนเดิมทุกประการ ไม่ได้ "ซ่อม" ให้ระหว่างการแยกไฟล์นี้
+//  ฟุจิตะ โคโตเนะ (rework 2.3) — Part-time / Dance Lession / หนูพร้อมแล้วคะ โปรดิวเซอร์ (ร่าง [พร้อมลุย])
+//  / Sekai ichi kawaii watashi / Campus Mode! / Self-affirmation Explosion! Love Love / Sleeping time
+//  + สกิลติดตัว "กระปุกออมสินน้องหมูน้อย" (เพดานเหรียญ 45 + กระปุก 15 + ท่านประธานเซนะจัง)
+//
+//  โครงสร้างสกิล (ดู dynamicSkillFor) — ปุ่มบนกระดานมี 3 ช่องเท่านั้น จึงแมปดังนี้
+//    ร่างปกติ กลางวัน : basic  = Part-time (1)      secondary  = Dance Lession (3)   ultimate      = หนูพร้อมแล้วคะ (4 + ความพร้อม 4)
+//    ร่างปกติ กลางคืน : basicNight = Part-time (3)  secondaryNight = Dance (5)       ultimateNight = Sleeping time (4)
+//    ร่าง [พร้อมลุย]  : basic3 = ULT3 Sekai ichi   secondary3 = ULT4 Campus Mode!   ultimate3     = ULT5 Love Love
+//      -> ร่าง [พร้อมลุย] ทับทั้งกลางวันและกลางคืน เพื่อให้ "อยู่จนกว่าจะใช้สกิล" เป็นจริงเสมอ
+//         (ไม่งั้นเข้าร่างท้ายวันแล้วตกคืนจะไม่มีปุ่มให้ปล่อยท่า)
+//
+//  หมายเหตุ: `maybeWakeKotone(t)` ใน server.js เป็น no-op ถาวรตาม comment เดิม — จงใจไม่ลบ เพราะเป็นส่วนหนึ่ง
+//  ของ post-damage hook chain มาตรฐาน (maybeBeatSave/Mode/Eva3/WakeKotone) ที่ไฟล์ตัวละครอื่นเรียกอยู่ ~9 จุด
 // ============================================================
 
-const KOTONE_COIN_MAX = 6;         // กระปุกออมสินน้องหมูน้อย เก็บ coin ได้สูงสุด
-const KOTONE_COIN_PER_DMG = 2;     // 2 coin = +1 ความเสียหายตอนโจมตี (มีสำเนาใน server.js สำหรับ doAttack's shared damage-sum)
-const KOTONE_SENA_BASE = 0.1;      // โอกาสเจอท่านประธานเซนะจังเมื่อใช้สกิลใดๆ (ฐาน 10%)
-const KOTONE_SENA_PER_COIN = 0.05; // เพิ่มอีก 5% ทุกๆ 1 coin ที่มีอยู่ในกระปุก
-const KOTONE_STUN_CHANCE = 0.1;    // [โหมงานหนัก]: โอกาสสุ่มสตั้นต่อเทิร์น
-const KOTONE_KAWAII_DMG = 3;       // ท่าไม้ตาย: ความเสียหายใส่ทุกคน (ยกเว้นตัวเอง)
-const KOTONE_KAWAII_STUN_TURNS = 2; // ท่าไม้ตาย: ทุกคนติดสตั้น
-const KOTONE_COIN_GAIN_MAX = 3;    // Part-time: ได้ coin แบบสุ่ม 1-3 เหรียญต่อครั้ง
-const KOTONE_DANCE_COIN_COST = 3;  // สกิลรอง: ต้องมี coin อย่างน้อยเท่านี้ถึงใช้ได้ — หักเท่านี้ตอนใช้
-const KOTONE_DANCE_ATK_BONUS = 2;  // สกิลรอง: บัฟพลังโจมตีพื้นฐาน +2 ในการโจมตีครั้งถัดไป
-const KOTONE_PIERCE_BURDEN_TURNS = 2; // สกิลรอง: ภาระเวท (แต้มสกิล +1) มีผลเทิร์นถัดไปเทิร์นเดียว
-const KOTONE_KSLEEP_TURNS = 3;     // Sleeping time: หลับนิ่ง 3 เทิร์นตายตัว
-const KOTONE_KSLEEP_HEAL = 2;      // Sleeping time: ฮีลตัวเองทันทีตอนใช้สกิล (ครั้งเดียว)
-const KOTONE_KSLEEP_SEAL_TURNS = 1; // Sleeping time: ศัตรูไม่สามารถโจมตี(เลือกเป็นเป้าหมาย)ได้ 1 เทิร์นแรกของการหลับ
+// ---------- สกิลติดตัว: กระปุกออมสินน้องหมูน้อย ----------
+const KOTONE_GOLD_CAP = 45;        // ขยายขีดจำกัดเหรียญของโคโตเนะ (คนอื่น GOLD_MAX = 30)
+const KOTONE_PIGGY_MAX = 15;       // กระปุกออมสินเก็บได้สูงสุด
+const KOTONE_PIGGY_CHANCE = 0.6;   // โอกาสสะสมเข้ากระปุกเมื่อได้รับเหรียญ
+const KOTONE_PIGGY_MAX_SAVE = 3;   // หยอดได้ครั้งละไม่เกิน 3 เหรียญ — หักจากเหรียญที่เพิ่งได้รับจริง
+                                   //  (ได้ 1 หยอด 1 · ได้ 2 หยอด 2 · ได้ตั้งแต่ 3 ขึ้นไป หยอด 3)
+const KOTONE_SENA_CHANCE = 0.2;    // โอกาสโดนท่านประธานเซนะจังเจอตัว (เฉพาะสกิลพื้นฐาน/พื้นฐาน 2/สกิลรอง)
+const KOTONE_SENA_STUN_TURNS = 1;  // โดนเจอตัว -> สตั้นตัวเอง 1 เทิร์น (เริ่มมีผลเทิร์นถัดไป)
+
+// ---------- Part-time ----------
+const KOTONE_PART_DAY_MIN = 1, KOTONE_PART_DAY_MAX = 6;     // กลางวัน: เหรียญสุ่ม 1-6
+const KOTONE_PART_NIGHT_MIN = 3, KOTONE_PART_NIGHT_MAX = 8; // กลางคืน: เหรียญสุ่ม 3-8
+const KOTONE_PART_NIGHT_HP = 1;                             // กลางคืน: เสียพลังชีวิตตัวเอง 1
+
+// ---------- Dance Lession ----------
+const KOTONE_DANCE_DAY_READY = 1;     // กลางวัน: [ความพร้อม] +1
+const KOTONE_DANCE_NIGHT_READY = 2;   // กลางคืน: [ความพร้อม] +2
+const KOTONE_DANCE_NIGHT_BURDEN = 2;  // กลางคืน: ภาระเวท 2 เทิร์น
+const KOTONE_DANCE_NIGHT_HP = 2;      // กลางคืน: เสียพลังชีวิตตัวเอง 2
+
+// ---------- ท่าไม้ตาย 1: หนูพร้อมแล้วคะ โปรดิวเซอร์ ----------
+const KOTONE_READY_NEED = 4;          // ต้องมี [ความพร้อม] ครบ 4 หน่วย (หักทั้งหมดตอนใช้)
+
+// ---------- ท่าไม้ตายในร่าง [พร้อมลุย] (ทั้ง 3 ท่าใช้ 6 แต้มสกิล + 6 เหรียญ) ----------
+const KOTONE_FORM_ULT_GOLD = 6;
+const KOTONE_KAWAII_HEAL = 1;         // ULT3: ฮีลตัวเอง
+const KOTONE_KAWAII_DMG = 1;          // ULT3: ตีหมู่เจาะเกราะ
+const KOTONE_KAWAII_STUN_TURNS = 2;   // ULT3: สตั้นทุกคน (ยกเว้นตัวเอง)
+const KOTONE_CAMPUS_HEAL = 3;         // ULT4: ฮีลตัวเอง
+const KOTONE_CAMPUS_NOHEAL_TURNS = 2; // ULT4: ไร้ทางเยียวยาทุกคน (ยกเว้นตัวเอง)
+const KOTONE_FORCE_BUST_DRAWS = 3;    // บังคับแตก: จั่วเพิ่มกี่ใบ
+const KOTONE_FORCE_BUST_BONUS = 8;    // บังคับแตก: บวกแต้มการ์ดตรงๆ ให้เกินเพดานแน่นอน (แม้เปิดไพ่/ล็อกไปแล้ว)
+                                      //  ตัวเลขเดียวกับ Crucible (ดูมกาย) / Ashen Trail (โอกูริ) — กลไกเดียวกัน
+
+// ---------- (รัก รักที่สุดเลย) ----------
+const KOTONE_LOVE_PER_COIN = 5;       // เงินในกระปุก 5 เหรียญ = +1 ดาเมจ
+const KOTONE_LOVE_MAX = 3;            // สูงสุด +3 (ที่ 15 เหรียญ)
+
+// ---------- Sleeping time ----------
+const KOTONE_SLEEP_TURNS = 3;         // หลับ 3 เทิร์น
+const KOTONE_SLEEP_HEAL = 2;          // ระหว่างหลับ ฮีล 2 หน่วย/เทิร์น
+const KOTONE_SLEEP_SKILL = 1;         // ระหว่างหลับ ฟื้นแต้มสกิล 1 หน่วย/เทิร์น
+const KOTONE_SLEEP_SEAL_TURNS = 1;    // ศัตรูเลือกโจมตีไม่ได้ 1 เทิร์น
+
+const KOTONE_FORM_IMG = "/characters/kotone/rework/สกิลอัลติเมติ1/Kotone.png";
+
+// สถานะของท่าไม้ตายทั้ง 3 ท่าในร่าง [พร้อมลุย] — ทำงานหลังเปิดไพ่ผ่าน resolveFormUlts()
+const KOTONE_FORM_ULT_KEYS = ["kawaii", "kcampus", "kshuki"];
 
 module.exports = {
   id: "kotone",
+  GOLD_CAP: KOTONE_GOLD_CAP,
+  PIGGY_MAX: KOTONE_PIGGY_MAX,
+  READY_NEED: KOTONE_READY_NEED,
+  FORM_ULT_GOLD: KOTONE_FORM_ULT_GOLD,
+  FORM_ULT_KEYS: KOTONE_FORM_ULT_KEYS,
 
-  // ดาเมจ contribution (เพลงฝึกซ้อม +2 / กระปุกออมสิน 2 coin=+1 / [โหมงานหนัก] ล้าง pigDmg) — เรียกจาก computeAttackBase()
-  damageBonus(engine, attacker, target, ctx) {
-    const kotoneAtk = (attacker.statuses.kotoneAtk || 0) > 0;
-    const kotoneExhausted = this.overworkActive(attacker) && !engine.isNightRound(engine.roundNumber);
-    let pigDmg = Math.floor((attacker.coins || 0) / KOTONE_COIN_PER_DMG);
-    if (kotoneExhausted) pigDmg = 0;
-    ctx.kotoneAtk = kotoneAtk;
-    ctx.kotoneExhausted = kotoneExhausted;
-    ctx.pigDmg = pigDmg;
-    return (kotoneAtk ? KOTONE_DANCE_ATK_BONUS : 0) + pigDmg;
+  // ---------- helper ----------
+  // ร่าง [พร้อมลุย] ทำงานอยู่ไหม
+  formActive(p) {
+    return !!p && ((p.statuses && p.statuses.kready) || 0) > 0;
+  },
+  // จำนวน [ความพร้อม] ที่สะสมอยู่
+  readyStacks(p) {
+    return (p && p.statuses && p.statuses.kotoneReady) || 0;
+  },
+  // ดาเมจเสริมของ (รัก รักที่สุดเลย) ตามเงินในกระปุก — 5/10/15 เหรียญ = +1/+2/+3
+  loveDamage(p) {
+    return Math.min(KOTONE_LOVE_MAX, Math.floor(((p && p.piggy) || 0) / KOTONE_LOVE_PER_COIN));
+  },
+  // ภาพประจำตัวตามร่างปัจจุบัน (null = ใช้ภาพปกติ) — เรียกจาก displayImg() ใน server.js
+  displayImg(p) {
+    return this.formActive(p) ? KOTONE_FORM_IMG : null;
   },
 
-  // [โหมงานหนัก] ทำงานอยู่ไหม (คงอยู่จนกว่าจะใช้ Sleeping time ตอนกลางคืน) — เรียกผ่าน server.js's overworkActive(p) wrapper
-  overworkActive(p) {
-    return !!p && ((p.statuses && p.statuses.overwork) || 0) > 0;
+  // ---------- ตัวเลือกสกิลตามร่าง/ช่วงเวลา — เรียกทั้งจาก useSkill() และ buildStateFor() ----------
+  //  night = ผลของ isNightRound() ที่ผู้เรียกคำนวณมาแล้ว (hook ไม่เดาเอง)
+  dynamicSkillFor(p, ch, tier, night) {
+    if (this.formActive(p)) {
+      if (tier === "basic") return ch.basic3;
+      if (tier === "secondary") return ch.secondary3;
+      return ch.ultimate3;
+    }
+    if (night) {
+      if (tier === "basic") return ch.basicNight;
+      if (tier === "secondary") return ch.secondaryNight;
+      return ch.ultimateNight;
+    }
+    return ch[tier];
   },
 
-  // โอกาสเจอท่านประธานเซนะจัง: ฐาน 10% + 5% ทุกๆ 1 coin — เรียกผ่าน server.js's kotoneSenaChance(p) wrapper
-  senaChance(p) {
-    return KOTONE_SENA_BASE + KOTONE_SENA_PER_COIN * (p.coins || 0);
+  // ---------- เงื่อนไขการกด — เรียกจาก useSkill() ก่อนหักแต้ม ----------
+  canUseSkill(engine, p, tier, skill, night) {
+    if (!skill) return false;
+    const st = skill.effect && skill.effect.status;
+    // ท่าไม้ตายในร่าง [พร้อมลุย]: ต้องอยู่ในร่าง และมีเหรียญพอจ่าย 6 เหรียญ
+    if (KOTONE_FORM_ULT_KEYS.includes(st)) {
+      return this.formActive(p) && (p.gold || 0) >= KOTONE_FORM_ULT_GOLD;
+    }
+    // หนูพร้อมแล้วคะ โปรดิวเซอร์: ต้องมี [ความพร้อม] ครบ 4 และยังไม่อยู่ในร่าง
+    if (st === "kready") {
+      return !this.formActive(p) && this.readyStacks(p) >= KOTONE_READY_NEED;
+    }
+    // Sleeping time (ท่าไม้ตายกลางคืน): หลับอยู่แล้ว กดซ้ำไม่ได้
+    if (tier === "ultimate" && night) return !((p.statuses.ksleep || 0) > 0);
+    return true;
   },
 
-  // เรียกจาก dealRound() ต้นเทิร์น — [โหมงานหนัก] ติดสถานะ (จุดอ่าน p.overworkNext — ดูหมายเหตุด้านบนเรื่องโค้ดกำพร้า)
-  onRoundStartOverworkTrigger(engine, p) {
-    if (!p.overworkNext) return;
-    p.overworkNext = false;
-    if (engine.resistActive(p)) {
-      engine.log(`🛡️ ${p.name} ต้านสถานะผิดปกติของตัวเอง — ไม่ติด [โหมงานหนัก]`);
+  // ---------- หักเหรียญของท่าไม้ตายในร่าง [พร้อมลุย] — เรียกจาก useSkill() พร้อมกับหักแต้มสกิล ----------
+  payFormUltGold(engine, p, skill) {
+    const st = skill && skill.effect && skill.effect.status;
+    if (!KOTONE_FORM_ULT_KEYS.includes(st)) return "";
+    p.gold = Math.max(0, (p.gold || 0) - KOTONE_FORM_ULT_GOLD);
+    engine.log(`🪙 ${p.name} จ่าย ${KOTONE_FORM_ULT_GOLD} เหรียญเพื่อปล่อย ${skill.name} (เหลือ ${p.gold} เหรียญ)`);
+    return ` — จ่าย ${KOTONE_FORM_ULT_GOLD} เหรียญ`;
+  },
+
+  // ---------- ผลของสกิลที่ทำงานทันที (instant) — เรียกจาก useSkill() ในส่วน effect ----------
+  //  คืน flashSuffix ต่อท้ายชื่อสกิลบนป้ายเด้ง
+  applyInstantSkill(engine, p, tier, night) {
+    if (this.formActive(p)) return ""; // ในร่าง [พร้อมลุย] ทั้ง 3 ปุ่มเป็นท่าไม้ตาย (ทำงานหลังเปิดไพ่)
+    if (tier === "basic") return this.applyPartTime(engine, p, night);
+    if (tier === "secondary") return this.applyDance(engine, p, night);
+    if (tier === "ultimate" && night) return this.applySleep(engine, p);
+    return "";
+  },
+
+  // Part-time — กลางวัน: เหรียญ 1-6 / กลางคืน: เหรียญ 3-8 + เสียเลือด 1
+  applyPartTime(engine, p, night) {
+    const min = night ? KOTONE_PART_NIGHT_MIN : KOTONE_PART_DAY_MIN;
+    const max = night ? KOTONE_PART_NIGHT_MAX : KOTONE_PART_DAY_MAX;
+    const roll = min + Math.floor(Math.random() * (max - min + 1));
+    const kept = engine.addGold(p, roll); // ยอดสุทธิหลังกระปุกออมสินแบ่งไปเก็บ (ถ้าโรลติด)
+    let hpMsg = "";
+    if (night) {
+      for (let i = 0; i < KOTONE_PART_NIGHT_HP; i++) engine.loseHp(p);
+      hpMsg = ` · เสียพลังชีวิต -${KOTONE_PART_NIGHT_HP}`;
+      engine.maybeBeatSave(p); engine.maybeBeatMode(p); engine.maybeEva3(p);
+    }
+    engine.log(`🐷 ${p.name} Part-time${night ? " (กะดึก)" : ""} — สุ่มได้ ${roll} เหรียญ (เข้ากระเป๋าสุทธิ +${kept} · มี ${p.gold})${hpMsg}`);
+    return ` — เหรียญ +${kept}`;
+  },
+
+  // Dance Lession — [ความพร้อม] +1 (กลางคืน +2 พร้อมภาระเวท 2 เทิร์น + เสียเลือด 2)
+  applyDance(engine, p, night) {
+    const add = night ? KOTONE_DANCE_NIGHT_READY : KOTONE_DANCE_DAY_READY;
+    p.statuses.kotoneReady = this.readyStacks(p) + add;
+    let extra = "";
+    if (night) {
+      if (!engine.resistActive(p)) {
+        p.statusAmt = p.statusAmt || {};
+        p.statuses.spellburden = Math.max(p.statuses.spellburden || 0, KOTONE_DANCE_NIGHT_BURDEN);
+        p.statusAmt.spellburden = Math.min(engine.SPELLBURDEN_MAX, (p.statusAmt.spellburden || 0) + 1);
+        extra += ` · ติดภาระเวท ${KOTONE_DANCE_NIGHT_BURDEN} เทิร์น`;
+      } else {
+        extra += " · ต้านสถานะผิดปกติของตัวเอง ไม่ติดภาระเวท";
+      }
+      for (let i = 0; i < KOTONE_DANCE_NIGHT_HP; i++) engine.loseHp(p);
+      extra += ` · เสียพลังชีวิต -${KOTONE_DANCE_NIGHT_HP}`;
+      engine.maybeBeatSave(p); engine.maybeBeatMode(p); engine.maybeEva3(p);
+    }
+    engine.log(`💃 ${p.name} Dance Lession${night ? " (รอบดึก)" : ""} — [ความพร้อม] +${add} (มี ${this.readyStacks(p)}/${KOTONE_READY_NEED})${extra}`);
+    return ` — ความพร้อม ${this.readyStacks(p)}/${KOTONE_READY_NEED}`;
+  },
+
+  // Sleeping time — ล้าง "สถานะเสีย" ทั้งหมด + กันถูกเลือกโจมตี 1 เทิร์น + หลับ 3 เทิร์น
+  //  ล้างเฉพาะดีบัฟ (BASIC_DEBUFF_CLEAR/SOFT_DEBUFF_STEP ผ่าน cleanseDebuffs) — บัฟและสถานะของตัวเอง
+  //  ([ความพร้อม] / ร่าง [พร้อมลุย] ฯลฯ) ยังอยู่ครบ
+  //  (ฮีล 2 / แต้มสกิล +1 ต่อเทิร์นระหว่างหลับ อยู่ที่ onRoundStartTick)
+  applySleep(engine, p) {
+    const purged = engine.cleanseDebuffs(p);
+    p.statuses.ksleep = KOTONE_SLEEP_TURNS;
+    p.statuses.seal = Math.max(p.statuses.seal || 0, KOTONE_SLEEP_SEAL_TURNS); // ศัตรูไม่สามารถเลือกโจมตีได้ 1 เทิร์น
+    engine.log(`😴 ${p.name} Sleeping time — ล้างสถานะเสียที่ติดตัวอยู่ ${purged} อย่าง · ศัตรูเลือกโจมตีไม่ได้ ${KOTONE_SLEEP_SEAL_TURNS} เทิร์น · หลับ ${KOTONE_SLEEP_TURNS} เทิร์น (ระหว่างหลับ ฟื้นพลังชีวิต +${KOTONE_SLEEP_HEAL} และแต้มสกิล +${KOTONE_SLEEP_SKILL} ต่อเทิร์น)`);
+    return " — หลับพักผ่อน";
+  },
+
+  // ---------- ท่าไม้ตาย 1: เข้าร่าง [พร้อมลุย] (หลังเปิดไพ่) ----------
+  //  เรียกจาก afterResolve()'s afterReveal-activation loop (TRANSFORMS.kready.afterReveal = true)
+  activateReady(engine, p) {
+    const left = Math.max(0, this.readyStacks(p) - KOTONE_READY_NEED);
+    if (left > 0) p.statuses.kotoneReady = left;
+    else delete p.statuses.kotoneReady;
+    engine.log(`✨ ${p.name} หนูพร้อมแล้วคะ โปรดิวเซอร์! — ใช้ [ความพร้อม] ${KOTONE_READY_NEED} หน่วยเข้าสู่ร่าง [พร้อมลุย] (อยู่จนกว่าจะปล่อยท่าไม้ตายในร่าง)`);
+  },
+
+  // ---------- ท่าไม้ตายในร่าง [พร้อมลุย] (หลังเปิดไพ่) ----------
+  //  ต้องทำงาน "ก่อน" ตัดสินผู้ชนะ เพราะมีผลบังคับแตก -> เรียกจาก resolveRound() หลังบล็อก ANATA
+  resolveFormUlts(engine) {
+    for (const p of engine.alivePlayers()) {
+      if (p.characterId !== "kotone") continue;
+      for (const key of KOTONE_FORM_ULT_KEYS) {
+        if (!((p.statuses[key] || 0) > 0) || p.seen[key]) continue;
+        if (engine.bustedOf(p)) continue; // ผู้ใช้แตกเอง = ท่าเป็นโมฆะ (voidUltimateOnBust ลบสถานะให้แล้ว)
+        p.seen[key] = true;
+        p.transformAt = engine.nextTransformCounter();
+        engine.withEffectSource(p, () => this.fireFormUlt(engine, p, key));
+        engine.triggerCutscene(p, key); // คิววีดีโอไว้ — afterResolve() จะเล่นให้ก่อนขึ้นสรุปผล
+      }
+    }
+  },
+
+  fireFormUlt(engine, p, key) {
+    // โหมดทีม: เอฟเฟกต์ลบทั้งหมด (ดาเมจ/ดีบัฟ/บังคับแตก) ไม่ลงพวกเดียวกัน
+    const others = engine.alivePlayers().filter((o) => o.id !== p.id && !engine.friendlyEffectBlocked(o));
+    if (key === "kawaii") {
+      const heal = engine.healHp(p, KOTONE_KAWAII_HEAL);
+      engine.log(`💖 Sekai ichi kawaii watashi! ${p.name} ขึ้นไลฟ์สุดน่ารักใส่ทุกคน — ฟื้นพลังชีวิต +${heal}`);
+      for (const t of others) {
+        engine.dealDirect(t, KOTONE_KAWAII_DMG); // เจาะเกราะ
+        engine.maybeBeatSave(t); engine.maybeBeatMode(t); engine.maybeEva3(t);
+        t.wasAttacked = true;
+        let stunMsg = "";
+        if (t.alive) {
+          if (engine.applyDebuff(t, "stun", null, KOTONE_KAWAII_STUN_TURNS)) stunMsg = ` และสตั้น ${KOTONE_KAWAII_STUN_TURNS} เทิร์น`;
+          else stunMsg = " (ต้านสถานะผิดปกติ — ไม่ติดสตั้น)";
+        }
+        engine.log(`💖 ${t.name} โดนไลฟ์เจาะเกราะ -${KOTONE_KAWAII_DMG}${stunMsg}`);
+        if (t.alive && t.hp <= 0) { engine.instantDeath(t); if (!t.alive) engine.log(`💀 ${t.name} เลือดจริงหมด ตกรอบ!`); }
+      }
+    } else if (key === "kcampus") {
+      this.grantLove(engine, p);
+      const heal = engine.healHp(p, KOTONE_CAMPUS_HEAL);
+      engine.log(`🏫 Campus Mode! ${p.name} เปิดโหมดสาวมหาลัย — ฟื้นพลังชีวิต +${heal}`);
+      for (const t of others) {
+        if (engine.applyDebuff(t, "nohealing", null, KOTONE_CAMPUS_NOHEAL_TURNS)) {
+          engine.log(`🚫 ${t.name} ติดสถานะไร้ทางเยียวยา ${KOTONE_CAMPUS_NOHEAL_TURNS} เทิร์น`);
+        } else {
+          engine.log(`🛡️ ${t.name} ต้านสถานะผิดปกติ — ไม่ติดไร้ทางเยียวยา`);
+        }
+      }
+    } else {
+      this.grantLove(engine, p);
+      p.kotoneExtraAtk = true; // โจมตีเพิ่มเติม 1 ครั้ง (อ่านที่ postAttackFollowup)
+      engine.log(`💞 Self-affirmation Explosion! Love Love! ${p.name} ระเบิดความมั่นใจ — การโจมตีเทิร์นนี้ทำได้เพิ่มอีก 1 ครั้ง`);
+    }
+    this.forceBustOthers(engine, p, others);
+    // "เมื่อใช้สกิล จะกลับร่างปกติทันที"
+    delete p.statuses.kready;
+    delete p.seen.kready;
+  },
+
+  // (รัก รักที่สุดเลย): บัฟการโจมตีครั้งถัดไป — ไม่ลดเทิร์น หมดไปเมื่อได้โจมตี
+  grantLove(engine, p) {
+    p.statuses.kotoneLove = 1;
+    engine.log(`💗 ${p.name} ได้รับบัฟ (รัก รักที่สุดเลย) — การโจมตีครั้งถัดไป +${this.loveDamage(p)} ดาเมจ (กระปุก ${p.piggy || 0}/${KOTONE_PIGGY_MAX} เหรียญ · ทำดาเมจแล้วกระปุกถูกล้างทั้งหมด)`);
+  },
+
+  // บังคับแตก: จั่วเพิ่ม + บวกแต้มการ์ดตรงๆ ให้เกินเพดานแน่นอน (แม้เปิดไพ่/ล็อกไปแล้ว)
+  //  รูปแบบเดียวกับ Crucible ของ DoomGuy / Ashen Trail ของโอกูริ
+  forceBustOthers(engine, p, others) {
+    // สนาม Overload Force: เพดาน 21 ถูกปลด ไม่มีการแตก -> การบวกแต้มการ์ดจะกลายเป็นการ "แจกแต้ม" ให้คู่แข่งแทน
+    if (engine.overloadForceActive) {
+      engine.log(`🎤 ${p.name} พยายามบังคับให้ทุกคนไพ่แตก — แต่สนาม Overload Force ปลดเพดาน 21 อยู่ ไม่มีใครแตกได้`);
       return;
     }
-    p.statuses.overwork = 2; // คงอยู่ 2 เทิร์น — Sleeping time ลบก่อนได้
-    p.shield = 0;
-    engine.log(`🥵 ${p.name} ติดสถานะ [โหมงานหนัก] 2 เทิร์น — โล่พังทั้งหมด ฟื้นโล่ไม่ได้ ใช้แต้มสกิลเพิ่ม 1 และเสี่ยงสตั้น 10% ทุกเทิร์น`);
-  },
-
-  // เรียกจาก dealRound() ต้นเทิร์น — Sleeping time / [เช้าที่สดใส] / ท่านประธานเซนะจัง / [โหมงานหนัก] สุ่มสตั้น
-  onRoundStartTick(engine, p) {
-    if ((p.statuses.ksleep || 0) > 0) {
-      p.locked = true;
-      engine.log(`😴 ${p.name} หลับพักผ่อนอยู่ (เหลืออีก ${p.statuses.ksleep} เทิร์น)`);
-    }
-    if ((p.statuses.fresh || 0) > 0) {
-      engine.addSkill(p, 1);
-      if (!this.overworkActive(p)) {
-        p.shield += 1;
-        engine.log(`🌅 ${p.name} เช้าที่สดใส — แต้มสกิล +1 และโล่ +1`);
-      } else {
-        engine.log(`🌅 ${p.name} เช้าที่สดใส — แต้มสกิล +1 (โล่ฟื้นไม่ได้เพราะ [โหมงานหนัก])`);
+    let hit = 0;
+    for (const o of others) {
+      for (let i = 0; i < KOTONE_FORCE_BUST_DRAWS; i++) {
+        const c = engine.drawCardFor(o);
+        if (c) { o.cards.push(c); engine.onCardDrawn(o, c); }
       }
+      o.cardBonus = (o.cardBonus || 0) + KOTONE_FORCE_BUST_BONUS;
+      o.busted = engine.bustedOf(o);
+      o.locked = true;
+      engine.voidUltimateOnBust(o);
+      engine.maybeMoonBurst(o);
+      hit++;
     }
-    if (p.senaNext) {
-      p.senaNext = false;
-      if (engine.resistActive(p)) {
-        engine.log(`🛡️ ${p.name} ต้านสถานะผิดปกติของตัวเอง — ไม่ต้องหลบหนีท่านประธานเซนะจัง`);
-      } else {
-        p.statuses.sena = 1;
-        p.locked = true;
-        engine.log(`🏃‍♀️ ${p.name} มัวแต่หลบหนีท่านประธานเซนะจัง — ทำอะไรไม่ได้เลยทั้งเทิร์น!`);
-      }
-    }
-    if (this.overworkActive(p) && !p.locked && Math.random() < KOTONE_STUN_CHANCE) {
-      if (engine.applyDebuff(p, "stun", null, 1)) {
-        p.locked = true;
-        engine.log(`😵 ${p.name} หมดแรงจาก [โหมงานหนัก] — สตั้น ขยับไม่ได้ทั้งเทิร์น!`);
-      } else {
-        engine.log(`😵🛡️ ${p.name} หมดแรงจาก [โหมงานหนัก] แต่ต้านสถานะผิดปกติไว้ได้ — ไม่ติดสตั้น`);
-      }
-    }
+    if (hit > 0) engine.log(`🎤 ${p.name} บังคับให้ทุกคน (ยกเว้นตัวเอง) ไพ่แตกทันที — ${hit} คน`);
   },
 
-  // เรียกจาก useSkill() ในส่วน effect — Part-time: เสียเลือด 1 (ไม่ตาย) ได้ coin สุ่ม 1-3 คืน flashSuffix
-  applyPartTimeEffect(engine, p) {
-    if (p.hp > 1 || (p.tempHp || 0) > 0) engine.loseHp(p);
-    const roll = 1 + Math.floor(Math.random() * KOTONE_COIN_GAIN_MAX);
-    const gained = Math.min(KOTONE_COIN_MAX, (p.coins || 0) + roll) - (p.coins || 0);
-    p.coins = (p.coins || 0) + gained;
-    engine.log(`🐷 ${p.name} Part-time — เสียพลังชีวิต 1 หน่วย ได้ coin +${gained} (สุ่มได้ ${roll} · สะสม ${p.coins}/${KOTONE_COIN_MAX})`);
-    return ` — coin +${gained} (มี ${p.coins}/${KOTONE_COIN_MAX})`;
+  // ---------- สกิลติดตัว: กระปุกออมสิน + ท่านประธานเซนะจัง ----------
+  // เรียกจาก addGold() ทุกครั้งที่โคโตเนะได้รับเหรียญจริง
+  //  หยอด = "แบ่งเงินที่เพิ่งได้รับ" ไปเก็บ จึงหักออกจากเหรียญในกระเป๋าด้วย (ได้ 1 หยอดได้แค่ 1)
+  //  คืนจำนวนที่หยอด เพื่อให้ addGold หักออกจากยอดที่ได้รับจริงได้
+  onGoldGained(engine, p, gained) {
+    if (!(gained > 0)) return 0;
+    if ((p.piggy || 0) >= KOTONE_PIGGY_MAX) return 0;
+    if (Math.random() >= KOTONE_PIGGY_CHANCE) return 0;
+    const saved = Math.min(gained, KOTONE_PIGGY_MAX_SAVE, KOTONE_PIGGY_MAX - (p.piggy || 0));
+    if (!(saved > 0)) return 0;
+    p.piggy = (p.piggy || 0) + saved;
+    p.gold = Math.max(0, (p.gold || 0) - saved);
+    engine.log(`🐷 ${p.name} แบ่งเงินหยอดกระปุกออมสินน้องหมูน้อย ${saved} เหรียญ (กระปุก ${p.piggy}/${KOTONE_PIGGY_MAX} · เหลือในกระเป๋า ${p.gold})`);
+    return saved;
   },
 
-  // เรียกจาก useSkill() ในส่วน effect — สกิลรอง: หัก coin 3 เหรียญ -> บัฟพลังโจมตีพื้นฐาน +2 ในการโจมตีครั้งถัดไป + ภาระเวท
-  applyDanceEffect(engine, p) {
-    p.coins = Math.max(0, (p.coins || 0) - KOTONE_DANCE_COIN_COST);
-    p.statuses.kotoneAtk = 1; // คงอยู่จนกว่าจะได้โจมตี (ไม่ลดเทิร์น — เหมือน empower)
-    const selfResisted = engine.resistActive(p);
-    if (!selfResisted) {
-      p.statusAmt = p.statusAmt || {};
-      p.statuses.spellburden = Math.max(p.statuses.spellburden || 0, KOTONE_PIERCE_BURDEN_TURNS);
-      p.statusAmt.spellburden = Math.min(engine.SPELLBURDEN_MAX, (p.statusAmt.spellburden || 0) + 1);
-    }
-    engine.log(`💃 ${p.name} ใช้ coin ${KOTONE_DANCE_COIN_COST} เหรียญฝึกซ้อม — การโจมตีครั้งถัดไปพลังโจมตี +${KOTONE_DANCE_ATK_BONUS}${selfResisted ? " (ต้านสถานะผิดปกติของตัวเอง — ไม่ติดภาระเวท)" : " (เทิร์นถัดไปใช้แต้มสกิลเพิ่ม +1)"} — เหลือ coin ${p.coins}`);
-  },
-
-  // เรียกจาก useSkill() ในส่วน effect — Sleeping time: หลับนิ่ง 3 เทิร์นตายตัว + ลบ [โหมงานหนัก] + ฮีลตัวเองทันที + กันถูกเลือกโจมตี
-  applyKSleepEffect(engine, p) {
-    const selfResisted = engine.resistActive(p); // ต้านสถานะผิดปกติของตัวเอง กัน "หลับ" (ksleep) ไม่ให้ติดได้ — ผลดีอื่นๆ ของสกิล (ฮีล/seal/ล้างโหมงานหนัก) ยังทำงานตามปกติ
-    if (!selfResisted) p.statuses.ksleep = KOTONE_KSLEEP_TURNS;
-    p.statuses.seal = Math.max(p.statuses.seal || 0, KOTONE_KSLEEP_SEAL_TURNS); // ศัตรูไม่สามารถโจมตีได้ 1 เทิร์น
-    p.nightWork = 0;
-    p.overworkNext = false;
-    if (this.overworkActive(p)) {
-      delete p.statuses.overwork;
-      engine.log(`😌 ${p.name} ได้นอนพักเสียที — สถานะ [โหมงานหนัก] หายไป`);
-    }
-    const heal = engine.healHp(p, KOTONE_KSLEEP_HEAL);
-    engine.log(`😴 ${p.name} Sleeping time — ${selfResisted ? "ต้านสถานะผิดปกติของตัวเอง ไม่ติดหลับ แต่" : `หลับ ${KOTONE_KSLEEP_TURNS} เทิร์น`} ฟื้นพลังชีวิต +${heal} และศัตรูไม่สามารถเลือกโจมตีได้ 1 เทิร์นแรก (ตื่นแล้วรับ [เช้าที่สดใส])`);
-  },
-
-  // เรียกจาก useSkill() ในส่วน effect (ทุกครั้งที่ใช้สกิลไม่ว่าตัวไหน) — ข้อเสียโคโตเนะ: โอกาสเจอท่านประธานเซนะจัง
-  maybeTriggerSena(engine, p) {
-    if (Math.random() >= this.senaChance(p)) return;
+  // เรียกจาก useSkill() หลังใช้สกิลพื้นฐาน/พื้นฐาน 2/สกิลรอง — 20% โดนท่านประธานเซนะจังเจอตัว
+  maybeTriggerSena(engine, p, tier, wasForm) {
+    if (tier !== "basic" && tier !== "secondary") return;
+    if (wasForm) return; // ปุ่มพื้นฐาน/รองในร่าง [พร้อมลุย] คือท่าไม้ตาย ไม่ใช่การไปทำงาน
+    if (Math.random() >= KOTONE_SENA_CHANCE) return;
     p.senaNext = true;
-    engine.log(`😱 ${p.name} เจอท่านประธานเซนะจัง!! — หลบหนีสุดชีวิต เทิร์นถัดไปจะทำอะไรไม่ได้เลย`);
+    engine.log(`😱 ${p.name} โดนท่านประธานเซนะจังเจอตัว!! — เทิร์นถัดไปสตั้น ${KOTONE_SENA_STUN_TURNS} เทิร์น`);
     if (!p.cutsceneShown.kotoneSena) {
       p.cutsceneShown.kotoneSena = true;
       engine.queueCutscene(p, "kotoneSena");
@@ -151,52 +318,62 @@ module.exports = {
     }
   },
 
-  // เรียกจาก afterResolve()'s afterReveal-activation loop — Sekai ichi kawaii watashi (ท่าไม้ตาย): ตีหมู่ทุกคน + สตั้น
-  activateKawaii(engine, p) {
-    engine.log(`💖 Sekai ichi kawaii watashi! ${p.name} ขึ้นไลฟ์สุดน่ารักใส่ทุกคน!`);
-    for (const t of engine.alivePlayers()) {
-      if (t.id === p.id) continue;
-      engine.dealMixed(t, KOTONE_KAWAII_DMG);
-      engine.maybeBeatSave(t); engine.maybeBeatMode(t); engine.maybeEva3(t);
-      t.wasAttacked = true;
-      let stunMsg = "";
-      if (t.alive) {
-        if (engine.resistActive(t)) {
-          engine.log(`🛡️ ${t.name} ต้านสถานะผิดปกติ — ไม่ติดสตั้น`);
-        } else {
-          t.statuses.stun = Math.max(t.statuses.stun || 0, KOTONE_KAWAII_STUN_TURNS);
-          stunMsg = ` และสตั้น ${KOTONE_KAWAII_STUN_TURNS} เทิร์น`;
-        }
-      }
-      engine.log(`💖 ${t.name} โดนไลฟ์ -${KOTONE_KAWAII_DMG}${stunMsg}`);
-      if (t.alive && t.hp <= 0) {
-        engine.instantDeath(t);
-        if (!t.alive) engine.log(`💀 ${t.name} เลือดจริงหมด ตกรอบ!`);
+  // ---------- ต้นเทิร์น: หลับ (ฮีล/แต้มสกิล) + สตั้นจากท่านประธานเซนะจัง — เรียกจาก dealRound() ----------
+  onRoundStartTick(engine, p) {
+    if ((p.statuses.ksleep || 0) > 0) {
+      p.locked = true;
+      const heal = engine.healHp(p, KOTONE_SLEEP_HEAL);
+      engine.addSkill(p, KOTONE_SLEEP_SKILL, "passive");
+      engine.log(`😴 ${p.name} หลับพักผ่อนอยู่ (เหลืออีก ${p.statuses.ksleep} เทิร์น) — ฟื้นพลังชีวิต +${heal} · แต้มสกิล +${KOTONE_SLEEP_SKILL}`);
+    }
+    if (p.senaNext) {
+      p.senaNext = false;
+      if (engine.applyDebuff(p, "stun", null, KOTONE_SENA_STUN_TURNS)) {
+        p.locked = true;
+        engine.log(`🏃‍♀️ ${p.name} มัวแต่หลบหนีท่านประธานเซนะจัง — สตั้น ${KOTONE_SENA_STUN_TURNS} เทิร์น!`);
+      } else {
+        engine.log(`🛡️ ${p.name} ต้านสถานะผิดปกติของตัวเอง — ไม่ติดสตั้นจากท่านประธานเซนะจัง`);
       }
     }
   },
 
-  // เรียกจาก doAttack() หลังคำนวณดาเมจ — สกิลรอง: บัฟพลังโจมตีพื้นฐาน +2 ใช้แล้วหมดไปทันทีเมื่อได้โจมตี
-  onAttackConsumeDanceBuff(engine, attacker) {
-    if (!((attacker.statuses.kotoneAtk || 0) > 0)) return;
-    delete attacker.statuses.kotoneAtk;
-    engine.log(`💃 ${attacker.name} เพลงฝึกซ้อม — การโจมตีนี้ +${KOTONE_DANCE_ATK_BONUS} (บัฟหมดลง)`);
+  // ---------- การโจมตี ----------
+  // ดาเมจ contribution ของ (รัก รักที่สุดเลย) — เรียกจาก computeAttackBase()
+  damageBonus(engine, attacker, target, ctx) {
+    const loveOn = (attacker.statuses.kotoneLove || 0) > 0;
+    const loveDmg = loveOn ? this.loveDamage(attacker) : 0;
+    ctx.kotoneLove = loveOn;
+    ctx.kotoneLoveDmg = loveDmg;
+    return loveDmg;
   },
 
-  // เรียกจาก doAttack() — กระปุกออมสินน้องหมูน้อย: ทุบกระปุกจ่ายเป็นดาเมจ (pigDmg คำนวณใน shared damage-sum แล้ว)
-  onAttackConsumeCoins(engine, attacker, pigDmg) {
-    if (!(pigDmg > 0)) return;
-    attacker.coins -= pigDmg * KOTONE_COIN_PER_DMG;
-    engine.log(`🐷 ${attacker.name} ทุบกระปุกออมสินน้องหมูน้อย — ใช้ ${pigDmg * KOTONE_COIN_PER_DMG} coin เพิ่มความเสียหาย +${pigDmg} (เหลือ ${attacker.coins})`);
+  // เรียกจาก doAttack() หลังคำนวณดาเมจ — ใช้บัฟแล้วหมดไป และล้างกระปุกทั้งหมดทันที
+  onAttackConsumeLove(engine, attacker) {
+    if (!((attacker.statuses.kotoneLove || 0) > 0)) return;
+    delete attacker.statuses.kotoneLove;
+    const spent = attacker.piggy || 0;
+    const dmg = this.loveDamage(attacker);
+    attacker.piggy = 0;
+    engine.log(`💗 ${attacker.name} รัก รักที่สุดเลย — ทุบกระปุกออมสิน ${spent} เหรียญเป็นดาเมจ +${dmg} (กระปุกถูกล้างทั้งหมด)`);
   },
 
-  // เรียกจาก endTurn() — [โหมงานหนัก]: โล่พังทั้งหมดตอนจบเทิร์น (ฟื้นไม่ได้)
-  onEndTurnOverworkShieldWipe(p) {
-    if (this.overworkActive(p)) p.shield = 0;
-  },
-
-  // เรียกจาก status-decay loop's expiry handler — Sleeping time ตื่นเอง -> รับ [เช้าที่สดใส] 3 เทิร์น
-  onSleepExpire(p) {
-    p.statuses.fresh = 3;
+  // เรียกจาก postAttackFollowup() — Self-affirmation Explosion: โจมตีเพิ่มอีก 1 ครั้ง
+  //  คืน true ถ้าเริ่มโจมตีต่อสำเร็จ (ผู้เรียกต้อง return ทันที)
+  startExtraAttack(engine, attacker) {
+    if (!attacker || !attacker.alive || attacker.characterId !== "kotone") return false;
+    if (!attacker.kotoneExtraAtk) return false;
+    attacker.kotoneExtraAtk = false;
+    const targets = engine.attackableTargets(attacker.id);
+    if (targets.length === 0) return false;
+    engine.log(`💞 ${attacker.name} Self-affirmation Explosion! Love Love — โจมตีเพิ่มอีกครั้งทันที!`);
+    engine.setAttackerId(attacker.id);
+    engine.setGameState("ATTACK");
+    engine.startPhaseTimer(engine.ATTACK_TIME, () => {
+      const t = engine.attackableTargets(engine.attackerId);
+      if (t.length) engine.doAttack(engine.attackerId, t[Math.floor(Math.random() * t.length)].id);
+      else engine.endTurn();
+    });
+    engine.broadcastState();
+    return true;
   },
 };

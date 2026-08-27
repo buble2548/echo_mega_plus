@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const escanor = require('../../characters/escanor.js');
+const universal = require('../../characters/_universal_status.js');
 const escanorCharacter = require('../../characters.js').CHARACTERS.find((entry) => entry.id === 'escanor');
 
 function mkPlayer(over = {}) {
@@ -27,6 +28,7 @@ function mkEngine(players, over = {}) {
     CHAR_BY_ID: { escanor: escanorCharacter },
     roundNumber: 1,
     GOLD_MAX: 30,
+    addGold: (p, n) => { const before = p.gold || 0; p.gold = Math.min(30, before + n); return p.gold - before; },
     logs,
     cutscenes,
     damageCalls,
@@ -122,15 +124,31 @@ test('Noon charge loses one from skill damage at most once per turn and exits im
 test('fully mitigated skill damage does not drain Noon charge', () => {
   const p = mkPlayer({ escanorCharge: 4, statuses: { escanorNoon: 999, escanorCool: 2 }, statusAmt: { escanorNoon: 1, escanorCool: 2 } });
   const engine = mkEngine({ p1: p }, { roundNumber: 3 });
-  assert.equal(escanor.adjustIncomingDamage(engine, p, 2, false), 0);
+  const left = 2 - universal.coolReduction(p, false); // เย็นชื่นใจเป็นตัวลดกลาง ทำงานก่อนถึงฮุคของเอสคานอร์
+  assert.equal(left, 0);
+  assert.equal(escanor.adjustIncomingDamage(engine, p, left, false), 0);
   assert.equal(p.escanorCharge, 4);
 });
 
-test('WineBarrel cool reduces skill damage but never reduces a normal attack', () => {
-  const p = mkPlayer({ statuses: { escanorMorning: 999, escanorCool: 2 }, statusAmt: { escanorMorning: 1, escanorCool: 2 } });
-  const engine = mkEngine({ p1: p });
-  assert.equal(escanor.adjustIncomingDamage(engine, p, 3, true), 3);
-  assert.equal(escanor.adjustIncomingDamage(engine, p, 3, false), 1);
+test('status damage such as burn never drains Noon charge', () => {
+  const p = mkPlayer({ escanorCharge: 4, statuses: { escanorNoon: 999 }, statusAmt: { escanorNoon: 1 } });
+  const engine = mkEngine({ p1: p }, { roundNumber: 3 });
+  p._statusDamage = true;
+  assert.equal(escanor.adjustIncomingDamage(engine, p, 1, false), 1);
+  assert.equal(p.escanorCharge, 4, 'ลุกไหม้/ดีบัฟไม่ใช่ "ความเสียหายจากสกิล"');
+});
+
+test('WineBarrel cool is a universal reduction that skips normal attacks and status damage', () => {
+  const p = mkPlayer({ statuses: { escanorCool: 2 }, statusAmt: { escanorCool: 2 } });
+  assert.equal(universal.coolReduction(p, true), 0, 'a normal attack is never reduced');
+  assert.equal(universal.coolReduction(p, false), 2);
+  p._statusDamage = true;
+  assert.equal(universal.coolReduction(p, false), 0, 'burn and other status damage is never reduced');
+  p._statusDamage = false;
+
+  // ไวน์ถูกขโมยไปใช้ได้ -> ตัวละครอื่นที่ดื่มต้องได้ผลเท่ากัน
+  const thief = mkPlayer({ characterId: 'temari', statuses: { escanorCool: 1 }, statusAmt: { escanorCool: 1 } });
+  assert.equal(universal.coolReduction(thief, false), 1);
 });
 
 test('dynamic costs match normal and Noon skill specifications', () => {
@@ -168,7 +186,7 @@ test('Noon secondary self-cost can enter Last Stand and does not leave Noon flar
   escanor.applySkill(engine, p, 'secondary', ['p2']);
   assert.equal(escanor.formOf(p), 'last');
   assert.equal(p.escanorCharge, 0);
-  assert.equal(p.hp, 6);
+  assert.equal(p.hp, 7);
   assert.equal(p.armor, 0);
   assert.equal(p.statuses.escanorFlareNoon || 0, 0);
 });
@@ -411,7 +429,7 @@ test('remaining forced burn ticks stop damaging after the target revives into La
   const engine = mkEngine({ p1: attacker, p2: target });
   escanor.onAttackLanded(engine, attacker, target);
   assert.equal(escanor.formOf(target), 'last');
-  assert.equal(target.hp, 6, 'the second forced burn tick must respect Last Stand immunity');
+  assert.equal(target.hp, 7, 'the second forced burn tick must respect Last Stand immunity');
 });
 
 test('Noon and Last Stand burn the normal attacker immediately', () => {
@@ -477,7 +495,7 @@ test('Last Stand effects never damage or burn Escanor teammates', () => {
 
   engine.withEffectSource(p, () => escanor.onRoundStartTick(engine, p));
   assert.equal(teammate.statuses.hburn || 0, 0);
-  assert.equal(enemy.statuses.hburn, 1);
+  assert.equal(enemy.statuses.hburn, 2, 'Last Stand มอบลุกไหม้ศัตรูทุกคน +2 ต่อเทิร์น');
 });
 
 test('Night wine is delivered next turn with a usable uid and upgrades to the correct Roman level', () => {
@@ -578,4 +596,52 @@ test('pending Escanor after-reveal skills stay hidden from opponents', () => {
   for (const status of ['escanorSpearBurst', 'escanorFlare', 'escanorFlareNoon', 'escanorPunch', 'escanorRhitta', 'escanorRhittaNoon']) {
     assert.match(serverText, new RegExp(`HIDDEN_UNTIL_REVEAL[\\s\\S]{0,400}${status}`));
   }
+});
+
+test('forced Morning from Eternal Sunshine still charges the sun +1 per turn', () => {
+  const p = mkPlayer({ escanorCharge: 10, escanorForcedMorning: 1, statuses: { escanorMorning: 999 }, statusAmt: { escanorMorning: 1 } });
+  const engine = mkEngine({ p1: p }, { isNightRound: () => true }); // กลางคืน แต่ถูกบังคับเป็น Morning
+
+  escanor.onRoundStartTick(engine, p);
+  assert.equal(escanor.formOf(p), 'morning');
+  assert.equal(p.escanorCharge, 11, 'ร่าง Morning ต้องได้ชาร์จ +1 ไม่ว่าจะมาจากเวลาหรือจากสุริยาไม่สิ้นแสง');
+
+  escanor.onRoundStartTick(engine, p);
+  assert.equal(p.escanorCharge, 12);
+  assert.equal(escanor.formOf(p), 'noon', 'ชาร์จเต็มระหว่างบังคับ Morning ต้องเข้า Noon ได้');
+});
+
+test('Last Stand has max HP 7 and is immune to bust damage', () => {
+  const p = mkPlayer({ hp: 1, escanorCharge: 3, statuses: { escanorNoon: 999 }, statusAmt: { escanorNoon: 1 } });
+  const engine = mkEngine({ p1: p, p2: mkTarget('p2') });
+  escanor.applySkill(engine, p, 'secondary', ['p2']); // Noon secondary จ่าย 1 HP -> ตาย -> Last Stand
+  assert.equal(escanor.formOf(p), 'last');
+  assert.equal(escanor.maxHp(p), 7);
+  assert.equal(p.hp, 7);
+  assert.equal(escanor.maxArmor(p), 0);
+  assert.equal(escanor.bustDamageImmune(p), true);
+
+  const morning = mkPlayer({ statuses: { escanorMorning: 999 }, statusAmt: { escanorMorning: 1 } });
+  assert.equal(escanor.bustDamageImmune(morning), false, 'ร่างอื่นยังรับความเสียหายจากไพ่แตกตามปกติ');
+  assert.equal(escanor.bustDamageImmune(mkPlayer({ characterId: 'temari' })), false);
+});
+
+test('Noon self-cost deaths go through the shared death-save pipeline', () => {
+  const p = mkPlayer({ hp: 1, escanorCharge: 3, statuses: { escanorNoon: 999 }, statusAmt: { escanorNoon: 1 } });
+  const calls = [];
+  const engine = mkEngine({ p1: p, p2: mkTarget('p2') }, {
+    resolveDamageAftermath(target) { calls.push(target.id); if (target.alive && target.hp <= 0) engine2Death(target); },
+  });
+  const engine2Death = (target) => { if (!escanor.tryNoonRevive(engine, target)) { target.hp = 0; target.alive = false; } };
+
+  escanor.applySkill(engine, p, 'basic', ['p2']);
+  assert.deepEqual(calls, ['p1'], 'ค่าใช้จ่าย HP ของสกิลต้องเรียก resolveDamageAftermath ไม่ใช่ instantDeath ตรงๆ');
+  assert.equal(escanor.formOf(p), 'last');
+});
+
+test('the retired escanorSpear status is gone from the hook', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', 'characters', 'escanor.js'), 'utf8');
+  assert.equal(/escanorSpear(?!Burst)/.test(src), false, 'escanorSpear เป็นโค้ดตาย ไม่มีจุดไหนเซ็ตสถานะนี้');
+  const server = fs.readFileSync(path.join(__dirname, '..', '..', 'server.js'), 'utf8');
+  assert.equal(/escanorSpear(?!Burst)/.test(server), false);
 });

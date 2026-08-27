@@ -50,19 +50,30 @@ function applyDebuff(p, key, amount, turns) {
   return true;
 }
 
+// "เย็นชื่นใจ" (escanorCool — WineBarrel ของเอสคานอร์): ลดความเสียหายที่ไม่ใช่การโจมตีปกติตามจำนวนสแตค
+//  เป็นสถานะ Universal เพราะ WineBarrel ถูกขโมยไปใช้ได้ ตัวละครไหนดื่มก็ต้องได้ผลเหมือนกัน
+//  ไม่กินดาเมจจากสถานะ/ดีบัฟ (p._statusDamage เช่น ลุกไหม้) — ลดเฉพาะดาเมจจากสกิล
+function coolReduction(p, isNormalAttack) {
+  if (!p || isNormalAttack || p._statusDamage) return 0;
+  if (!(((p.statuses && p.statuses.escanorCool) || 0) > 0)) return 0;
+  return statusAmtOf(p, "escanorCool") || 1;
+}
+
 // ดีบัฟพื้นฐานที่ "ต้านสถานะผิดปกติ" ล้างออกได้ทั้งหมด
-const BASIC_DEBUFF_CLEAR = ["discord", "sleep", "stun", "nodraw", "noskill", "weak", "fragile", "spellburden", "oblada", "hburn", "phenexBanUlt", "nanayaSeal", "miyakoSeal", "invert", "nohealing", "manaSeal", "chaa"];
+const BASIC_DEBUFF_CLEAR = ["discord", "sleep", "stun", "nodraw", "noskill", "weak", "fragile", "spellburden", "oblada", "hburn", "phenexBanUlt", "nanayaSeal", "miyakoSeal", "invert", "nohealing", "manaSeal", "chaa",
+  // ผู้สังหารเมจ: ตราล่าเวท/ดูดซับเวท ถูกลบล้างได้ด้วย "ต้านทานสถานะผิดปกติ"
+  //  (mageslayerMarkedId ฝั่งผู้ร่ายถูก reconcile ให้เองที่ tickWitchMark ท้ายเทิร์น — ดู characters/mageslayer.js)
+  "mageslayerMark", "manaLeech"];
 // ดีบัฟที่ยังไม่เกิดผลทันที (ยามฟ้าสาง / เส้นชีวิต): โดนล้าง = ลดลงทีละ 1 หน่วย ไม่หายทั้งหมด
 const SOFT_DEBUFF_STEP = ["dawn", "deathline"];
 
 function cleanseDebuffs(p) {
   let purged = 0;
   for (const k of BASIC_DEBUFF_CLEAR) {
-    // Mana Burden (ผู้สังหารจอมมหาเวทย์): Bard ที่ติดตราล่าเวทอยู่ตอนโดนภาระเวท — ล้างสถานะนี้ด้วยต้านสถานะผิดปกติไม่ได้
-    if (k === "spellburden" && p.mageslayerLockedBurden) continue;
     if ((p.statuses[k] || 0) > 0) {
       delete p.statuses[k];
       if (p.statusAmt) delete p.statusAmt[k];
+      if (k === "mageslayerMark") delete p.mageslayerMarks; // ผู้สังหารเมจ: ล้าง map ผู้ร่ายที่ผูกกับตราด้วย
       purged++;
     }
   }
@@ -103,7 +114,11 @@ function tickBurn(engine, p) {
     const heal = engine.healHp(p, 1);
     engine.log(`❤️‍🔥 ${p.name} ${label} — ลุกไหม้กลายเป็นการรักษา ฟื้นพลังชีวิต +${heal} (เหลืออีก ${p.statuses.hburn - 1} หน่วย)`);
   } else {
+    // _statusDamage: บอกฮุคของตัวละครว่าก้อนนี้เป็น "ดาเมจจากสถานะ/ดีบัฟ" ไม่ใช่ดาเมจจากสกิลหรือการโจมตี
+    //  (เอสคานอร์ใช้แยกว่าจะหัก Sun Charge ของร่าง Noon ไหม — ดู characters/escanor.js)
+    p._statusDamage = true;
     engine.dealMixed(p, 1); // ลุกไหม้: ลดเกราะก่อน ถ้าไม่มีเกราะจึงเข้าเลือดจริง
+    p._statusDamage = false;
     engine.log(`🔥 ${p.name} ลุกไหม้ — เสียหาย -1 (ลดเกราะก่อน) (เหลืออีก ${p.statuses.hburn - 1} หน่วย)`);
     engine.maybeBeatSave(p);
     engine.maybeBeatMode(p);
@@ -166,8 +181,26 @@ function tickEvadeStacks(engine, p) {
   }
 }
 
+// สถานะที่ "ไม่ลดเทิร์นเอง" — ต้องตรงกับรายการ `continue;` ในลูปลดเทิร์นของ endTurn() (server.js)
+//  มาร์กถาวร (ตราล่าเวท/รังสรรค์/ลงทัณฑ์/เส้นตาย) · บัฟที่คงอยู่จนกว่าจะได้โจมตี (empower/miyako*/kotoneLove)
+//  · ร่างแปลง/สแตคที่มีตัวนับของตัวเอง · สถานะที่ engine ลบเองตามเงื่อนไข
+//  ใช้ร่วมกับแฝดที่ "พักอยู่" ของฮิซาคาว่า (characters/hisakawa_sister.js) เพื่อให้กติกาการนับเวลา
+//  ของแฝดสองคนตรงกัน — เดิมฝั่งที่พักลดเทิร์นทุก key ทำให้มาร์กถาวรสลายไปเองระหว่างพัก
+const NO_TICK_STATUS = new Set([
+  "dawn", "chill", "hburn", "melody", "star", "emeraude", "saphir", "lance", "takutoThirdAtk",
+  "doomCrucible", "doomDrain", "doomExplode", "doomLockon", "fortune", "linked", "rsHopper",
+  "cassius", "yaak", "spear", "ohger", "evade", "empower", "miyakoHeal", "miyakoCombo", "miyakoUlt",
+  "hakunoInvertReady", "hakunoNoRegenReady", "kotoneLove", "kotoneReady", "kready", "deathline", "tepeuCook", "tepeuPonder",
+  "kaiCreation", "kaiPunishment", "mageslayerMark", "mageslayerFury", "triggerForm", "triggerMulti",
+  "triggerZeperion", "triggerLight", "hisakawaTempo", "triggerDarkWail", "escanorMorning",
+  "escanorNight", "escanorNoon", "escanorLastStand", "escanorSolar", "escanorFlare",
+  "escanorFlareNoon", "escanorPunch", "escanorRhitta", "escanorRhittaNoon", "escanorSun",
+  "graybeast", "grit", "healthfull", "overweight", "ntd", "beat", "eva3", "banagherPassive2",
+]);
+
 module.exports = {
   SPELLBURDEN_MAX,
+  NO_TICK_STATUS,
   statusAmtOf,
   applyBuff,
   applyDebuff,
@@ -175,6 +208,7 @@ module.exports = {
   BASIC_DEBUFF_CLEAR,
   SOFT_DEBUFF_STEP,
   cleanseDebuffs,
+  coolReduction,
   noHealActive,
   invertActive,
   tickBurn,

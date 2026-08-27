@@ -1,0 +1,335 @@
+# GAME_SYSTEM.md — คู่มือระบบเกม ECHO (เอกสารอ้างอิงภายในสำหรับ AI/ผู้พัฒนา)
+
+> เอกสารนี้อธิบาย **การทำงานจริงของ engine** ไม่ใช่วิธีติดตั้ง/รัน (ดู [README.md](README.md))
+> เลขบรรทัดอ้างอิงสภาพโค้ด ณ commit `e42c512` — ถ้าเลื่อนไปแล้วให้ค้นด้วยชื่อฟังก์ชันแทน
+
+---
+
+## 1. ภาพรวมสถาปัตยกรรม
+
+```
+server.js (6.3k บรรทัด)          เอนจินกลางทั้งหมด: state, เฟส, การ์ด, ดาเมจ, สกิล, socket handler
+characters.js (1.7k)             DATA ล้วน — roster/ชื่อสกิล/desc/cost/img + POSITION_COLORS + publicRoster()
+characters/index.js              มัดรวม CHAR_HOOKS = { [characterId]: module } — ตัวละครใหม่ต้อง require+push ที่นี่
+characters/<id>.js               LOGIC ของตัวละครนั้น (34 ตัว) — export { id, ...methods(engine, ...) }
+characters/_universal_status.js  บัฟ/ดีบัฟกลาง (pure function ไม่พึ่ง engine)
+characters/_transforms.js        ตาราง metadata คัตซีน (TRANSFORMS) — data ล้วน
+characters/yuna.js               "ไอดอลประจำสนาม" ไม่ใช่ตัวละครที่เล่นได้ (ไม่อยู่ใน CHAR_HOOKS, require ตรง)
+client/src/                      React (Vite): App.jsx คุมฉาก, screens/Game.jsx (4k บรรทัด) คือ UI สนามทั้งหมด
+tests/                           node --test (ไม่มี dep เพิ่ม) — มี integration test ที่ spawn server จริง
+```
+
+**หลักการแบ่งความรับผิดชอบ**
+- `characters.js` = ตัวเลข/ข้อความที่ผู้เล่นเห็น (ไม่มี logic)
+- `characters/<id>.js` = ผลของสกิลจริง — เรียก state ผ่าน `engine.*` เท่านั้น ห้าม require server.js (จะ circular)
+- `server.js` = ผู้ถือ state จริง + เรียก hook ตามจังหวะ (dispatcher)
+- ผลที่ "ตัวละครไหนก็ควรใช้ร่วมกันได้" → ใช้สถานะ universal ไม่สร้าง key เฉพาะตัวใหม่
+
+**engine object** (`server.js:6112`) คือ context ที่ส่งให้ hook ทุกตัว — เพราะ `gameState`/`roundNumber`/`centralDeck` เป็น `let`
+จึง expose ผ่าน getter/setter (`engine.gameState`, `engine.setGameState(v)`) ไม่ใช่ค่า primitive ตรงๆ
+
+---
+
+## 2. State machine (`gameState`)
+
+```
+LOBBY → TEAM_MODE → TEAM_SETUP → PLAYING ⇄ CUTSCENE → SUMMARY → ATTACK → TRANSITION → (วน PLAYING) → GAMEOVER → LOBBY
+```
+
+| state | ความหมาย | timer |
+|---|---|---|
+| `LOBBY` | ห้องรอ กด ready — ครบ 2+ คน & ready หมด → `enterModeSelect()` | – |
+| `TEAM_MODE` | โหวตโหมด (ffa / duo / trio / overload) | – |
+| `TEAM_SETUP` | เลือกทีม A/B/C + ยืนยัน | – |
+| `PLAYING` | เฟสจั่วไพ่ + ใช้สกิล/ไอเทม | `CARD_TIME` 60s |
+| `CUTSCENE` | เล่นวีดีโอในคิว (พัก state เดิมไว้) | ตาม `seconds` ของแต่ละคลิป |
+| `SUMMARY` | เปิดแต้มทุกคน ประกาศผู้ชนะ | `SUMMARY_TIME` 5s |
+| `ATTACK` | ผู้ชนะเลือกเป้า (หมดเวลา = สุ่มเป้าให้) | `ATTACK_TIME` 15s |
+| `TRANSITION` | แบนเนอร์ "รอบที่ N" | `TRANSITION_TIME` 3s |
+| `GAMEOVER` | ประกาศผู้ชนะสุดท้าย | – |
+
+`startPhaseTimer(seconds, onExpire)` (`:847`) มีตัวเดียวทั้งเกม — ต้อง `clearPhaseTimer()` ทุกครั้งที่เปลี่ยนเฟส
+
+---
+
+## 3. วงจร 1 รอบ (call chain ที่ต้องจำ)
+
+```
+dealRound()            :2833  เริ่มรอบ: roundNumber++, สับเด็คใหม่, ล้าง cutsceneQueue/lastLog,
+                              เปิดร้านทุก 5 เทิร์น, Yuna window, ฟื้นเกราะรอบคู่, แจกไพ่ใบแรก
+   ↓ (ผู้เล่นกด)
+hit(id)                :3105  จั่ว 1 ใบ (เช็ค nodraw/ครุ่นคิด/เพดานแต้ม/โชคลาภ/สภาพชา) → checkAllLocked()
+useSkill(id,tier,...)  :3181  ใช้สกิล (ดูข้อ 6)
+lock(id)               :3161  "เปิดไพ่" = พร้อม — ยิง applyLockColorTriggers() ก่อนล็อก
+   ↓
+checkAllLocked()       :4158  มนุษย์ทุกคน locked && ไม่มี pending answer → resolveRound()
+resolveRound()         :4251  เคลียร์ข้อเสนอค้าง (สัญญา/Locacaca/พันธมิตร/บทเพลง) → ANATA → ยูกิจั่วปิดท้าย
+                              → หาผู้ชนะ (best) / ผู้แพ้ (worst) → แจกดาเมจแพ้ → afterResolve()
+   └ ถ้าแต้มสูงสุดเสมอ & rand<30% → triggerOverloadForce() → restoreTurnSnapshot() (ย้อนทั้งเทิร์น) → beginOverloadForceDraw() (แจกไพ่ใหม่ในเทิร์นเดิม)
+afterResolve()         :4502  เอฟเฟกต์หลังเปิดไพ่ (tepeu kill / Ashen Trail / บัฟแตกไพ่) + คัตซีน afterReveal
+                              → runCutsceneQueue(goSummary)
+goSummary()            :4549  gameState = SUMMARY, timer 5s
+afterSummary()         :4561  ผู้ชนะโจมตีไม่ได้ไหม (หลับ/สตั้น/เร้นเงา/เสมอแต้ม) → endTurn()
+                              ไม่งั้น gameState = ATTACK รอ doAttack
+doAttack(by,target)    :4723  ท่อดาเมจเต็ม (ดูข้อ 5) → postAttackFollowup()
+postAttackFollowup()   :4638  โจมตีซ้ำ (nanaya/miyako/takuto/ยูกิ 2 เป้า) หรือ → endTurn()
+endTurn()              :5363  ลดเทิร์นสถานะทั้งหมด, ระเบิดค้าง (eva/shrade), เก็บกวาดสัญญา/พันธมิตร,
+                              แจกแต้มสกิล+เหรียญ, เช็คจบเกม → TRANSITION → dealRound()
+```
+
+**จุดพลาดที่เจอบ่อย**: `dealRound()` ล้าง `cutsceneQueue` ทิ้ง — โค้ดที่คิววีดีโอไว้ต้องอยู่ **หลัง** บรรทัดนั้นเสมอ
+
+---
+
+## 4. การ์ดและแต้ม
+
+- **กองกลางร่วม 43 ใบ** สับใหม่ทุกรอบใน `dealRound()` (ทุกคนจั่วจากกองเดียวกัน — ไพ่หมดกอง = จั่วไม่ได้)
+  - เลข 1–10 × 4 สี (red/blue/green/yellow) = 40 ใบ + `king` + `queen` + `joker`
+- `drawFromCentralDeck(predicate)` `:1050` — สุ่มจาก index ที่ผ่าน predicate (ใช้ทำ "โชคลาภ" / "จั่วได้แค่ 2-3 แต้ม")
+- `drawInitialCard()` ห้ามได้การ์ดพิเศษ
+- **การ์ดพิเศษ**: King = เหรียญ +10 ทันที · Queen = `freecast` ใช้สกิลฟรี 1 ครั้ง (หายจบเทิร์น) · Joker = `+min(12, 21-base)` (โหมด Overload = +12 ตายตัว)
+- **ทริกเกอร์สี ครบ 3 ใบ/ชุด**
+  - 🔵 ฟ้า → ทำงาน **ทันทีตอนจั่ว** (`checkBlueTrigger`): ต้านสถานะผิดปกติ 1 เทิร์น
+  - 🔴 แดง / 🟢 เขียว / 🟡 เหลือง → ประเมิน **ตอนกด lock** (`applyLockColorTriggers` `:1122`): แดง = ATK รอบนี้ +n · เขียว = ฟื้นเลือด +n · เหลือง = แต้มสกิล +2n
+- **แต้ม**: `calculateScore()` `:1082` (raw) → `scoreOf(p)` `:1158` (+cardBonus, cap ตามบัฟ) → `bustedOf(p)` `:1164`
+- **เพดาน** `scoreCap(p)` `:1151`: ปกติ 21 · `fiber` (เสือนอนกิน) 19 ไม่แตก · `upg` (ฮิคารุ) 20 ไม่แตก · Overload = `Infinity`
+- **ไพ่แตกแล้วไม่ล็อกอัตโนมัติ** — ยังกดสกิล/ไอเทมได้จนกว่าจะกดเปิดไพ่เอง แต่ท่าไม้ตายที่กดไปเป็นโมฆะ (`voidUltimateOnBust` `:1918`)
+
+---
+
+## 5. ท่อความเสียหาย (สำคัญที่สุด)
+
+**ค่าคงที่ฐาน**: `MAX_HP = 7` · `MAX_ARMOR = 3` · `MAX_SKILL = 8` (Bard = 9) · `MAX_PLAYERS = 6`
+
+**ลำดับการรับดาเมจ**: `shield` (กันครั้ง) → `armor` (เกราะ) → `hp` (เลือดจริง) — hp ถึง 0 = ตกรอบ
+
+| ฟังก์ชัน | พฤติกรรม |
+|---|---|
+| `damageSoft(p)` `:1763` | 1 หน่วยมาตรฐาน: shield → armor → hp (ใช้กับดาเมจแพ้จั่ว) |
+| `dealMixed(p,n,isNormal)` `:1822` | n หน่วย เกราะก่อนแล้วเลือด (ท่ามาตรฐานของสกิล/โจมตี) |
+| `dealDirect(p,n,isNormal)` `:1800` | ทะลุเกราะ เข้าเลือดจริงตรงๆ (ยังกิน shield) |
+| `dealArmorOnly(p,n)` `:1813` | กินเฉพาะเกราะ |
+| `loseHp(p)` / `loseArmor(p)` | primitive ระดับ 1 หน่วย — ห้ามแก้ `p.hp` ตรงๆ นอกจากนี้ |
+| `instantDeath(p)` `:1370` | สังหารทันที (ผ่านระบบกันตายก่อน) |
+
+ทุก path ผ่าน `adjustIncomingDamage()` `:1784` → `CHAR_HOOKS[id].adjustIncomingDamage()` และเช็ค
+`sealActive` (อมตะ ไม่รับดาเมจ) + `friendlyEffectBlocked` (ยิงพวกเดียวกันในโหมดทีม)
+
+`isNormalAttack = true` **เฉพาะที่ `doAttack()` เรียกเท่านั้น** — ใช้แยกว่าเป็น "โจมตีปกติ" (มีผลกับสกิลกันดาเมจหลายตัว)
+
+**พลังโจมตี**: `computeAttackBase(engine, attacker, target)` `:4690` — ฐาน 1 หน่วย บวกจาก
+`hook.attackBaseOverride()` (แทนที่ฐาน) + `hook.damageBonus()` (บวกทับ) + บัฟ ungated ที่แจกข้ามตัวละครได้ (`veil`, `partner`, `cardAtkBonus` ฯลฯ)
+→ มีเทสต์แยกที่ [tests/computeAttackBase.test.js](tests/computeAttackBase.test.js)
+
+**ระบบกันตาย** (เรียกหลังทุกดาเมจก้อนใหญ่): `maybeBeatSave` (กันตาย 1 ครั้ง/เกม) → `maybeBeatMode` (เลือด<3 เข้าโหมด) → `maybeEva3` → `resolveDamageAftermath`
+
+ท้าย `dealDirect`/`dealMixed`/`dealArmorOnly` ทั้งสามตัวเรียก `mageslayerMarkSteal(target, n)` — จุดเดียวที่ทำให้
+"ตราล่าเวท" ของผู้สังหารเมจขโมยพลังงานจาก **ดาเมจทุกประเภท** (ปืน/สกิล/โจมตีปกติ) โดยดูต้นตอจาก `effectSourceId`
+ดังนั้นเอฟเฟกต์ที่ยิงดาเมจต้องห่อ `withEffectSource` ไม่งั้นตราล่าเวทเงียบ
+
+**ดาเมจแพ้รอบ** (`resolveRound` `:4400`): แต้มน้อยสุด → `damageSoft` 1 หน่วย + แต้มสกิล +1 — มีทางยกเว้นหลายชั้น (`sealActive`, `beatSaved`, `monster`, eva13 loss-immune, `fullbelly` ลด 1)
+
+---
+
+## 6. สกิล
+
+| tier | cost | หมายเหตุ |
+|---|---|---|
+| `passive` (+ `passive2`/`passive3`) | ฟรี | ทำงานเองตาม trigger `roundStart`/`win`/`lose`/`attacked` หรือ engine เรียกตรง |
+| `basic` | 2 | |
+| `secondary` | 4 | |
+| `ultimate` | 6 | หลอดจุ 8 |
+
+**ใช้ได้ 1 สกิลต่อเทิร์น** (`p.skillUsedRound`) — ยกเว้นตัวที่มีโควตาของตัวเอง (Bard 2 โน้ต/เทิร์น, kai/takumi 5 ครั้ง)
+
+**สูตรราคาจริง** (`useSkill` `:3316`–`:3360`)
+```
+cost = skill.cost
+     + (nightTaxTier === tier ? 1 : 0)     // กลางคืน: สุ่มแพงขึ้น 1 tier/คน/เทิร์น (เพดาน 8)
+     - statusAmt(spellflow)                 // กระแสเวท
+     + min(8, statusAmt(spellburden))       // ภาระเวท
+ถ้า cost > 0 และมี freecast (การ์ด Queen) → ฟรี 1 ครั้ง
+```
+
+**การได้แต้มสกิล** (จุดจริงในโค้ด — ตัวเลขใน README เก่ากว่านี้):
+- จบเทิร์น **+1** (เช้าที่แจกโบนัส = **+2**) — `endTurn()` `:5546`
+- แพ้เพราะแต้มน้อยสุด / ไพ่แตก **+1** — `resolveRound()` `:4437`
+- ทริกเกอร์ไพ่เหลืองครบ 3 ใบ **+2 ต่อชุด**
+- รีเจนพิเศษรายตัวละคร (satoru / hakuno หญิง / ultraman_trigger / hisakawa / ignis) +1 ต่อเทิร์น
+- **ชนะการจั่วไม่ได้แต้มสกิลแล้ว** (patch 2.1.3.5) และ **การโดนโจมตีก็ไม่ได้แต้ม** — ไม่มี `addSkill` ให้เป้าหมายใน `doAttack()` เลย
+- บล็อกการฟื้นแต้ม: `stagger` (ชะงัก) · `manaSeal` · ตัวละคร mageslayer · ยูกิ (`maxSkillOf` = 0) · `skillDrain` (ค่าปรับ −1/เทิร์น)
+- `addSkill(p, n, src)` — `src` เป็น tag ของ "ช่องทางฟื้นฟู" (`"item"` / `"passive"` / `"card"`) ใส่เฉพาะจุดที่เป็น
+  การฟื้นพลังงานจริงๆ (ไอเทม / พาสซีฟตัวละคร / ไพ่เหลืองครบชุด) **ไม่ใส่** ให้แต้มพื้นฐานจบเทิร์น ค่าชดเชยการแพ้
+  หรือการโอนแต้มระหว่างผู้เล่น — ใช้ตัดสินว่าดีบัฟ `manaLeech` (ดูดซับเวท) จะโรล 35% หรือไม่
+
+**สกิลที่สลับตัวเองได้** (`useSkill` เลือก `skill` object ใหม่ก่อนคิดราคา): shrade_elan, shiki (เลือกตอน join), riddhe, banagher, phenex, hakuno (เพศ), hikaru, oguri, takuto, escanor, hisakawa_sister, ignis, oberon (ตามช่วงเวลา), kotone (ตามช่วงเวลา + ร่าง [พร้อมลุย] ทับทั้ง 3 ช่อง)
+
+**คอสที่ไม่ใช่แต้มสกิล**: ท่าไม้ตายในร่าง [พร้อมลุย] ของโคโตเนะจ่าย **6 แต้มสกิล + 6 เหรียญ** — ด่านเงินเช็คที่
+`CHAR_HOOKS.kotone.canUseSkill()` (ก่อนหักแต้ม) และหักจริงที่ `payFormUltGold()` ในส่วน effect
+
+---
+
+## 7. สถานะ (statuses)
+
+- `p.statuses[key]` = **จำนวนเทิร์นที่เหลือ** (หรือจำนวนสแตค แล้วแต่ key)
+- `p.statusAmt[key]` = **ขนาดของผล** (เช่น guard 2 = ลดดาเมจ 2) — อ่านด้วย `statusAmtOf(p,key)` เสมอ
+- ลดเทิร์นทั้งหมดที่ลูปใน `endTurn()` `:5397` — **key ที่ไม่ควรลดเทิร์นต้อง `continue;` ในลูปนั้นเอง** (มี ~40 ข้อยกเว้น พร้อมคอมเมนต์เหตุผลรายบรรทัด)
+
+**บัฟกลาง** (`_universal_status.js`): `spellflow` (สกิลถูกลง) · `might`/`empower` (เสริมพลัง) · `guard` (คุ้มครอง) · `resist` (ต้านสถานะ) · `fortune` (โชคลาภ) · `evade` (หลบหลีก) · `netramana` (โอกาสสังหาร 20%)
+
+**ดีบัฟกลาง**: `spellburden` · `weak` · `fragile` · `sleep` · `stun` · `nodraw` · `noskill` · `nohealing` · `invert` (ผกผัน) · `hburn` (ลุกไหม้) · `chaa` (จั่ว 1 ครั้งได้ 2 ใบ) · `decay` (ผุพัง เกราะไม่ฟื้น)
+
+**ดีบัฟเฉพาะผู้สังหารเมจ** (อยู่ใน `BASIC_DEBUFF_CLEAR` — ต้านสถานะผิดปกติล้างได้ทั้งคู่)
+- `mageslayerMark` (ตราล่าเวท) — ไม่ลดเทิร์น (`continue` ใน `endTurn`) ถาวรจนย้ายมาร์ก/ถูกล้าง · ฝั่งผู้ร่ายเก็บที่
+  `ms.mageslayerMarkedId` + `target.mageslayerMarks[msId]` และ reconcile ให้เองที่ `tickWitchMark()` ท้ายเทิร์น
+- `manaLeech` (ดูดซับเวท) — ลดเทิร์นตามปกติ · ทริกที่ `useSkill()` และที่ `addSkill()` ที่มี `src`
+
+- `applyDebuff()` คืน `false` ถ้าโดน `resist` กัน — `BASIC_DEBUFF_CLEAR` คือรายการที่ต้านสถานะล้างได้ทั้งหมด, `SOFT_DEBUFF_STEP` (`dawn`, `deathline`) ล้างได้ทีละ 1 สแตค
+- **`evade` เป็นกรณีพิเศษ**: ตัวจริงอยู่ใน `p.evadeStacks` (array อายุต่อสแตค, สูงสุด 3 สแตค × 2 เทิร์น) — `p.statuses.evade` เป็นแค่ mirror ใช้ `grantEvadeStack`/`consumeEvadeStack`/`tickEvadeStacks` เท่านั้น ห้ามแตะตรงๆ
+
+---
+
+## 8. คัตซีน / แปลงร่าง
+
+- `TRANSFORMS` (`characters/_transforms.js`) = metadata ต่อ status key: `{ img, video, title, label, seconds, music, voice, afterReveal }`
+- `queueCutscene(p,key)` เข้าคิว · `triggerCutscene(p,key)` เล่นทันที (ครั้งแรกวีดีโอเต็ม ครั้งถัดไปแค่การ์ดแจ้งเตือน — ดู `p.cutsceneShown`)
+- `runCutsceneQueue(onDone)` `:2542` — ตั้ง `gameState = "CUTSCENE"` เล่นเรียงทีละคลิป แล้วเรียก `onDone`
+- `afterReveal: true` = ลูปใน `afterResolve()` กวาดเล่นให้เอง (ท่าไม้ตายที่ทำงานหลังเปิดไพ่)
+- `p.transformAt = ++transformCounter` ใช้ตัดสินว่าเพลงของใครทับใคร เมื่อสวนท่าไม้ตายกัน
+- โหมดประหยัด (client `lowQ`) ข้ามวีดีโอแต่ยัง **รอเวลาเท่าเดิม** เพื่อให้ทุกคนซิงก์กัน
+
+---
+
+## 9. เศรษฐกิจ + ร้านค้า
+
+- **เหรียญ**: จบเทิร์น +1 ทุกคน · ชนะจั่ว +1 · การ์ด King +10 · เพดาน `goldCapOf(p)` = 30 (โคโตเนะ 45 จากสกิลติดตัว)
+  - **ทุกการได้รับเหรียญต้องผ่าน `addGold(p, n)`** (`server.js`, เปิดให้ hook ผ่าน `engine.addGold`) — เป็นจุดเดียวที่
+    บังคับเพดานรายบุคคลและยิง `CHAR_HOOKS.kotone.onGoldGained()` (กระปุกออมสิน 60% แบ่งเหรียญที่เพิ่งได้ไปหยอด
+    ไม่เกินครั้งละ 3 เต็ม 15 — **หักจากยอดที่ได้รับ**) เขียน `p.gold` ตรงๆ = กระปุกออมสินเงียบ
+  - `addGold()` คืน **ยอดสุทธิที่เหลืออยู่ในกระเป๋า** (หลังกระปุกแบ่งไปแล้ว) ไม่ใช่ยอดก่อนแบ่ง
+- **ร้านเปิดทุก 5 เทิร์น** (`roundNumber % SHOP_INTERVAL_TURNS === 0` ใน `dealRound`) — **ร้านเดียว: ร้านค้ามายา 15 ช่อง** (patch 2.3 ยุบร้านลุงเท่งเข้ามา — ไม่มี `uncleShopItems`/แท็บสลับร้านอีกแล้ว)
+  - **ช่องล็อกช่องเดียว = Trigger Dark Key** โผล่แน่นอน 1 ชิ้นทุกรอบ (อิกนิสต้องมีของซื้อเสมอ) และไม่ถูกสุ่มซ้ำในช่องอื่น
+  - **14 ช่องที่เหลือสุ่มล้วนตาม `SHOP_WEIGHTS`** (`rollShopItem(allowGun, allowHyper)`): เปลี่ยนสีการ์ด 15% / โชคลาภ 5% / ต้านสถานะ 15% / ยาลดไพ่ 12% / แต้มสกิล 14% / เกราะ 14% / ปืน GUTS Select 8% / กระสุน 14% / Hyper Key Trigger 3%
+    - แต้มสกิลแตกย่อยตาม `SHOP_SKILL_SIZES[].weight` — เล็ก 50 / กลาง 35 / ใหญ่ 15 (= 7% / 4.9% / 2.1% ของทั้งช่อง)
+    - กระสุนแตกย่อยตาม `SHOP_AMMO_WEIGHTS` — Shockwave/Gargorgon/Thunder อย่างละ 4 / Nurse 2 (= 4% / 4% / 4% / 2%)
+    - โควตาต่อรอบ: ปืน ≤ `SHOP_MAX_GUNS` (2) · Hyper Key ≤ `SHOP_MAX_HYPER` (1) — เต็มโควตาแล้วน้ำหนักตกไปรวมกับกระสุนธรรมดา
+- ซื้อแล้วเข้า `p.inventory` (หายทุกแมตช์ใหม่) → ใช้ผ่าน `useInventoryItem()` `:2693`
+- ปืนยิงได้ 1 นัด/เทิร์น เฉพาะช่วงจั่วไพ่ และต้องมีปืนถึงจะยิงกระสุนได้ (`hasGutsGun`)
+
+---
+
+## 10. กลางวัน/กลางคืน
+
+- สลับทุก **5 เทิร์น** (`CYCLE_TURNS`) เริ่มเกมเป็นกลางวัน — โหมด Overload กลับด้าน (5 เทิร์นแรกเป็นกลางคืน)
+- **กลางวัน**: จบเทิร์นได้แต้มสกิล +1 แต่ **เฉพาะเช้าที่ 2, 4, 6, …** (`morningBonusActive`)
+- **กลางคืน**: สุ่ม 1 tier ของแต่ละคนแพงขึ้น +1 (`p.nightTaxTier`)
+- **เกราะฟื้น +1 ทุกเทิร์นเลขคู่** เหมือนกันทั้งวัน/คืน (บล็อกโดย `armorLocked` / `decay` / MOON*CELL)
+- `cycleShift` = ตัวเลื่อนวงจรทั้งเกม (Lie Like Vortigern / ชเรด รีเซ็ตกลางคืน) — **ต้องคำนวณใหม่ตรงๆ ห้ามบวกสะสม** (มีคอมเมนต์เตือนบั๊กเดิมที่ `engine.extendNight`)
+- มิติมายาบรรเลงของ Bard **override วงจรทั้งหมด** (โลหิต = กลางวัน, วิญญาณ = กลางคืน)
+
+---
+
+## 11. Overload Force + บอสยูกิ
+
+- แต้มสูงสุด **เสมอกัน** → โรล 30% (`OVERLOAD_FORCE_CHANCE`) → `triggerOverloadForce()`
+  - แจกไพ่ใหม่ **ในเทิร์นเดิม**, ปลดเพดาน 21 (ไม่มีการแตก), Joker = +12 ตายตัว
+  - โทษ: ทุกใบที่ 5 ที่จั่วหลังแต้มเกิน 21 → เสีย HP จริง 1 (`applyOverloadOverdrawPenalty` `:1729`) — ยูกิได้รับการยกเว้น
+- **ย้อนทั้งเทิร์นก่อนแจกไพ่ใหม่**: `captureTurnSnapshot()` ถ่ายสภาพผู้เล่นทั้งหมด (+ `roundSkills`/ร้านค้า/ตัวแปรวงจรวัน-คืน/ยูนะ) ไว้ตอนปลาย `dealRound()` ก่อนเข้าเฟสจั่วไพ่ · `restoreTurnSnapshot()` เรียกเป็นอย่างแรกใน `triggerOverloadForce()`
+  - คืนให้ครบ: แต้มสกิล, โควตา `skillUsedRound`/`kaiSkillUsesRound`/`bardNotesUsed`, ไอเทม+เหรียญ, ดาเมจ/ดีบัฟที่ก่อในเทิร์นนั้น, แม้แต่คนที่ตายไปแล้วก็ฟื้น (บั๊กเดิม: สกิลที่ทำงาน "หลังเปิดไพ่" ถูกล้างทิ้งพร้อมมือไพ่ = เสียแต้มกับสกิลฟรี)
+  - **ไม่ย้อน** ข้อมูลการเชื่อมต่อ (`socketId`/`connected`/`sessionToken`/`ready`) และไม่ปลุกผู้เล่นที่ออกจากเกมกลางเทิร์น · สแนปช็อตใช้ได้ครั้งเดียว (ล้างทิ้งหลัง restore / ตอน `startMatch()` / กลับล็อบบี้)
+- **บอสยูกิเกิดได้เฉพาะโหมด `overload`** — `triggerOverloadForce()` เช็ค `gameMode === "overload"` ก่อนเรียก `createYuukiBoss()` ดังนั้น ffa/duo/trio ไม่มีทางเจอยูกิ (Overload Force ยังเกิดได้ตามปกติ ครั้งที่ 3+ ก็เป็นแค่ Overload Force ธรรมดา)
+- **โหมด `overload`**: เรียกบอสตั้งแต่ `startMatch()` — โค่นบอส = ผู้เล่นทุกคนชนะร่วมกัน (`yuukiDefeated`)
+- ยูกิเป็น player ปลอม id `__yuuki_boss__` — HP/เกราะสเกลตามจำนวนผู้เล่น (`YUUKI_SCALE` 1–6 คน = 7/3 … 30/5), เล่นเองผ่าน `autoPlayYuuki()` `:1235`
+  - จั่วตอบโต้ ≤1 ใบต่อไพ่ที่มนุษย์จั่ว (`yuukiReactiveDrawCredits`) + จั่วแก้มือช่วงสรุปอีก ≤2 ใบ
+  - ชนะ = โจมตี 2 เป้าไม่ซ้ำ (`yuukiAttackTargets`) · Star of Fall ทุก 5 เทิร์น · ยูกิไม่มีแต้มสกิล (`maxSkillOf` = 0)
+
+---
+
+## 12. โหมดทีม
+
+`gameMode`: `ffa` | `duo` (2 คน/ทีม) | `trio` | `overload` | `pending`
+- โหวตเลือกโหมด → `TEAM_SETUP` เลือกทีม A/B/C + ยืนยันครบ → `startMatch()`
+- `sameTeam(a,b)` กันเลือกเป็นเป้าโจมตี · `friendlyEffectBlocked(target)` กันเอฟเฟกต์ลบใส่พวกเดียวกัน
+- `withEffectSource(source, fn)` ตั้ง `effectSourceId` ให้ระบบรู้ว่าใครเป็นต้นตอ — **handler ที่ก่อเอฟเฟกต์ต้องห่อด้วยตัวนี้** ไม่งั้น friendly-fire check พัง (ดู [tests/team-friendly-fire.test.js](tests/team-friendly-fire.test.js))
+- ชนะเมื่อเหลือทีมเดียว (`remainingTeamWinInfo`)
+
+---
+
+## 13. Socket protocol
+
+**Client → Server** (ทุกตัวผ่าน `onPlayerEvent()` ที่มี rate-limit ต่อ event)
+```
+reconnectSession {sessionToken}   reserve {position}   join {name,position,characterId,shikiUlt}
+startGame   selectGameMode {mode}   teamBackToMode   chooseTeam {teamId}   confirmTeam {confirmed}   toggleReady
+hit   lock   useSkill {tier,targets,item}   attack {targetId}
+buyShopItem {itemId}   useInventoryItem {uid,cardIndex,color,targetId}
+contractAnswer / locaAnswer / allyAnswer / allyBreakAnswer / allyFinalAnswer / bardTarget /
+kaiOverhaul / hakunoCommandSpell / phenexRelease / batKarmaSend / nanayaToggleEye / nanayaCancelReattack
+backToLobby   leave   disconnect
+```
+
+**Server → Client**
+
+| event | เนื้อหา |
+|---|---|
+| `state` | **snapshot ทั้งเกม ต่อผู้ชมแต่ละคน** — `buildStateFor(viewerId)` `:2127` ซ่อนไพ่/แต้ม/สกิลคนอื่นตอน PLAYING |
+| `roster` / `positions` / `positionTaken` / `full` / `inProgress` / `joined` | หน้า setup/lobby |
+| `skillFlash` | การ์ดสกิลเด้งบนกระดาน (ไม่หยุดเกม) |
+| `transformNotice` | แจ้งแปลงร่างซ้ำ (ครั้งที่ 2+) |
+| `bardSfx` | เสียงโน้ต/บรรเลงของ Bard |
+
+- ไม่มีระบบห้อง — **เกมเดียวทั้งเซิร์ฟเวอร์**, สูงสุด 6 คน
+- `playerId` แยกจาก `socket.id` → รีคอนเนกต์กลับมาเป็นคนเดิมได้ภายใน `RECONNECT_GRACE_MS` (60s)
+- `buildStateFor` เป็นจุดเดียวที่ตัดสินว่าอะไรถูกซ่อน — เพิ่มฟิลด์ลับต้องระวังที่นี่
+
+---
+
+## 14. Contract ของ character hook
+
+```js
+// characters/<id>.js
+module.exports = {
+  id: "<characterId>",                     // ต้องตรงกับ id ใน characters.js
+
+  // ตัวเลือก — engine เรียกอัตโนมัติถ้ามี
+  damageBonus(engine, attacker, target, ctx) { return 0; },         // บวกดาเมจ (computeAttackBase)
+  attackBaseOverride(engine, attacker, target, ctx) { return 1; },  // แทนที่ดาเมจฐาน
+  adjustIncomingDamage(engine, p, n, isNormalAttack) { return n; }, // ปรับดาเมจขาเข้า
+
+  // ที่เหลือคือ method ที่ server.js เรียกเองแบบเจาะจง: CHAR_HOOKS.<id>.<method>(engine, ...)
+  activateSomething(engine, p) { engine.log("..."); },
+};
+```
+
+**กฎเหล็ก**
+1. เข้าถึง state ผ่าน `engine.*` เท่านั้น (`engine.log`, `engine.healHp`, `engine.dealMixed`, `engine.players`, …)
+2. อ่านค่า `let` ของ server ผ่าน getter (`engine.roundNumber`) — เขียนผ่าน setter (`engine.setRoundNumber`)
+3. ค่าคงที่เฉพาะตัวละครเก็บในไฟล์ตัวเอง — ที่ยังค้างใน server.js คือตัวที่ shared loop ยังใช้อยู่ (มีคอมเมนต์กำกับทุกตัว)
+4. ตัวละครใหม่ = เพิ่ม data ใน `characters.js` + ไฟล์ใน `characters/` + `require`+push ใน `characters/index.js`
+
+---
+
+## 15. Gotchas ที่ควรจำก่อนแก้โค้ด
+
+1. **`dealRound()` ล้าง `cutsceneQueue`** — คิววีดีโอไว้ก่อนบรรทัดนั้น = หาย
+2. **ลูปลดเทิร์นสถานะใน `endTurn()`** — status key ใหม่ที่ไม่ควรลดเทิร์นต้องเพิ่ม `continue;` เอง ไม่งั้นหายเงียบ; ตรงข้าม key ที่ `continue` แล้วไม่มีใครลบทิ้ง = ค้างถาวรทั้งแมตช์ (บั๊กเดิมของ `burnout`)
+3. **โรลโอกาสต้องอยู่ที่จุดตัดสินจริง** — Rip and Tear ของ DoomGuy เคยโรลใน `afterSummary()` หลังสุ่มผู้ชนะไปแล้ว ทำให้โอกาสจริงถูกหารด้วยจำนวนคนที่เสมอ (ย้ายมาที่ `resolveRound()` แล้ว)
+4. **`withEffectSource`** ต้องห่อทุก handler ที่ก่อเอฟเฟกต์ ไม่งั้น friendly-fire / แหล่งที่มาดาเมจพัง
+5. **ห้ามแก้ `p.hp` / `p.armor` / `p.statuses.evade` ตรงๆ** — ใช้ primitive ที่ให้ไว้ (มี link/mirror/กันตายผูกอยู่)
+6. **`isNormalAttack`** ให้ `true` เฉพาะจาก `doAttack()` เท่านั้น
+7. **`p.seen[key]` vs `p.cutsceneShown[key]`** — อันแรกกันเอฟเฟกต์ทำงานซ้ำ อันหลังกันวีดีโอเล่นซ้ำ คนละเรื่องกัน
+8. `process.on("uncaughtException")` ที่หัวไฟล์เป็น **ตาข่ายสำรอง** ไม่ใช่ที่จัดการ error — handler ต้อง try/catch เอง (`safeOn`/`onPlayerEvent` ทำให้แล้ว)
+9. ไฟล์สื่อ (รูป/วีดีโอ/เพลง) ไม่ track ใน git — ไม่มีไฟล์ในเครื่อง client จะ fallback เป็นอีโมจิ (`client/src/data/avatars.js`)
+10. `resetCombat(p)` `:1939` คือรายการฟิลด์ผู้เล่นทั้งหมด — **ฟิลด์ใหม่ของตัวละครต้องรีเซ็ตที่นี่** ไม่งั้นค้างข้ามแมตช์
+
+---
+
+## 16. เทสต์
+
+```bash
+npm test    # node --test "tests/**/*.test.js"
+```
+- `server.integration.test.js` — spawn server จริงแล้วต่อด้วย socket.io-client (port 32000 + pid%1000)
+- `computeAttackBase.test.js` — `require("../server.js").computeAttackBase` ตรงๆ (server ไม่ listen เมื่อไม่ใช่ main module)
+- `tests/characters/*.test.js` — ทดสอบ hook รายตัวละครโดย mock `engine`
+- อยากเทสต์ฟังก์ชันใหม่ใน server.js ต้องเพิ่มเข้า `module.exports` ท้ายไฟล์ก่อน

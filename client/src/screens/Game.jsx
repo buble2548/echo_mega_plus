@@ -53,7 +53,7 @@ function isTargetable(p, iAmAttacker, c) {
   const normalAttackTarget = iAmAttacker && !friendly && !p.statuses?.seal && (!c.kaiRivalId || p.id === c.kaiRivalId);
   const gunTarget = !!c.gunSel && !self && !friendly;
   const escanorSkillTarget = c.escanorSel && !self && !friendly;
-  return (normalAttackTarget || !!c.anataSel || c.dawnSel || c.appleSel || c.bbSel || c.shSel || c.skSel || c.doomSel || c.saObSel || escanorSkillTarget || c.ignisSel || c.ignisImpactSel || c.bgSel || c.kawaiiSel || !!c.bardPending || c.nanayaSel || c.tpSel || c.kaiCreateSel || c.kaiPunishSel || c.msMarkSel || c.msRuptureSel || c.psSealSel || gunTarget) && p.alive;
+  return (normalAttackTarget || !!c.anataSel || c.dawnSel || c.appleSel || c.bbSel || c.shSel || c.skSel || c.doomSel || c.saObSel || escanorSkillTarget || c.ignisSel || c.ignisImpactSel || c.bgSel || !!c.bardPending || c.nanayaSel || c.tpSel || c.kaiCreateSel || c.kaiPunishSel || c.msMarkSel || c.msRuptureSel || c.psSealSel || gunTarget) && p.alive;
 }
 // แตะ/คลิกการ์ดคู่ต่อสู้แล้วต้องทำอะไร — ไล่ตามโหมดเลือกเป้าหมายที่เปิดอยู่ ไม่มีเลยก็โจมตีปกติ
 function resolveAttackPick(id, c) {
@@ -69,7 +69,6 @@ function resolveAttackPick(id, c) {
   if (c.ignisSel) return c.pickIgnis(id);
   if (c.ignisImpactSel) return c.pickIgnisImpact(id);
   if (c.bgSel) return c.pickBg(id);
-  if (c.kawaiiSel) return c.pickKawaii(id);
   if (c.bardPending) return c.pickBard(id);
   if (c.nanayaSel) return c.pickNanaya(id);
   if (c.tpSel) return c.pickTp(id);
@@ -88,6 +87,12 @@ function resolveAttackPick(id, c) {
 function Cutscene({ cs }) {
   const ref = useRef(null);
   const [introDone, setIntroDone] = useState(false);
+  // เพลงประกอบเฉพาะฉาก (cs.voice) — เล่นทับวีดีโอตั้งแต่ต้นฉาก และหยุดทันทีที่ฉากจบ/เปลี่ยนฉาก
+  useEffect(() => {
+    if (!cs.voice) return;
+    const a = playSfx(cs.voice);
+    return () => { if (a) { try { a.pause(); } catch { /* ignore */ } } };
+  }, [cs.id, cs.voice]);
   useEffect(() => {
     const v = ref.current;
     if (!v) return;
@@ -685,7 +690,7 @@ function ModalMounts({
   allyBreakAsk, onAnswerAllyBreak,
   allyFinalAsk, onAnswerAllyFinal,
   statusView, statusViewIsSelf, onCloseStatus,
-  shopOpen, shop, uncleShop, onCloseShop,
+  shopOpen, shop, onCloseShop,
   bagOpen, onCloseBag, players, gameState, roundNumber, onPickGunAmmo,
   skillConfirm, onConfirmSkill, onCancelSkill,
 }) {
@@ -705,7 +710,7 @@ function ModalMounts({
       {allyBreakAsk && me?.alive && <AllyBreakModal ask={allyBreakAsk} onAnswer={onAnswerAllyBreak} />}
       {allyFinalAsk && me?.alive && <AllyFinalModal ask={allyFinalAsk} onAnswer={onAnswerAllyFinal} />}
       {statusView && <StatusModal p={statusView} statusOnly={statusViewIsSelf} onClose={onCloseStatus} />}
-      {shopOpen && <ShopModal shop={shop} uncleShop={uncleShop} me={me} onClose={onCloseShop} />}
+      {shopOpen && <ShopModal shop={shop} me={me} onClose={onCloseShop} />}
       {bagOpen && <InventoryModal me={me} players={players} gameState={gameState} roundNumber={roundNumber} onPickGunAmmo={onPickGunAmmo} onClose={onCloseBag} />}
       {skillConfirm && <SkillConfirmModal confirm={skillConfirm} onConfirm={onConfirmSkill} onCancel={onCancelSkill} />}
       <GutsVideoPreloader me={me} />
@@ -717,7 +722,7 @@ function ModalMounts({
 const PHASE_NAMES = { PLAYING: "🎴 สุ่มการ์ด", ATTACK: "⚔️ โจมตี" };
 
 // สถานะที่ผูกกับท่าไม้ตายของแต่ละตัวละคร — ใช้เช็คว่ากำลังมีผลอยู่ไหม (กดซ้ำไม่ได้จนกว่าจะหมดเวลา)
-const ULTIMATE_STATUS = { hikaru: "gingastrium", kuwagata: "rachan", banagher: "paradise", temari: "anata", gambler: "golden", eva13: "fourth", appleguy: "chill", kotone: "kawaii", shiki: "deatheye", miyako: "miyakoUlt", hakuno: "moonCell", takumi: "takumiBlackout", bat_ben: "batTaunt", princess_shiki: "pshikiUlt" };
+const ULTIMATE_STATUS = { hikaru: "gingastrium", kuwagata: "rachan", banagher: "paradise", temari: "anata", gambler: "golden", eva13: "fourth", appleguy: "chill", kotone: "kready", shiki: "deatheye", miyako: "miyakoUlt", hakuno: "moonCell", takumi: "takumiBlackout", bat_ben: "batTaunt", princess_shiki: "pshikiUlt" };
 
 // ---------- Apple guy: ของส่งมอบ 3 ชิ้น (สกิลพื้นฐาน เอาแบบนี้ได้ไหม เลือก -> สกิลรอง เอาไปสิ ส่งให้เป้าหมาย) ----------
 const APPLE_ITEMS = [
@@ -976,13 +981,14 @@ const STATUS_INFO = {
   tiger:     { icon: "🐯", label: "เสือนอนกิน", cls: "bg-echo-gold text-gray-900", desc: "เสือนอนกิน: พลังโจมตี +1 (และฟื้นพลังชีวิต 1 หน่วยในเทิร์นถัดไป)" },
   unplug:    { icon: "🔌", label: "สายหลุด", cls: "bg-echo-hp", desc: "กระชากสายแลน: บัฟหายไปชั่วคราวตลอดเทิร์นนี้ (กลับคืนในเทิร์นถัดไป)" },
   nohealing: { icon: "☠️", label: "ไร้ทางเยียวยา", cls: "bg-echo-hp", desc: "ไร้ทางเยียวยา: ฟื้นพลังชีวิตไม่ได้ ตามจำนวนเทิร์นที่เหลือ" },
-  // ---------- ฟุจิตะ โคโตเนะ (patch 1.9.1 / rework 2.1.3) ----------
-  overwork:  { icon: "🥵", label: "โหมงานหนัก", cls: "bg-echo-hp", desc: "โหมงานหนัก: ใช้แต้มสกิลเพิ่มขึ้น 1 สุ่มสตั้น 10% ทุกเทิร์น โล่พังทั้งหมดและฟื้นไม่ได้ พลังโจมตีช่วงเช้าเหลือ 0 — คงอยู่ 2 เทิร์น และลบล้างได้ด้วย Sleeping time (สกิลรอง 2) เท่านั้น" },
-  fresh:     { icon: "🌅", label: "เช้าที่สดใส", cls: "bg-echo-gold text-gray-900", desc: "เช้าที่สดใส: ได้แต้มสกิล +1 และโล่ +1 ทุกเทิร์น ตามจำนวนเทิร์นที่เหลือ" },
-  ksleep:    { icon: "😴", label: "หลับพักผ่อน", cls: "bg-echo-cyan text-gray-900", desc: "Sleeping time: หลับ 2 เทิร์นตายตัว — ตื่นแล้วจะได้รับ [เช้าที่สดใส] (เทิร์นแรกของการหลับ ศัตรูเลือกโจมตีไม่ได้)" },
-  kotoneAtk: { icon: "💃", label: "เพลงฝึกซ้อม", cls: "bg-echo-magenta", desc: "สกิลรอง: การโจมตีปกติครั้งถัดไปพลังโจมตี +2 — คงอยู่จนกว่าจะได้โจมตี" },
-  sena:      { icon: "😱", label: "หนีเซนะ", cls: "bg-echo-hp", desc: "เจอท่านประธานเซนะจัง — มัวแต่หลบหนีจนทำอะไรไม่ได้เลยทั้งเทิร์นนี้" },
-  kawaii:    { icon: "💖", label: "Kawaii", cls: "bg-echo-magenta", desc: "Sekai ichi kawaii watashi: หลังเปิดไพ่จะโจมตีเป้าหมายที่เลือกไว้ 3 หน่วยและสตั้น 3 เทิร์น" },
+  // ---------- ฟุจิตะ โคโตเนะ (rework 2.3) ----------
+  ksleep:      { icon: "😴", label: "หลับพักผ่อน", cls: "bg-echo-cyan text-gray-900", desc: "Sleeping time: ล้างสถานะเสียทั้งหมดตอนใช้ แล้วหลับ 3 เทิร์น (ทำอะไรไม่ได้) — ระหว่างหลับฟื้นพลังชีวิต +2 และแต้มสกิล +1 ทุกเทิร์น (เทิร์นแรกศัตรูเลือกโจมตีไม่ได้)" },
+  kotoneReady: { icon: "🎀", label: "ความพร้อม", cls: "bg-echo-cyan text-gray-900", desc: "ความพร้อม: สะสมจาก Dance Lession (กลางวัน +1 / กลางคืน +2) — ครบ 4 หน่วยจะใช้ท่าไม้ตาย หนูพร้อมแล้วคะ โปรดิวเซอร์ ได้" },
+  kready:      { icon: "✨", label: "พร้อมลุย", cls: "bg-echo-magenta", desc: "ร่าง [พร้อมลุย]: ปุ่มสกิลทั้ง 3 ช่องเปลี่ยนเป็นท่าไม้ตาย Sekai ichi kawaii watashi / Campus Mode! / Self-affirmation Explosion! Love Love (คอส 6 แต้มสกิล + 6 เหรียญ) — อยู่ในร่างนี้จนกว่าจะปล่อยท่าใดท่าหนึ่ง" },
+  kotoneLove:  { icon: "💗", label: "รัก รักที่สุดเลย", cls: "bg-echo-magenta", desc: "รัก รักที่สุดเลย: การโจมตีครั้งถัดไปทำดาเมจเพิ่มตามเงินในกระปุกออมสิน (5/10/15 เหรียญ = +1/+2/+3) — ทำดาเมจแล้วกระปุกถูกล้างทั้งหมด" },
+  kawaii:      { icon: "💖", label: "Kawaii", cls: "bg-echo-magenta", desc: "Sekai ichi kawaii watashi: ทำงานหลังเปิดไพ่ — ตีหมู่เจาะเกราะ 1 หน่วย สตั้น 2 เทิร์น และบังคับทุกคนไพ่แตก" },
+  kcampus:     { icon: "🏫", label: "Campus Mode", cls: "bg-echo-magenta", desc: "Campus Mode!: ทำงานหลังเปิดไพ่ — ได้บัฟ รัก รักที่สุดเลย ฮีล 3 หน่วย ทุกคนติดไร้ทางเยียวยา 2 เทิร์น และบังคับทุกคนไพ่แตก" },
+  kshuki:      { icon: "💞", label: "Love Love", cls: "bg-echo-magenta", desc: "Self-affirmation Explosion! Love Love: ทำงานหลังเปิดไพ่ — ได้บัฟ รัก รักที่สุดเลย บังคับทุกคนไพ่แตก และโจมตีเพิ่มได้อีก 1 ครั้ง" },
   // ---------- ชเรด เอลัน (patch พิเศษ) ----------
   melody:    { icon: "🎵", label: "ท่วงทำนอง", cls: "bg-echo-cyan text-gray-900", desc: "ท่วงทำนอง: สะสมจากสกิล เชิญรับฟัง (สูงสุด 5) — ครบ 5 ตอนกลางคืนจะใช้ท่าไม้ตาย รวมร่างทำนองเพลง ได้" },
   shradecharge: { icon: "🎻", label: "บทเพลงสุดท้าย", cls: "bg-echo-hp", desc: "แด่เพื่อนรักของฉัน: กำลังบรรเลงบทเพลงสุดท้าย — จั่ว/ใช้สกิลไม่ได้ ครบกำหนดจะระเบิดใส่ทุกคน 8 หน่วย แล้วชเรดจบชีวิตลง" },
@@ -1003,10 +1009,11 @@ const STATUS_INFO = {
   kaiLink: { icon: "🕊️", label: "เชื่อมต่อ", cls: "bg-echo-magenta", desc: "เชื่อมต่อ (สวรรค์ประทานพร): HP/เกราะที่เสียหรือฟื้นฟูจริงถูกแชร์ให้คู่เชื่อมเท่ากัน 1:1 ตามจำนวนเทิร์นที่เหลือ" },
   kaiRival1: { icon: "😡", label: "คู่ปรับ", cls: "bg-echo-hp", desc: "โทสะระงับด้วยโทสะ: ถูกบังคับโจมตีเฉพาะคู่ปรับที่ถูกกำหนดไว้เท่านั้น ตามจำนวนเทิร์นที่เหลือ" },
   kaiRival2: { icon: "😡", label: "คู่ปรับ", cls: "bg-echo-hp", desc: "โทสะระงับด้วยโทสะ: ถูกบังคับโจมตีเฉพาะคู่ปรับที่ถูกกำหนดไว้เท่านั้น ตามจำนวนเทิร์นที่เหลือ" },
-  // ---------- ผู้สังหารจอมมหาเวทย์ ----------
-  mageslayerMark: { icon: "🎯", label: "ตราล่าเวท", cls: "bg-echo-magenta", desc: "ตราล่าเวท (Witch Mark): โจมตีเป้าหมายนี้จะฟื้นพลังงาน; เมื่อเป้าหมายใช้สกิลมีโอกาส 35% ถูกขโมยพลังงาน 1 หน่วยและคืนให้ผู้ใช้ตรา (เคลื่อนย้ายได้ ถาวรจนกว่าจะย้าย/ถูกล้าง)" },
-  mageslayerFury: { icon: "😤", label: "Fury", cls: "bg-echo-gold text-gray-900", desc: "Fury: สะสมพลังโกรธ (สูงสุด 2) — ใช้หมดพร้อมกันในการโจมตีปกติครั้งถัดไป (+ดาเมจ และดูดเลือดเท่าจำนวนสต็อก)" },
-  manaRupture: { icon: "💥", label: "ระเบิดมานา", cls: "bg-echo-hp", desc: "ระเบิดมานา: มาร์กเป้าหมายก่อนเปิดการ์ด ไม่โดนต้านสถานะผิดปกติ คำนวณดาเมจจากพลังงานตอนถูกมาร์ก และระเบิดตอนเริ่มเทิร์นถัดไป (7-8 = 1 / 2-6 = 3 / 0-1 = 5)" },
+  // ---------- ผู้สังหารเมจ ----------
+  mageslayerMark: { icon: "🎯", label: "ตราล่าเวท", cls: "bg-echo-magenta", desc: "ตราล่าเวท (Witch Mark): ความเสียหายทุกประเภทของผู้สังหารเมจต่อเป้าหมายนี้จะขโมยพลังงานเท่าความเสียหาย (ต่ำสุด 1 สูงสุด 5) — ขโมยเกินพลังงานที่เหลือ เป้าหมายติด [อ่อนแอ] -1 2 เทิร์น — ทุก 2 เทิร์นถูกขโมยเพิ่มอีก 1 หน่วย (เคลื่อนย้ายได้ ถาวรจนกว่าจะย้าย/ถูกล้างด้วยต้านทานสถานะผิดปกติ)" },
+  manaLeech: { icon: "🩸", label: "ดูดซับเวท", cls: "bg-echo-magenta", desc: "ดูดซับเวท: ทุกครั้งที่กดสกิล / ใช้ไอเทมฟื้นพลังงาน / ฟื้นพลังงานจากพาสซีฟ / การ์ดรังสรร มีโอกาส 35% ถูกผู้สังหารเมจขโมยพลังงาน 1 หน่วย" },
+  mageslayerFury: { icon: "😤", label: "Fury", cls: "bg-echo-gold text-gray-900", desc: "Fury: สะสมพลังโกรธ (สูงสุด 3 ขั้น) — ใช้หมดพร้อมกันในการโจมตีปกติครั้งถัดไป: สูบพลังชีวิตเท่าจำนวนขั้น (ดาเมจ +ขั้น และฟื้นเลือด +ขั้น) พร้อมมอบ [ดูดซับเวท] แก่เป้าหมาย 1/3/5 เทิร์นตามขั้น" },
+  manaRupture: { icon: "💥", label: "ระเบิดมานา", cls: "bg-echo-hp", desc: "ระเบิดมานา: ติดสถานะ 2 เทิร์น เมื่อหมดเวลาจะระเบิดตามพลังงานในเทิร์นที่ติดสถานะ (7-8 = ดาเมจ 1 / 2-6 = ดาเมจ 3 + ผนึกพลังเวทย์ 2 เทิร์น / 0-1 = ดาเมจ 5 + ผนึกพลังเวทย์ 3 เทิร์น)" },
   // ---------- Ultraman Trigger ----------
   triggerDarkForm: { icon: "🌑", label: "Trigger Dark", cls: "bg-echo-magenta", desc: "ร่าง Trigger Dark คงอยู่ 5 เทิร์น หากตายในร่างนี้จะตายจริง และเมื่อคืนร่างต้องซื้อ Trigger Dark Key ใหม่" },
   triggerDarkWail: { icon: "🌘", label: "อวดครวญ", cls: "bg-echo-gold text-gray-900", desc: "สะสมได้สูงสุด 5 หน่วยและยังคงอยู่แม้ Trigger Dark คืนร่าง — Impact สร้างความเสียหายตามจำนวนนี้ แล้วล้างทั้งสนาม" },
@@ -1014,7 +1021,7 @@ const STATUS_INFO = {
   escanorMorning: { icon: "☀️", label: "Morning", cls: "bg-echo-gold text-gray-900", desc: "เอสคานอร์ร่างเช้า: ชาร์จประกายแสงสุริยัน +1/เทิร์น โจมตี +1 เกราะ +1 และโจมตีติดลุกไหม้ +1" },
   escanorNight: { icon: "🌙", label: "Night", cls: "bg-echo-cyan text-gray-900", desc: "เอสคานอร์ร่างกลางคืน: หลบหลีก 50%, ได้แต้มสกิล +1 ทุกเทิร์น และพลังโจมตีพื้นฐานเป็น 0" },
   escanorNoon: { icon: "☀️", label: "Noon", cls: "bg-echo-hp", desc: "เอสคานอร์ร่าง Noon: ชาร์จลดลงทุกเทิร์นหรือเมื่อรับความเสียหายจากสกิล, โจมตี +1 เกราะ +1, ตี/ถูกตีทำให้เกิดลุกไหม้ และเมื่อตายจะเข้าสู่ Last Stand" },
-  escanorLastStand: { icon: "🔥", label: "Last Stand", cls: "bg-echo-hp", desc: "Last Stand: MaxHP 6 เกราะ 0, HP ลด 1/เทิร์น, ไม่รับดาเมจจากดีบัฟ, ดาเมจจากโจมตี/สกิลที่ได้รับเหลือ 1 และโจมตีสำเร็จจะล้างลุกไหม้ตัวเองพร้อมฮีล 1" },
+  escanorLastStand: { icon: "🔥", label: "Last Stand", cls: "bg-echo-hp", desc: "Last Stand: MaxHP 7 เกราะ 0, HP ลด 1/เทิร์น, มอบลุกไหม้ให้ศัตรูทุกคน +2/เทิร์น, ไม่รับดาเมจจากดีบัฟลุกไหม้, ไม่รับความเสียหายจากการที่ไพ่แตก, ดาเมจจากโจมตี/สกิลที่ได้รับเหลือ 1 และโจมตีสำเร็จจะล้างลุกไหม้ตัวเองพร้อมฮีล 1" },
   escanorSolar: { icon: "☀️", label: "Solar", cls: "bg-echo-gold text-gray-900", desc: "Solar: สะสมได้สูงสุด 4 หน่วย ได้เมื่อเปิดไพ่แพ้หรือไม่ได้โจมตี หากไม่ได้รับเพิ่มครบ 3 เทิร์นจะลดลงครั้งละ 1 หน่วย ระหว่างสุริยาไม่สิ้นแสงจะใช้ 1 หน่วยต่อเทิร์นเพื่อคงร่าง Morning" },
   escanorCool: { icon: "💪", label: "เย็นชื่นใจ", cls: "bg-echo-cyan text-gray-900", desc: "เย็นชื่นใจ: ลดความเสียหายจากสกิลตามจำนวนสแตค และหมดเมื่อครบ 2 เทิร์น" },
   drunk: { icon: "🍷", label: "มึนเมา", cls: "bg-echo-magenta", desc: "มึนเมา: ลดลงทีละ 1 ทุกเทิร์น และเมื่อกดสกิลหรือจั่วไพ่มีโอกาสสุ่มติดห้ามจั่ว ห้ามสกิล หรือสตัน" },
@@ -1120,6 +1127,7 @@ function statusEntries(p, full) {
     if (!(v > 0)) continue;
     // รูปโปรไฟล์แสดงร่าง Morning/Night และ Solar มีตัวนับเฉพาะด้านล่างอยู่แล้ว จึงไม่ต้องแสดงป้ายซ้ำ
     if (k === "escanorMorning" || k === "escanorNight" || k === "escanorSolar") continue;
+    if (k === "mageslayerBurdenBgm") continue; // ผู้สังหารเมจ: ตัวจับเวลาเพลงพื้นหลัง Mana Burden ไม่ใช่สถานะที่ผู้เล่นต้องเห็น
     const info = STATUS_INFO[k] || { icon: "✦", label: k, cls: "bg-white/20", desc: "" };
     const amt = (p.statusAmt || {})[k] || 0; // จำนวน (amount) ของบัฟ/ดีบัฟพื้นฐาน (patch 2.0.8)
     out.push({ key: k, v, amt, ...info });
@@ -1128,7 +1136,7 @@ function statusEntries(p, full) {
   if ((p.tonkatsu || 0) > 0) out.push({ key: "tonkatsu", v: p.tonkatsu, icon: "🍜", label: "ทงคัสสึ", cls: "bg-echo-cyan text-gray-900", desc: "ชามทงคัสสึสะสม (สูงสุด 4) — ใช้กับ Song for you: 1 ชาม = +1 พลังขิง และล้างสถานะผิดปกติทั้งหมด" });
   if ((p.profit || 0) > 0) out.push({ key: "profit", v: p.profit, icon: "💰", label: "กำไร", cls: "bg-echo-gold text-gray-900", desc: "กำไรเท่าตัวโว้ย: การโจมตีครั้งถัดไป +N และทะลุเกราะ (คงอยู่จนได้ตี)" });
   if ((p.appleAtk || 0) > 0) out.push({ key: "appleAtk", v: p.appleAtk, icon: "🍎", label: "มอบของ", cls: "bg-echo-gold text-gray-900", desc: "เอาไปสิ: พลังโจมตีเพิ่มจากการมอบของ +1 ต่อครั้ง ซ้อนทับได้สูงสุด 2 หน่วย — แต่ละหน่วยคงอยู่ 3 เทิร์นแยกกัน" });
-  if ((p.coins || 0) > 0) out.push({ key: "coins", v: p.coins, icon: "🐷", label: "Coin", cls: "bg-echo-gold text-gray-900", desc: "กระปุกออมสินน้องหมูน้อย: coin สะสม (สูงสุด 6) — ตอนโจมตีแปลงเป็นความเสียหาย 3 coin = +1 (ใช้แล้วเหรียญหมดไป)" });
+  if (p.character?.id === "kotone") out.push({ key: "piggy", v: p.piggy || 0, icon: "🐷", label: `กระปุกออมสิน ${p.piggy || 0}/${p.piggyMax || 15}`, cls: "bg-echo-gold text-gray-900", desc: "กระปุกออมสินน้องหมูน้อย: โอกาส 60% ทุกครั้งที่ได้รับเหรียญ จะแบ่งเงินที่เพิ่งได้ไปหยอด (หักจากเหรียญจริง — ครั้งละไม่เกิน 3 เต็มที่ 15) — แปลงเป็นดาเมจผ่านบัฟ (รัก รักที่สุดเลย): 5/10/15 เหรียญ = +1/+2/+3" });
   // เหรียญ (gold) ไม่โชว์ในรายการสถานะอีกต่อไป — ปุ่มร้านค้าที่แผงตัวเองมีบอกอยู่แล้ว และไม่ควรให้ผู้เล่นอื่นเห็นเหรียญของเรา
   // โอกูริ แคป: Energy + Stamina ชาร์จ (โชว์เสมอ — ทรัพยากรหลักของตัวละคร แยกกัน 2 อย่าง)
   if (p.character?.id === "escanor") {
@@ -1212,7 +1220,7 @@ function StatusChips({ p, left, compact, max = 5 }) {
 const PERMANENT_STATUS_KEYS = new Set([
   "dawn", "chill", "hburn", "melody", "star", "emeraude", "saphir", "lance", "takutoThirdAtk",
   "doomCrucible", "fortune", "rsHopper", "cassius", "yaak", "spear", "ohger", "evade", "empower",
-  "miyakoHeal", "miyakoCombo", "miyakoUlt", "hakunoInvertReady", "hakunoNoRegenReady", "kotoneAtk",
+  "miyakoHeal", "miyakoCombo", "miyakoUlt", "hakunoInvertReady", "hakunoNoRegenReady", "kotoneLove", "kotoneReady", "kready",
   "deathline", "tepeuCook", "tepeuPonder", "hisakawaTempo", "graybeast", "grit", "healthfull", "overweight",
 ]);
 
@@ -1383,9 +1391,9 @@ const SHOP_ITEM_INFO = {
   heroSword: { icon: "⚔️", img: "/characters/yuuki/yuuki.jpg", label: () => "ดาบผู้กล้า", desc: "ไอเทมเฉพาะจากการโค่นยูกิ — ใช้แล้วพลังโจมตีปกติ +2 เป็นเวลา 2 เทิร์น (หาซื้อไม่ได้)" },
   tepeuMeal: { icon: "🍲", label: (it) => `มื้อที่สุข (ฟื้นเลือด +${it.value})`, desc: "ฟื้นพลังชีวิตทันที — ผลิตได้จากเทเปาเท่านั้น (วันนี้อากาศดีจัง)" },
   wineBarrel: { icon: "🍷", img: "/characters/escanor/สกิลพื้นฐาน/Barrel.png", label: (it) => `WineBarrel Lv.${it.level || 1}`, desc: "ใช้แล้วฟื้น HP ตามระดับ; ระดับ IV ฟื้น HP 3 หน่วย และมอบมึนเมา 2 หน่วยกับเย็นชื่นใจ 2 หน่วย; อยู่ในกระเป๋าครบ 4 เทิร์นจะอัปเกรด 1 ระดับ สูงสุด IV" },
-  // ---------- ร้านขายของลุงเท่ง: ปืนหน่วย GUTS Select + กระสุน (ใช้รูปจริงแทน emoji) ----------
+  // ---------- ปืนหน่วย GUTS Select + กระสุน (ขายในร้านค้ามายา — ใช้รูปจริงแทน emoji) ----------
   gutsGun: { icon: "🔫", img: "/item/guts_select_gun/guts_gun.webp", label: () => "ปืนหน่วย GUTS Select", desc: "ไอเทมถาวร มีได้กระบอกเดียว — กดที่ปืนเพื่อเลือกกระสุนแล้วเลือกเป้าหมาย ยิงได้ 1 นัด/เทิร์น (เฉพาะช่วงจั่วไพ่)" },
-  blackSparklence: { icon: "BS", img: "/characters/ignis/Black Sparklence.webp", label: () => "Black Sparklence", desc: "ปืนถาวรของอิกนิส ใช้กระสุนจากร้านลุงเท่งได้ ยิงได้ 1 นัดต่อเทิร์นในช่วงจั่วไพ่ — หลังยิง Nursedessei Cannon จะใช้ปืนไม่ได้ 3 เทิร์น" },
+  blackSparklence: { icon: "BS", img: "/characters/ignis/Black Sparklence.webp", label: () => "Black Sparklence", desc: "ปืนถาวรของอิกนิส ใช้กระสุนจากร้านค้ามายาได้ ยิงได้ 1 นัดต่อเทิร์นในช่วงจั่วไพ่ — หลังยิง Nursedessei Cannon จะใช้ปืนไม่ได้ 3 เทิร์น" },
   gutsAmmo: {
     icon: "🔑",
     imgOf: (it) => GUTS_AMMO_INFO[it.ammo]?.img,
@@ -1430,38 +1438,23 @@ function ItemIcon({ info, className = "" }) {
   return <span className={`shrink-0 ${className}`}>{info.icon}</span>;
 }
 
-// ร้านค้า 2 ร้าน สลับด้วยแถบด้านบน — รีสต็อกพร้อมกันทุกๆ 5 เทิร์น
-const SHOP_TABS = [
-  { key: "maya",  title: "🏪 ร้านค้ามายา",        short: "🏪 มายา" },
-  { key: "uncle", title: "🛒 ร้านขายของลุงเท่ง", short: "🛒 ลุงเท่ง" },
-];
-function ShopModal({ shop, uncleShop, me, onClose }) {
-  const [tab, setTab] = useState("maya");
-  const list = tab === "uncle" ? uncleShop : shop;
+// ร้านค้ามายา (patch 2.3): ร้านเดียว 15 ช่อง — รีสต็อกทุกๆ 5 เทิร์น
+//  กริดขยายออกด้านข้าง (สูงสุด 5 คอลัมน์ = 3 แถว) ไม่ให้โมดัลยืดลงจนต้อง scroll แนวตั้ง
+function ShopModal({ shop, me, onClose }) {
+  const list = shop;
   const hasGun = (me?.inventory || []).some((i) => i.type === "gutsGun");
   const isIgnis = me?.characterId === "ignis";
   return (
     <div className="fixed inset-0 z-40 bg-black/70 grid place-items-center p-4" onClick={onClose}>
-      <div className="bg-echo-navy rounded-2xl p-5 max-w-lg w-full shadow-2xl max-h-[85vh] overflow-y-auto border-2 border-echo-gold" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-echo-navy rounded-2xl p-4 sm:p-5 w-full max-w-md sm:max-w-3xl lg:max-w-5xl shadow-2xl max-h-[90vh] overflow-y-auto border-2 border-echo-gold" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
-          <div className="text-xl font-black text-echo-gold">{SHOP_TABS.find((t) => t.key === tab).title}</div>
+          <div className="text-xl font-black text-echo-gold">🏪 ร้านค้ามายา</div>
           <div className="text-sm font-bold bg-black/40 rounded-lg px-2 py-1">🪙 {me?.gold ?? 0} เหรียญ</div>
-        </div>
-        <div className="flex gap-2 mb-3">
-          {SHOP_TABS.map((t) => (
-            <button
-              key={t.key}
-              className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-bold border transition-colors ${tab === t.key ? "border-echo-gold bg-echo-gold/20 text-echo-gold" : "border-white/15 bg-black/30 opacity-70 hover:opacity-100"}`}
-              onClick={() => { clickSound(); setTab(t.key); }}
-            >
-              {t.short}
-            </button>
-          ))}
         </div>
         {(!list || list.length === 0) ? (
           <div className="text-sm opacity-70 py-6 text-center">ร้านค้ายังไม่เปิด — จะเปิดทุกๆ 5 เทิร์น</div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2">
             {list.map((it) => {
               const info = shopInfoOf(it);
               const sold = !!it.sold;
@@ -1471,15 +1464,17 @@ function ShopModal({ shop, uncleShop, me, onClose }) {
                 <div key={it.id} className={`rounded-xl border p-2 flex flex-col items-center text-center gap-1 ${sold ? "border-white/10 bg-white/5 opacity-50" : "border-echo-gold/50 bg-black/30"}`}>
                   <ItemIcon info={info} className="text-2xl h-10 w-10" />
                   <div className="text-xs font-bold leading-tight">{info.label(it)}</div>
-                  <div className="text-[11px] opacity-70 leading-snug">{info.desc}</div>
-                  <div className="text-xs font-bold text-echo-gold">🪙 {it.price}</div>
-                  <Button
-                    className="w-full py-1.5 text-xs"
-                    disabled={sold || owned || !afford}
-                    onClick={() => { clickSound(); socket.emit("buyShopItem", { itemId: it.id }); }}
-                  >
-                    {sold ? "ขายแล้ว" : owned ? "มีแล้ว" : afford ? "ซื้อ" : "เหรียญไม่พอ"}
-                  </Button>
+                  <div className="text-[11px] opacity-70 leading-snug line-clamp-3">{info.desc}</div>
+                  <div className="mt-auto w-full flex flex-col items-center gap-1 pt-1">
+                    <div className="text-xs font-bold text-echo-gold">🪙 {it.price}</div>
+                    <Button
+                      className="w-full py-1.5 text-xs"
+                      disabled={sold || owned || !afford}
+                      onClick={() => { clickSound(); socket.emit("buyShopItem", { itemId: it.id }); }}
+                    >
+                      {sold ? "ขายแล้ว" : owned ? "มีแล้ว" : afford ? "ซื้อ" : "เหรียญไม่พอ"}
+                    </Button>
+                  </div>
                 </div>
               );
             })}
@@ -1515,7 +1510,7 @@ function InventoryModal({ me, players, gameState, roundNumber, onPickGunAmmo, on
     : me?.locked ? "เปิดไพ่ไปแล้ว — ยิงไม่ได้"
     : (me?.gutsShotTurn || 0) === roundNumber ? "ยิงไปแล้วในเทิร์นนี้ (1 นัด/เทิร์น)"
     : hasBlackSparklence && blackSparklenceCooldown > 0 ? "Black Sparklence ใช้งานไม่ได้อีก " + blackSparklenceCooldown + " เทิร์น"
-    : ammoItems.length === 0 ? "ไม่มีกระสุน — ซื้อได้ที่ร้านขายของลุงเท่ง"
+    : ammoItems.length === 0 ? "ไม่มีกระสุน — ซื้อได้ที่ร้านค้ามายา"
     : targets.length === 0 && hasTargetedAmmo && !hasReadyHyper && !hasReadyDarkKey ? "ไม่มีเป้าหมายให้ยิง"
     : null;
 
@@ -2475,7 +2470,6 @@ export default function Game({ state, lowQ }) {
   const [anataSel, setAnataSel] = useState(null); // เทมาริ: โหมดเลือกเป้าหมาย ANATA WAAAAAAAA (null = ไม่ได้เลือกอยู่)
   const [dawnSel, setDawnSel] = useState(false); // โอเบรอน: โหมดเลือกเป้าหมายรุ่งอรุณแห่งวันใหม่ (เลือกตัวเองได้)
   const [bgSel, setBgSel] = useState(false); // บานาจ: โหมดเลือกเป้าหมาย Absorb shield (เลือกตัวเองได้)
-  const [kawaiiSel, setKawaiiSel] = useState(false); // โคโตเนะ (patch 2.1.3): โหมดเลือกเป้าหมาย Sekai ichi kawaii watashi (เลือกตัวเองไม่ได้)
   const [appleOpen, setAppleOpen] = useState(false); // Apple guy: เมนูเลือกของส่งมอบ (สกิลพื้นฐาน)
   const [tohnoOpen, setTohnoOpen] = useState(false); // โทโนะ ชิกิ: เมนูเลือกระดับมีดพับประจำตระกูล (สกิลพื้นฐาน)
   const [appleSel, setAppleSel] = useState(false);   // Apple guy: โหมดเลือกเป้าหมายเอาไปสิ (เลือกตัวเองไม่ได้)
@@ -2494,8 +2488,8 @@ export default function Game({ state, lowQ }) {
   const [tpSel, setTpSel] = useState(false);          // เทเปา: โหมดเลือกเป้าหมาย นายเป็นคนทำตัวเองนะ (เลือกตัวเองไม่ได้)
   const [kaiCreateSel, setKaiCreateSel] = useState(false);   // ไค: โหมดเลือกเป้าหมายมือซ้ายแห่งการรังสรรค์ (เลือกตัวเองได้)
   const [kaiPunishSel, setKaiPunishSel] = useState(false);   // ไค: โหมดเลือกเป้าหมายมือขวาแห่งการลงทัณฑ์ (เลือกตัวเองได้)
-  const [msMarkSel, setMsMarkSel] = useState(false);         // ผู้สังหารจอมมหาเวทย์: โหมดเลือกเป้าหมาย Witch Mark (เลือกตัวเองไม่ได้)
-  const [msRuptureSel, setMsRuptureSel] = useState(false);   // ผู้สังหารจอมมหาเวทย์: โหมดเลือกเป้าหมาย Mana Rupture (เลือกตัวเองไม่ได้)
+  const [msMarkSel, setMsMarkSel] = useState(false);         // ผู้สังหารเมจ: โหมดเลือกเป้าหมาย Witch Mark (เลือกตัวเองไม่ได้)
+  const [msRuptureSel, setMsRuptureSel] = useState(false);   // ผู้สังหารเมจ: โหมดเลือกเป้าหมาย Mana Rupture (เลือกตัวเองไม่ได้)
   const [gunSel, setGunSel] = useState(null);                // ปืนหน่วย GUTS Select: กระสุนที่เลือกไว้ รอจิ้มเป้าหมายบนกระดาน (เลือกตัวเองไม่ได้)
   const [cycleFx, setCycleFx] = useState(null); // แบนเนอร์สลับกลางวัน/กลางคืน
   const prevCycle = useRef(null);
@@ -2625,13 +2619,16 @@ export default function Game({ state, lowQ }) {
   const isBroadband = ch?.id === "broadband_man";
   const lanLocked = isBroadband && !me?.contractPartnerId;    // กระชากสายแลน: ใช้ได้ก็ต่อเมื่อมีคู่สัญญาแล้ว
   const offerLocked = isBroadband && !!me?.contractPartnerId; // สนใจใช้บริการเราไหม: ใช้ไม่ได้ระหว่างมีคู่สัญญา
-  // ---------- ฟุจิตะ โคโตเนะ ----------
+  // ---------- ฟุจิตะ โคโตเนะ (rework 2.3) ----------
   const isKotone = ch?.id === "kotone";
-  const overworkMe = !!(me && me.statuses?.overwork); // [โหมงานหนัก]: Part-time (กลางวัน)/Dance/ท่าไม้ตายใช้ไม่ได้ + แต้มสกิลแพงขึ้น 1
-  const ktBasicLocked = isKotone && overworkMe && !nightNow; // โหมงานหนักตอนกลางวัน (patch 2.0.8.1: นำโดนโปรดิวเซอร์จับได้ออกแล้ว)
-  const ktSecLocked = isKotone && (nightNow ? !!me?.statuses?.ksleep : (overworkMe || (me?.coins || 0) < 3)); // หลับอยู่แล้ว / โหมงานหนัก / coin ไม่ถึง 3 (patch 2.1.3)
-  const ktUltLocked = isKotone && (overworkMe || nightNow || (me?.coins || 0) < 3);        // ท่าไม้ตายใช้ไม่ได้กลางคืน/โหมงานหนัก/coin ไม่ถึง 3
-  const ktCost = (s) => (s ? s.cost + 1 : 0); // โหมงานหนัก: ใช้แต้มสกิลเพิ่มขึ้น 1
+  const ktForm = isKotone && !!me?.kotoneForm;              // อยู่ร่าง [พร้อมลุย] — ปุ่มทั้ง 3 ช่องเป็นท่าไม้ตาย (6 แต้ม + 6 เหรียญ)
+  const ktNoGold = ktForm && (me?.gold || 0) < 6;           // เหรียญไม่พอจ่ายค่าท่าไม้ตายในร่าง
+  const ktBasicLocked = isKotone && ktNoGold;
+  const ktSecLocked = isKotone && (ktNoGold || (!ktForm && nightNow && !!me?.statuses?.ksleep));
+  // ท่าไม้ตาย: ในร่างต้องมีเหรียญพอ · กลางวันต้องมี [ความพร้อม] ครบ 4 · กลางคืน (Sleeping time) ห้ามหลับซ้ำ
+  const ktUltLocked = isKotone && (ktForm
+    ? ktNoGold
+    : (nightNow ? !!me?.statuses?.ksleep : (me?.kotoneReady || 0) < (me?.kotoneReadyNeed || 4)));
   // ---------- Bard : คีตกวี ----------
   const isBard = ch?.id === "bard";
   const bardPending = isBard && phase === "PLAYING" ? me?.bardPending : null; // บทเพลงรอเลือกเป้าหมาย
@@ -2777,14 +2774,12 @@ export default function Game({ state, lowQ }) {
     if (tier === "ultimate" && ch?.id === "ignis") { setIgnisImpactSel(true); setSkillOpen(false); return; }
     if (tier === "secondary" && ch?.id === "satoru") { socket.emit("useSkill", { tier: "secondary", targets: [me.id] }); setSkillOpen(false); return; }
     if (tier === "ultimate" && ch?.id === "satoru") { setSkillOpen(false); return; }
-    // ฟุจิตะ โคโตเนะ (patch 2.1.3): ท่าไม้ตาย Sekai ichi kawaii watashi เข้าโหมดเลือกเป้าหมาย (คนอื่นเท่านั้น)
-    if (tier === "ultimate" && ch?.id === "kotone") { setKawaiiSel(true); setSkillOpen(false); return; }
     // เทเปา: ท่าไม้ตาย นายเป็นคนทำตัวเองนะ เข้าโหมดเลือกเป้าหมายก่อนส่งไป server
     if (tier === "ultimate" && ch?.id === "tepeu") { setTpSel(true); setSkillOpen(false); return; }
     // ไค ชิซากิ: สกิลพื้นฐาน/รอง เข้าโหมดเลือกเป้าหมายก่อนส่งไป server (เลือกตัวเองได้ทั้งคู่)
     if (tier === "basic" && ch?.id === "kai") { setKaiCreateSel(true); setSkillOpen(false); return; }
     if (tier === "secondary" && ch?.id === "kai") { setKaiPunishSel(true); setSkillOpen(false); return; }
-    // ผู้สังหารจอมมหาเวทย์: สกิลพื้นฐาน/รอง เข้าโหมดเลือกเป้าหมายก่อนส่งไป server (เลือกตัวเองไม่ได้)
+    // ผู้สังหารเมจ: สกิลพื้นฐาน/รอง เข้าโหมดเลือกเป้าหมายก่อนส่งไป server (เลือกตัวเองไม่ได้)
     if (tier === "basic" && ch?.id === "mageslayer") { setMsMarkSel(true); setSkillOpen(false); return; }
     if (tier === "ultimate" && ch?.id === "mageslayer") { setMsRuptureSel(true); setSkillOpen(false); return; }
     socket.emit("useSkill", { tier });
@@ -2860,15 +2855,14 @@ export default function Game({ state, lowQ }) {
     socket.emit("useSkill", { tier: "secondary", targets: [id] });
     setKaiPunishSel(false);
   };
-  // เลือกเป้าหมาย Witch Mark / Mana Rupture (ผู้สังหารจอมมหาเวทย์) -> ส่งไป server ทันที
+  // เลือกเป้าหมาย Witch Mark / Mana Rupture (ผู้สังหารเมจ) -> ส่งไป server ทันที
   const pickMsMark = (id) => {
     socket.emit("useSkill", { tier: "basic", targets: [id] });
     setMsMarkSel(false);
   };
   const pickMsRupture = (id) => {
     socket.emit("useSkill", { tier: "ultimate", targets: [id] });
-    // Mana Rupture ใส่ดีบัฟก่อนเปิดไพ่และระเบิดต้นเทิร์นถัดไป แต่เสียง sfx ต้องดังทันทีตอนกดใช้
-    playSfx("mageslayer_skill2");
+    // เสียง SFX_Skill_2.mp3 ไม่ได้ดังตอนกด — server ส่ง skillFlash พร้อม sound ตอนสถานะหมดเวลาแล้วระเบิดจริง
     setMsRuptureSel(false);
   };
   // เลือกเป้าหมาย Weapon ของ DoomGuy -> ส่งไป server ทันที
@@ -2928,11 +2922,6 @@ export default function Game({ state, lowQ }) {
     socket.emit("useSkill", { tier: "basic", targets: [id] });
     setBgSel(false);
   };
-  // เลือกเป้าหมาย Sekai ichi kawaii watashi (โคโตเนะ patch 2.1.3) -> ส่งไป server ทันที
-  const pickKawaii = (id) => {
-    socket.emit("useSkill", { tier: "ultimate", targets: [id] });
-    setKawaiiSel(false);
-  };
   // เลือกเป้าหมาย อันนี้ของนายรึเปล่า (นานายะ ชิกิ) -> ส่งไป server ทันที
   const pickNanaya = (id) => {
     socket.emit("useSkill", { tier: "basic", targets: [id] });
@@ -2961,9 +2950,6 @@ export default function Game({ state, lowQ }) {
   useEffect(() => {
     if (bgSel && (phase !== "PLAYING" || me?.skillUsed || done)) setBgSel(false);
   }, [bgSel, phase, me?.skillUsed, done]);
-  useEffect(() => {
-    if (kawaiiSel && (phase !== "PLAYING" || me?.skillUsed || done)) setKawaiiSel(false);
-  }, [kawaiiSel, phase, me?.skillUsed, done]);
   useEffect(() => {
     if (appleSel && (phase !== "PLAYING" || me?.skillUsed || done)) setAppleSel(false);
   }, [appleSel, phase, me?.skillUsed, done]);
@@ -3063,9 +3049,9 @@ export default function Game({ state, lowQ }) {
 
   // สถานะ+handler ของทุกโหมดเลือกเป้าหมาย มัดรวมไว้ที่เดียว ใช้ร่วมกันทั้ง layout มือถือและจอใหญ่ (ดู isTargetable/resolveAttackPick)
   const targetChain = {
-    anataSel, dawnSel, appleSel, bbSel, shSel, skSel, doomSel, saObSel, escanorSel, ignisSel, ignisImpactSel, bgSel, kawaiiSel, bardPending, nanayaSel, tpSel,
+    anataSel, dawnSel, appleSel, bbSel, shSel, skSel, doomSel, saObSel, escanorSel, ignisSel, ignisImpactSel, bgSel, bardPending, nanayaSel, tpSel,
     kaiCreateSel, kaiPunishSel, msMarkSel, msRuptureSel, psSealSel, pickPsSeal, gunSel, pickGunTarget,
-    pickAnata, pickDawn, pickGive, pickBb, pickSh, pickSk, pickDoom, pickSaOb, pickEscanor, pickIgnis, pickIgnisImpact, pickBg, pickKawaii, pickBard, pickNanaya, pickTp,
+    pickAnata, pickDawn, pickGive, pickBb, pickSh, pickSk, pickDoom, pickSaOb, pickEscanor, pickIgnis, pickIgnisImpact, pickBg, pickBard, pickNanaya, pickTp,
     pickKaiCreate, pickKaiPunish, pickMsMark, pickMsRupture,
     kaiRivalId,
     myId: me?.id,
@@ -3132,12 +3118,6 @@ export default function Game({ state, lowQ }) {
             <span className="text-lg font-black text-echo-gold animate-pulse">🛡️ แตะเลือกเป้าหมาย Absorb shield</span>
             <button onClick={() => { clickSound(); pickBg(me.id); }} className="ml-3 text-sm font-bold bg-echo-gold text-gray-900 rounded-full px-3 py-1">เลือกตัวเอง</button>
             <button onClick={() => { clickSound(); setBgSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
-          </div>
-        )}
-        {kawaiiSel && (
-          <div className="shrink-0 text-center mt-1.5 text-hard">
-            <span className="text-lg font-black text-echo-magenta animate-pulse">💖 แตะเลือกเป้าหมาย Sekai ichi kawaii watashi</span>
-            <button onClick={() => { clickSound(); setKawaiiSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
           </div>
         )}
         {appleSel && (
@@ -3325,10 +3305,10 @@ export default function Game({ state, lowQ }) {
               {/* ช่องสกิล 3 อัน — ทรงพัด: ช่องกลาง (สกิลรอง) ยกสูงกว่าอีก 2 ช่อง */}
               <div className="grid grid-cols-3 gap-2 mt-3 items-end">
                 <div className="translate-y-1.5">
-                  <SkillSlot label="สกิลพื้นฐาน" tier="basic" skill={ch?.basic} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoHealPending || hakunoSecondaryPending || beatBasicLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || witchMarkCooldown || (me.skillUsed && !gambleRepeat && !isApple && !isBard && !isTohno && !isHakuno && !isDoomguy && !isKai && !isTakumi) || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || cassiusLocked || veilLocked || ktBasicLocked || (isHakuno && me.hakunoGenderSwitched) || doomBasicLocked || takutoBasicPending || tepeuCookLocked || tepeuPonderLocked || batStealthLocked || psBladeLocked} onUse={requestSkillUse} ammo={isGambler ? me.gamblerUses : undefined} cost={isGambler && goldenOn ? halfCost(ch?.basic) : isKotone && overworkMe ? ktCost(ch?.basic) : undefined} />
+                  <SkillSlot label="สกิลพื้นฐาน" tier="basic" skill={ch?.basic} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoHealPending || hakunoSecondaryPending || beatBasicLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || witchMarkCooldown || (me.skillUsed && !gambleRepeat && !isApple && !isBard && !isTohno && !isHakuno && !isDoomguy && !isKai && !isTakumi) || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || cassiusLocked || veilLocked || ktBasicLocked || (isHakuno && me.hakunoGenderSwitched) || doomBasicLocked || takutoBasicPending || tepeuCookLocked || tepeuPonderLocked || batStealthLocked || psBladeLocked} onUse={requestSkillUse} ammo={isGambler ? me.gamblerUses : undefined} cost={isGambler && goldenOn ? halfCost(ch?.basic) : undefined} />
                 </div>
                 <div className="-translate-y-2">
-                  <SkillSlot label="สกิลรอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || (me.skillUsed && !isBard && !isDoomguy && !isKai && !isTakumi) || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked || batKarmaLocked || psSealLocked} onUse={requestSkillUse} ammo={isApple ? me.appleGiveUses : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : isKotone && overworkMe ? ktCost(ch?.secondary) : undefined} />
+                  <SkillSlot label="สกิลรอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || (me.skillUsed && !isBard && !isDoomguy && !isKai && !isTakumi) || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked || batKarmaLocked || psSealLocked} onUse={requestSkillUse} ammo={isApple ? me.appleGiveUses : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : undefined} />
                 </div>
                 <div className="translate-y-1.5">
                   {isBard ? <BardComposeSlot me={me} /> : isKai ? <KaiOverhaulSlot me={me} /> : <SkillSlot label="ท่าไม้ตาย" tier="ultimate" skill={ch?.ultimate} points={me.skillPoints} disabled={(done || phase !== "PLAYING" || noSkill || moonCellOn || beatMe || me.skillUsed || ultimateActive || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || takumiBudgetLocked || fourthLocked || doomUltLocked || takutoUltLockedNow || tepeuCookLocked || tepeuPonderLocked || offerLocked || ktUltLocked || shUltLocked || shCharging || rgCharging || phenexTaunting || hikaruUltLocked)} onUse={requestSkillUse} cost={undefined} />}
@@ -3512,7 +3492,7 @@ export default function Game({ state, lowQ }) {
           allyBreakAsk={state.allyBreakAsk} onAnswerAllyBreak={(c) => socket.emit("allyBreakAnswer", { cancel: c })}
           allyFinalAsk={state.allyFinalAsk} onAnswerAllyFinal={(k) => socket.emit("allyFinalAnswer", { keep: k })}
           statusView={statusView} statusViewIsSelf={statusViewId === state.youId} onCloseStatus={() => setStatusViewId(null)}
-          shopOpen={shopOpen} shop={state.shop} uncleShop={state.uncleShop} onCloseShop={() => setShopOpen(false)}
+          shopOpen={shopOpen} shop={state.shop} onCloseShop={() => setShopOpen(false)}
           bagOpen={bagOpen} onCloseBag={() => setBagOpen(false)} players={state.players} gameState={state.gameState} roundNumber={state.roundNumber} onPickGunAmmo={startGunPick}
           skillConfirm={skillConfirm} onConfirmSkill={confirmSkillUse} onCancelSkill={cancelSkillConfirm}
         />
@@ -3599,13 +3579,6 @@ export default function Game({ state, lowQ }) {
         </div>
       )}
 
-      {/* โหมดเลือกเป้าหมาย Sekai ichi kawaii watashi (โคโตเนะ patch 2.1.3) — เลือกได้เฉพาะคนอื่น */}
-      {kawaiiSel && (
-        <div className="absolute top-[22%] left-1/2 -translate-x-1/2 z-40 text-center text-hard whitespace-nowrap">
-          <span className="text-xl font-black text-echo-magenta animate-pulse bg-black/60 rounded-full px-5 py-1.5">💖 คลิกเลือกเป้าหมาย Sekai ichi kawaii watashi</span>
-          <button onClick={() => { clickSound(); setKawaiiSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
-        </div>
-      )}
 
       {/* โหมดเลือกเป้าหมายเอาไปสิ (Apple guy) — มอบของที่เลือกไว้ให้คนอื่น */}
       {appleSel && (
@@ -3705,7 +3678,7 @@ export default function Game({ state, lowQ }) {
         </div>
       )}
 
-      {/* โหมดเลือกเป้าหมาย Witch Mark / Mana Rupture (ผู้สังหารจอมมหาเวทย์) — เลือกได้เฉพาะคนอื่น */}
+      {/* โหมดเลือกเป้าหมาย Witch Mark / Mana Rupture (ผู้สังหารเมจ) — เลือกได้เฉพาะคนอื่น */}
       {msMarkSel && (
         <div className="absolute top-[22%] left-1/2 -translate-x-1/2 z-40 text-center text-hard whitespace-nowrap">
           <span className="text-xl font-black text-echo-hp animate-pulse bg-black/60 rounded-full px-5 py-1.5">🩸 คลิกเลือกเป้าหมาย Witch Mark</span>
@@ -3868,10 +3841,10 @@ export default function Game({ state, lowQ }) {
               <div className="flex flex-col items-center gap-1.5">
                 <div className="flex items-end gap-2 sm:gap-3">
                   <div className="w-40 sm:w-48">
-                    <SkillSlot size="lg" label="พื้นฐาน" tier="basic" skill={ch?.basic} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoHealPending || hakunoSecondaryPending || beatBasicLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || witchMarkCooldown || (me.skillUsed && !gambleRepeat && !isApple && !isBard && !isTohno && !isHakuno && !isDoomguy && !isKai && !isTakumi) || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || cassiusLocked || veilLocked || ktBasicLocked || (isHakuno && me.hakunoGenderSwitched) || doomBasicLocked || takutoBasicPending || tepeuCookLocked || tepeuPonderLocked || batStealthLocked || psBladeLocked} onUse={requestSkillUse} ammo={isGambler ? me.gamblerUses : undefined} cost={isGambler && goldenOn ? halfCost(ch?.basic) : isKotone && overworkMe ? ktCost(ch?.basic) : undefined} />
+                    <SkillSlot size="lg" label="พื้นฐาน" tier="basic" skill={ch?.basic} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoHealPending || hakunoSecondaryPending || beatBasicLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || witchMarkCooldown || (me.skillUsed && !gambleRepeat && !isApple && !isBard && !isTohno && !isHakuno && !isDoomguy && !isKai && !isTakumi) || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || cassiusLocked || veilLocked || ktBasicLocked || (isHakuno && me.hakunoGenderSwitched) || doomBasicLocked || takutoBasicPending || tepeuCookLocked || tepeuPonderLocked || batStealthLocked || psBladeLocked} onUse={requestSkillUse} ammo={isGambler ? me.gamblerUses : undefined} cost={isGambler && goldenOn ? halfCost(ch?.basic) : undefined} />
                   </div>
                   <div className="w-40 sm:w-48">
-                    <SkillSlot size="lg" label="รอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || (me.skillUsed && !isBard && !isDoomguy && !isKai && !isTakumi) || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked || batKarmaLocked || psSealLocked} onUse={requestSkillUse} ammo={isApple ? me.appleGiveUses : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : isKotone && overworkMe ? ktCost(ch?.secondary) : undefined} />
+                    <SkillSlot size="lg" label="รอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || (me.skillUsed && !isBard && !isDoomguy && !isKai && !isTakumi) || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked || batKarmaLocked || psSealLocked} onUse={requestSkillUse} ammo={isApple ? me.appleGiveUses : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : undefined} />
                   </div>
                   <div className="w-40 sm:w-48">
                     {isBard ? <BardComposeSlot me={me} /> : isKai ? <KaiOverhaulSlot me={me} /> : <SkillSlot size="lg" label="ท่าไม้ตาย" tier="ultimate" skill={ch?.ultimate} points={me.skillPoints} disabled={(done || phase !== "PLAYING" || noSkill || moonCellOn || beatMe || me.skillUsed || ultimateActive || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || takumiBudgetLocked || monsterMe || fourthLocked || doomUltLocked || takutoUltLockedNow || tepeuCookLocked || tepeuPonderLocked || offerLocked || ktUltLocked || shUltLocked || shCharging || rgCharging || phenexTaunting)} onUse={requestSkillUse} cost={undefined} />}
@@ -4000,7 +3973,7 @@ export default function Game({ state, lowQ }) {
         allyBreakAsk={state.allyBreakAsk} onAnswerAllyBreak={(c) => socket.emit("allyBreakAnswer", { cancel: c })}
         allyFinalAsk={state.allyFinalAsk} onAnswerAllyFinal={(k) => socket.emit("allyFinalAnswer", { keep: k })}
         statusView={statusView} statusViewIsSelf={statusViewId === state.youId} onCloseStatus={() => setStatusViewId(null)}
-        shopOpen={shopOpen} shop={state.shop} uncleShop={state.uncleShop} onCloseShop={() => setShopOpen(false)}
+        shopOpen={shopOpen} shop={state.shop} onCloseShop={() => setShopOpen(false)}
         bagOpen={bagOpen} onCloseBag={() => setBagOpen(false)} players={state.players} gameState={state.gameState} roundNumber={state.roundNumber} onPickGunAmmo={startGunPick}
         skillConfirm={skillConfirm} onConfirmSkill={confirmSkillUse} onCancelSkill={cancelSkillConfirm}
       />

@@ -1,5 +1,6 @@
 const ID = "escanor";
 const ESCANOR_CHARGE_MAX = 12;
+const LAST_STAND_HP = 7;
 const SOLAR_MAX = 4;
 const BURN_MAX = 6;
 const WINE_MAX = 3;
@@ -229,9 +230,9 @@ function onRoundStartTick(engine, p, prevNight) {
 
   if (isLast(p)) {
     addBurn(engine, p, 4, "Last Stand");
-    for (const o of enemies(engine, p)) addBurn(engine, o, 1, "Last Stand");
+    for (const o of enemies(engine, p)) addBurn(engine, o, 2, "Last Stand");
     engine.loseHp(p);
-    if (p.hp <= 0) engine.instantDeath(p);
+    resolveDamageAftermath(engine, p); // ต้องผ่านระบบกันตายกลาง (beatSave/beatMode/eva3) เหมือนดาเมจก้อนอื่นทั้งเกม
     return;
   }
 
@@ -241,9 +242,8 @@ function onRoundStartTick(engine, p, prevNight) {
   } else if (p.escanorCharge >= ESCANOR_CHARGE_MAX) {
     p.escanorCharge = ESCANOR_CHARGE_MAX;
     enterForm(engine, p, "noon");
-  } else if (p.escanorForcedMorning > 0) {
-    enterForm(engine, p, "morning");
-  } else if (isMorningTime(engine)) {
+  } else if (p.escanorForcedMorning > 0 || isMorningTime(engine)) {
+    // ร่าง Morning ได้ชาร์จ +1/เทิร์นเสมอ ไม่ว่าจะมาจากเวลากลางวันหรือจาก "สุริยาไม่สิ้นแสง"
     enterForm(engine, p, "morning");
     p.escanorCharge = Math.min(ESCANOR_CHARGE_MAX, (p.escanorCharge || 0) + 1);
     if (p.escanorCharge >= ESCANOR_CHARGE_MAX) enterForm(engine, p, "noon");
@@ -283,7 +283,7 @@ function onEndTurnSolar(engine, p) {
   }
 }
 function armorBonus(p) { return p && p.characterId === "escanor" && ["morning", "noon"].includes(formOf(p)) ? 1 : 0; }
-function maxHp(p) { return isLast(p) ? 6 : null; }
+function maxHp(p) { return isLast(p) ? LAST_STAND_HP : null; }
 function maxArmor(p) { return isLast(p) ? 0 : null; }
 function adjustOutgoingDamage(engine, attacker, target, dmg) {
   if (!attacker || attacker.characterId !== ID) return dmg;
@@ -293,13 +293,11 @@ function adjustOutgoingDamage(engine, attacker, target, dmg) {
   if (f === "last") dmg = 0;
   if (f === "morning" || f === "noon") dmg += 1;
   if (f === "last") dmg += Math.floor(totalBurn(engine) / 5);
-  if (attacker.statuses?.escanorSpear > 0) dmg += 1;
   if (attacker.statuses?.escanorPunch > 0) dmg += 1;
   return Math.max(0, dmg);
 }
 function adjustIncomingDamage(engine, p, n, isNormalAttack) {
   if (!p || p.characterId !== ID || n <= 0 || p._statusDamage) return n;
-  if (!isNormalAttack && p.statuses?.escanorCool > 0) n = Math.max(0, n - (p.statusAmt?.escanorCool || 1));
   if (n > 0 && isNoon(p) && !isNormalAttack && cooldownSkillLoss(p) !== engine.roundNumber) {
     p.escanorCharge = Math.max(0, (p.escanorCharge || 0) - 1);
     p.escanorNoonSkillLossRound = engine.roundNumber;
@@ -332,7 +330,6 @@ function onAttackLanded(engine, attacker, target) {
   }
   if (f === "morning" || f === "noon") addBurn(engine, target, 1, "Escanor");
   if (f === "last") addBurn(engine, target, 2, "Last Stand");
-  if (attacker.statuses?.escanorSpear > 0) { addBurn(engine, target, 1, "หอกเพลิงสุริยะ"); clearStatus(attacker, "escanorSpear"); }
   if (attacker.statuses?.escanorFlare > 0) { addBurn(engine, target, 1, "เพลิงปะทุ"); clearStatus(attacker, "escanorFlare"); }
   if (attacker.statuses?.escanorFlareNoon > 0) { addBurn(engine, target, 2, "เพลิงปะทุ Noon"); engine.applyDebuff(target, "nohealing", 2, 1); clearStatus(attacker, "escanorFlareNoon"); }
   if (attacker.statuses?.escanorPunch > 0) { addBurn(engine, target, 2, "หมัดเพลิงสุริยัน"); clearStatus(attacker, "escanorPunch"); }
@@ -380,7 +377,7 @@ function tryNoonRevive(engine, p) {
   p.escanorCharge = 0;
   p.escanorForcedMorning = 0;
   p.alive = true;
-  p.hp = 6;
+  p.hp = Math.max(1, LAST_STAND_HP - (p.maxHpPenalty || 0));
   p.armor = 0;
   p.statuses = p.statuses || {};
   p.statusAmt = p.statusAmt || {};
@@ -391,12 +388,15 @@ function tryNoonRevive(engine, p) {
   engine.log?.(`☀️ ${p.name} ฟื้นคืนชีพเข้าสู่ Last Stand!`);
   return true;
 }
+// ไพ่แตกในร่าง Last Stand: ไม่รับความเสียหายจากการที่ไพ่แตก (ยังได้แต้มสกิลจากการแพ้ตามปกติ)
+function bustDamageImmune(p) { return p && p.characterId === ID && isLast(p); }
 function hburnImmune(p) { return p && p.characterId === ID && isLast(p); }
 function hburnLabel(p) { return hburnImmune(p) ? "Last Stand ไม่รับดาเมจจากลุกไหม้" : null; }
 function hburnHeals() { return false; }
 
+// มึนเมา (drunk): มาจาก WineBarrel ซึ่งถูกขโมยไปใช้ได้ -> ผลต้องทำงานกับทุกตัวละคร ไม่ผูกกับ characterId
 function onCardDraw(engine, p) {
-  if (!p || p.characterId !== ID || !p.alive || !(p.statuses?.drunk > 0)) return;
+  if (!p || !p.alive || !(p.statuses?.drunk > 0)) return;
   if (Math.random() >= 0.2) return;
   const roll = Math.random();
   if (roll < 0.38) engine.applyDebuff(p, "nodraw", 1, 1);
@@ -441,7 +441,7 @@ function applySkill(engine, p, tier, targets) {
     if (!t) return;
     if (form === "noon") {
       engine.loseHp(p);
-      if (p.hp <= 0) engine.instantDeath(p);
+      resolveDamageAftermath(engine, p); // กันตาย/Beat Mode ต้องได้ลุ้นก่อนตกรอบจากค่าใช้จ่ายของสกิลตัวเอง
       if (!p.alive || !isNoon(p)) return;
     }
     playCutscene(engine, p, "escanorBasic1");
@@ -454,14 +454,14 @@ function applySkill(engine, p, tier, targets) {
       const wines = (p.inventory || []).filter((it) => it.type === "wineBarrel").sort((a, b) => (b.level || 1) - (a.level || 1));
       const it = wines[0];
       p.inventory.splice(p.inventory.indexOf(it), 1);
-      p.gold = Math.min(engine.GOLD_MAX, (p.gold || 0) + wineSellPrice(it.level));
+      engine.addGold(p, wineSellPrice(it.level));
       engine.log?.(`🍷 ${p.name} ขาย WineBarrel Lv.${it.level || 1} ได้ ${wineSellPrice(it.level)} เหรียญ`);
       return;
     }
     if (form === "last") { setStatus(p, "escanorPunch", 999, 1); return; }
     if (form === "noon") {
       engine.loseHp(p);
-      if (p.hp <= 0) engine.instantDeath(p);
+      resolveDamageAftermath(engine, p); // กันตาย/Beat Mode ต้องได้ลุ้นก่อนตกรอบจากค่าใช้จ่ายของสกิลตัวเอง
       if (p.alive && isNoon(p)) setStatus(p, "escanorFlareNoon", 999, 1);
       return;
     }
@@ -513,6 +513,7 @@ module.exports = {
   onNormalAttackReceived,
   onAfterResolve,
   tryNoonRevive,
+  bustDamageImmune,
   hburnImmune,
   hburnLabel,
   hburnHeals,

@@ -103,7 +103,7 @@ module.exports = {
       const picked = candidates[Math.floor(Math.random() * candidates.length)];
       stolen = target.inventory.splice(picked.idx, 1)[0];
       p.inventory.push({ ...stolen, uid: `stolen_${p.id}_${Date.now()}_${Math.floor(Math.random() * 100000)}` });
-      p.gold = Math.min(engine.GOLD_MAX || 30, (p.gold || 0) + 2);
+      engine.addGold(p, 2);
     }
     const healed = engine.healHp ? engine.healHp(p, 2) : 0;
     if (engine.log) {

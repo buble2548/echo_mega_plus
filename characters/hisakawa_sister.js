@@ -2,6 +2,8 @@
 //  Hisakawa Sister - one player slot, two separate twins
 // ============================================================
 
+const { NO_TICK_STATUS } = require("./_universal_status");
+
 const BASE = "/characters/hisakawa_sister";
 const TWIN_MAX_HP = 3;
 const TWIN_MAX_ARMOR = 2;
@@ -9,7 +11,7 @@ const STAGE_TURNS = 5;
 const TALENT_TURNS = 5;
 const DREAM_TURNS = 5;
 const LIMIT_TURNS = 3;
-const REVIVE_COST = 4;
+const REVIVE_COST = 6;
 const SWITCH_COST = 1;
 const TWIN_KEYS = ["nagi", "hayate"];
 const COUPLE_BUFF_KEYS = ["hisakawaStage", "hisakawaTalent", "hisakawaDream"];
@@ -93,6 +95,13 @@ function anyTwinDead(p) {
   return !!h && TWIN_KEYS.some((key) => !h.twins[key].alive);
 }
 
+// การซิงก์มี 2 ระดับ — แยกกันเพราะ "แหล่งความจริง" ต่างกัน:
+//   syncIn()     = รับช่วงร่างใหม่เต็มรูปแบบ (เริ่มเกม / สลับตัว / แฝดล้ม / ชุบ) -> เขียนทับ p ทั้งก้อน
+//   syncVitals() = รีเฟรชแค่เลือด/เกราะ ไม่แตะ p.statuses เลย
+// ระหว่างที่แฝดคนหนึ่งคุมอยู่ p.statuses คือแหล่งความจริง (server.js เขียนสถานะใส่ p ตรงๆ หลายจุด
+// เช่น nodraw/noskill/stagger ตอน dealRound, ไอเทมร้านค้า, freecast, dawn) — ถ้าใช้ syncIn เต็มรูปแบบ
+// ในจังหวะเหล่านั้นสถานะพวกนี้จะถูกล้างทิ้งเงียบๆ จึงต้องใช้ syncVitals และให้ฝั่งแฝดเขียนแบบ
+// write-through (setTwinStatus/delTwinStatus) มิเรอร์ลง p ทันทีเมื่อเป็นแฝดที่กำลังคุมอยู่
 function syncIn(p) {
   const t = activeTwin(p);
   if (!t) return;
@@ -100,6 +109,13 @@ function syncIn(p) {
   p.armor = t.armor;
   p.statuses = clone(t.statuses);
   p.statusAmt = clone(t.statusAmt);
+}
+
+function syncVitals(p) {
+  const t = activeTwin(p);
+  if (!t) return;
+  p.hp = t.hp;
+  p.armor = t.armor;
 }
 
 function syncOut(p) {
@@ -120,26 +136,52 @@ function skillStatus(skill) {
   return skill?.status || skill?.effect?.status;
 }
 
-function applyStatus(t, key, turns, amount) {
-  if (!t || !t.alive) return;
-  t.statuses[key] = Math.max(t.statuses[key] || 0, turns);
+function isActive(p, t) {
+  const h = p && p.hisakawa;
+  return !!h && h.twins[h.active] === t;
+}
+
+// เขียนสถานะลงแฝด + มิเรอร์ลง p ทันทีถ้าเป็นแฝดที่กำลังคุมอยู่ (แทนการ syncIn ทับทั้งก้อน)
+function setTwinStatus(p, t, key, turns, amount) {
+  t.statuses[key] = turns;
   if (amount != null) {
     t.statusAmt = t.statusAmt || {};
-    t.statusAmt[key] = Math.max(t.statusAmt[key] || 0, amount);
+    t.statusAmt[key] = amount;
   }
+  if (!isActive(p, t)) return;
+  p.statuses[key] = turns;
+  if (amount != null) {
+    p.statusAmt = p.statusAmt || {};
+    p.statusAmt[key] = amount;
+  }
+}
+
+function delTwinStatus(p, t, key) {
+  delete t.statuses[key];
+  if (t.statusAmt) delete t.statusAmt[key];
+  if (!isActive(p, t)) return;
+  delete p.statuses[key];
+  if (p.statusAmt) delete p.statusAmt[key];
+}
+
+function applyStatus(p, t, key, turns, amount) {
+  if (!t || !t.alive) return;
+  const nextTurns = Math.max(t.statuses[key] || 0, turns);
+  const nextAmt = amount == null ? null : Math.max((t.statusAmt && t.statusAmt[key]) || 0, amount);
+  setTwinStatus(p, t, key, nextTurns, nextAmt);
 }
 
 function applyCoupleStatus(p, key, turns) {
   const h = ensure(p);
   if (!h) return;
   for (const t of Object.values(h.twins)) {
-    t.statuses[key] = Math.max(t.statuses[key] || 0, turns);
+    setTwinStatus(p, t, key, Math.max(t.statuses[key] || 0, turns));
   }
 }
 
-function addFortune(t, n = 1) {
+function addFortune(p, t, n = 1) {
   if (!t || !t.alive) return;
-  t.statuses.fortune = Math.min(3, (t.statuses.fortune || 0) + n);
+  setTwinStatus(p, t, "fortune", Math.min(3, (t.statuses.fortune || 0) + n));
 }
 
 function damageTwin(t, n) {
@@ -157,13 +199,8 @@ function clearCoupleBuffs(p) {
   const h = ensure(p);
   if (!h) return;
   for (const t of Object.values(h.twins)) {
-    delete t.statuses.hisakawaStage;
-    delete t.statuses.hisakawaTalent;
-    delete t.statuses.hisakawaDream;
+    for (const key of COUPLE_BUFF_KEYS) delTwinStatus(p, t, key);
   }
-  delete p.statuses.hisakawaStage;
-  delete p.statuses.hisakawaTalent;
-  delete p.statuses.hisakawaDream;
 }
 
 function publicTwin(t, active) {
@@ -208,6 +245,7 @@ module.exports = {
   },
 
   syncIn,
+  syncVitals,
   syncOut,
   activeTwin,
   otherTwin,
@@ -238,8 +276,7 @@ module.exports = {
     const h = ensure(p);
     const t = h && h.twins[twinKey];
     if (!t || !t.alive) return false;
-    applyStatus(t, key, turns, amount);
-    if (h.active === twinKey) syncIn(p);
+    applyStatus(p, t, key, turns, amount);
     return true;
   },
 
@@ -300,7 +337,7 @@ module.exports = {
       h.active = other.key;
       h.controlTurns = 0;
       if (statusOn(outgoing, "hisakawaLimit") && other.key === "hayate") {
-        addFortune(other, 1);
+        addFortune(p, other, 1);
         suffix = " — ฮายาเตะได้รับโชคลาภ +1";
       }
       syncIn(p);
@@ -320,29 +357,24 @@ module.exports = {
       dead.statusAmt = {};
       engine.log(`💫 ${p.name} ปลุก ${dead.name} กลับมาสู้ต่อ (${dead.hp}/${TWIN_MAX_HP}, เกราะ 0)`);
     } else if (skillStatus(skill) === "hisakawaLimit") {
-      applyStatus(active, "hisakawaLimit", LIMIT_TURNS);
-      syncIn(p);
+      applyStatus(p, active, "hisakawaLimit", LIMIT_TURNS);
       engine.log(`🧡 ${active.name} อย่าทำอะไรเกินตัวสิ — ดาเมจที่ได้รับเบาลง 1 และโจมตีติดผกผัน`);
     } else if (skillStatus(skill) === "hisakawaTempo") {
-      applyStatus(active, "hisakawaTempo", 999);
-      syncIn(p);
+      applyStatus(p, active, "hisakawaTempo", 999);
       engine.log(`💨 ${active.name} จังหวะนี้แหละ — หากแต้มต่ำสุดแบบไม่เสมอ จะได้โจมตีหลังผู้ชนะ`);
     } else if (skillStatus(skill) === "hisakawaStage") {
       applyCoupleStatus(p, "hisakawaStage", STAGE_TURNS);
-      syncIn(p);
       engine.log(`🎤 ${p.name} Miracle Live — เปิดเวทีของพวกเรา ${STAGE_TURNS} เทิร์น`);
     } else if (skillStatus(skill) === "hisakawaTalent") {
       applyCoupleStatus(p, "hisakawaTalent", TALENT_TURNS);
-      syncIn(p);
       engine.log(`💃 ${p.name} Miracle Dance — พรสวรรค์ของพวกเราเพิ่มพลังโจมตี +2`);
     } else if (skillStatus(skill) === "hisakawaDream") {
       for (const t of Object.values(h.twins)) {
-        delete t.statuses.hisakawaStage;
-        delete t.statuses.hisakawaTalent;
+        delTwinStatus(p, t, "hisakawaStage");
+        delTwinStatus(p, t, "hisakawaTalent");
       }
       applyCoupleStatus(p, "hisakawaDream", DREAM_TURNS);
       p.transformAt = engine.nextTransformCounter();
-      syncIn(p);
       engine.queueCutscene(p, "hisakawaSunday");
       engine.log(`🎁 ${p.name} O-KU-RI-MO-NO-Sunday — รวมเวทีและพรสวรรค์เป็นฝันของเหล่าฝาแฝด`);
     }
@@ -405,9 +437,9 @@ module.exports = {
       const sameLow = combatants.filter((o) => valFn(o) === score);
       const low = Math.min(...combatants.map(valFn).filter((v) => v >= 0));
       if (score === low && sameLow.length === 1 && p.id !== winnerId) {
+        // บัฟยังไม่ถูกใช้ตรงนี้ — ตัดทิ้งตอน startHayateAssistAttack() ที่ได้ออกโจมตีจริงเท่านั้น
+        // (ผู้ชนะอาจโจมตีไม่ได้เลย เช่น หลับ/สตั้น/เร้นเงา ซึ่ง afterSummary() ข้าม postAttackFollowup ไปจบเทิร์น)
         p.hisakawaHayateAssist = true;
-        delete t.statuses.hisakawaTempo;
-        syncIn(p);
         engine.log(`💨 ${t.name} ได้จังหวะต่ำสุด — เตรียมโจมตีหลังผู้ชนะ`);
       }
     }
@@ -417,10 +449,15 @@ module.exports = {
     const p = engine.alivePlayers().find((o) => o.characterId === "hisakawa_sister" && o.hisakawaHayateAssist);
     if (!p) return false;
     p.hisakawaHayateAssist = false;
+    // ระหว่างรอคิว ผู้ชนะอาจตีจนฮายาเตะล้มและนากิออกมาคุมแทน — จังหวะนี้ถือว่าพลาดไป
+    const h = ensure(p);
+    const hayate = h && h.twins.hayate;
+    if (!h || h.active !== "hayate" || !hayate.alive) return false;
     const targets = engine.attackableTargets(p.id);
     if (!targets.length) return false;
+    delTwinStatus(p, hayate, "hisakawaTempo");
     engine.setAttackerId(p.id);
-    engine.log(`💨 ฮายาเตะ ฮิซากาว่า ได้โจมตีต่อจาก ${attacker ? attacker.name : "ผู้ชนะ"}`);
+    engine.log(`💨 ${hayate.name} ได้โจมตีต่อจาก ${attacker ? attacker.name : "ผู้ชนะ"}`);
     return true;
   },
 
@@ -448,18 +485,20 @@ module.exports = {
     }
     if (active.alive) {
       h.controlTurns = (h.controlTurns || 0) + 1;
-      if (statusOn(active, "hisakawaDream")) addFortune(active, 1);
+      if (statusOn(active, "hisakawaDream")) addFortune(p, active, 1);
       if (h.controlTurns >= 2 && h.controlTurns % 3 === 2) {
-        applyStatus(active, "resist", 1, 1);
+        applyStatus(p, active, "resist", 1, 1);
         engine.log(`👭 ${active.name} ควบคุมต่อเนื่อง — ได้ต้านสถานะผิดปกติ 1 เทิร์น`);
       }
     }
-    syncIn(p);
+    syncVitals(p);
   },
 
   onEndTurnTick(engine, p) {
     const h = ensure(p);
     if (!h) return;
+    // จังหวะที่จองไว้แต่ไม่ได้ใช้ (ผู้ชนะโจมตีไม่ได้ / ไม่มีเป้าให้ตี) ต้องไม่ค้างข้ามไปเทิร์นหน้า
+    p.hisakawaHayateAssist = false;
     for (const key of TWIN_KEYS) {
       const t = h.twins[key];
       if (key === h.active) continue;
@@ -468,8 +507,9 @@ module.exports = {
         // พร้อมกับแฝดที่ยังสู้ เพื่อไม่ให้การชุบดึงระยะเวลาเก่ากลับมาอีกครั้ง
         if (!t.alive && !COUPLE_BUFF_KEYS.includes(s)) continue;
         if (t.statuses[s] >= 999) continue;
-        if (s === "fortune") continue;
-        if (s === "hburn") continue;
+        // ใช้รายการเดียวกับลูปลดเทิร์นใน endTurn() ของ server.js — ไม่งั้นมาร์กถาวร (ตราล่าเวท/
+        // รังสรรค์/เส้นตาย) และบัฟที่รอโจมตีจะสลายไปเองเฉพาะตอนแฝดคนนั้นพักอยู่
+        if (NO_TICK_STATUS.has(s)) continue;
         t.statuses[s]--;
         if (t.statuses[s] <= 0) {
           delete t.statuses[s];
@@ -477,7 +517,7 @@ module.exports = {
         }
       }
     }
-    syncIn(p);
+    syncVitals(p);
   },
 
   extraSkillRegen(p) {

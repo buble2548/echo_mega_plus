@@ -63,9 +63,12 @@ test('appleAtk (appleguy give-buff stacks): +N (array length)', () => {
 test('tigerAtk (broadband_man tiger, no-partner branch): +1, gated to broadband_man (self-only status)', () => {
   assert.equal(base({ characterId: 'broadband_man', statuses: { tiger: 2 } }), 2);
 });
-test('kotoneAtk (kotone dance buff): +2, only for kotone characterId', () => {
-  assert.equal(base({ characterId: 'kotone', statuses: { kotoneAtk: 1 } }), 3);
-  assert.equal(base({ characterId: 'tohno', statuses: { kotoneAtk: 1 } }), 1, 'kotoneAtk must not apply to non-kotone');
+test('kotoneLove (รัก รักที่สุดเลย): +floor(piggy/5) capped at 3, only for kotone characterId', () => {
+  assert.equal(base({ characterId: 'kotone', piggy: 7, statuses: { kotoneLove: 1 } }), 2, 'floor(7/5)=1');
+  assert.equal(base({ characterId: 'kotone', piggy: 15, statuses: { kotoneLove: 1 } }), 4, 'floor(15/5)=3');
+  assert.equal(base({ characterId: 'kotone', piggy: 40, statuses: { kotoneLove: 1 } }), 4, 'capped at +3');
+  assert.equal(base({ characterId: 'kotone', piggy: 15 }), 1, 'no bonus without the buff');
+  assert.equal(base({ characterId: 'tohno', piggy: 15, statuses: { kotoneLove: 1 } }), 1, 'kotoneLove must not apply to non-kotone');
 });
 test('shradeAtk (shrade_elan spada form, night only): +2 at night, +0 by day', () => {
   const attackerNight = mkPlayer({ characterId: 'shrade_elan', shradeForm: true });
@@ -115,18 +118,14 @@ test('profitAtk (gambler accumulated profit): +N, only for gambler', () => {
   assert.equal(base({ characterId: 'gambler', profit: 3 }), 4);
   assert.equal(base({ characterId: 'tohno', profit: 3 }), 1, 'profit field ignored for non-gambler');
 });
-test('pigDmg (kotone coin bank, 2 coins = +1) zeroed internally while kotoneExhausted', () => {
-  assert.equal(base({ characterId: 'kotone', coins: 5 }), 3, 'floor(5/2)=2');
-  const attacker = mkPlayer({ characterId: 'kotone', coins: 5, statuses: { overwork: 1 } });
+test('kotoneLove reports ctx for the attack-fx card and coin-consumption step', () => {
+  const attacker = mkPlayer({ characterId: 'kotone', piggy: 12, statuses: { kotoneLove: 1 } });
   const target = mkPlayer({ characterId: 'tohno' });
   const dayEngine = Object.assign(Object.create(engine), { isNightRound: () => false });
   const result = computeAttackBase(dayEngine, attacker, target);
-  // NOTE: computeAttackBase only zeroes pigDmg internally (matches original source order —
-  // the original code's `if (kotoneExhausted) base = 0;` runs AFTER the sum, in doAttack's
-  // remaining code, not inside the extracted block). base here is just doomBaseAtk(1) + pigDmg(0).
-  assert.equal(result.base, 1);
-  assert.equal(result.kotoneExhausted, true);
-  assert.equal(result.pigDmg, 0, 'pigDmg itself reported as zeroed for downstream coin-consumption logic to match');
+  assert.equal(result.base, 3, 'ฐาน 1 + floor(12/5)=2');
+  assert.equal(result.kotoneLove, true);
+  assert.equal(result.kotoneLoveDmg, 2);
 });
 test('oguriGoldAtk: capped at OGURI_GOLD_ATK_CAP even with excess stacks; victoryAtk adds OGURI_ULT_ATK_BONUS', () => {
   const attacker = mkPlayer({ characterId: 'oguri', statuses: { victorybeat: 1 } });
