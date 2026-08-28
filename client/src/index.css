@@ -306,6 +306,22 @@ body {
   animation: fieldFxPulse 1.6s ease-in-out infinite;
 }
 
+/* ---------- ออร่าขอบจอของหลักสูตรการสอน (อาจารย์ ไบเลธ) ----------
+   ใช้กลไกเดียวกับ field-fx-beatbark ของยูนะ แต่แยกสีตามหลักสูตรที่เปิดอยู่
+   มาตราฐาน = เขียว · พิเศษ = แดงเข้ม · จบการศึกษา = ฟ้า */
+.field-fx-byleth-normal,
+.field-fx-byleth-ex,
+.field-fx-byleth-end {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  animation: fieldFxPulse 2.4s ease-in-out infinite;
+}
+.field-fx-byleth-normal { background: radial-gradient(circle, transparent 58%, rgba(46, 158, 75, 0.42) 100%); }
+.field-fx-byleth-ex     { background: radial-gradient(circle, transparent 58%, rgba(192, 57, 43, 0.45) 100%); }
+.field-fx-byleth-end    { background: radial-gradient(circle, transparent 58%, rgba(59, 130, 196, 0.45) 100%); }
+
 /* ---------- ระเบิดตอนเปลี่ยนร่าง (แดง=ราชัน / เขียว=Beat Mode) ---------- */
 @keyframes xfxBurst {
   0% { transform: translate(-50%, -50%) scale(0.15); opacity: 0; }

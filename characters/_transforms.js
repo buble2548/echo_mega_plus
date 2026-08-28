@@ -227,5 +227,13 @@ module.exports = function buildTransforms(img) {
     eijiSwordHit:  { img: "/characters/eiji/skill2/eiji_skill2.jpg", video: "/characters/eiji/skill2/eiji_skill2_hit.mp4", title: "ดาบแห่งความทรงจำ", label: "ความเสียหาย 2 เท่า", seconds: 4, music: null, afterReveal: false },
     eijiInterrupt: { img: "/characters/eiji/eiji.webp", video: "/characters/eiji/passive/eiji_passive1.mp4", title: "ผู้เล่นอันดับ 2", label: "ขัดจังหวะ + สวนคืน", seconds: 7, music: null, afterReveal: false },
     eijiLonging:   { img: "/characters/eiji/eiji.webp", video: "/characters/eiji/passive/eiji_passive_extra.mp4", title: "Longing", label: "ตามไปจบเรื่อง", seconds: 17, music: null, afterReveal: false },
+    // ---------- มิซึซาว่า ฮารุกะ (patch 2.5 new) ----------
+    //  harukaOmega: ท่าไม้ตาย New Omega — เล่นทันทีตอนกด (ก่อนเปิดไพ่) แล้วสลับภาพประจำตัวเป็น new_omega.jpg 5 เทิร์น
+    //  harukaPunish / harukaCounter: คลิปสั้นที่ "คิว" ไว้ให้เล่นก่อนป้ายสรุปความเสียหาย (ไม่ใช่ตอนกดสกิล)
+    //  seconds ปรับให้ตรงความยาวจริง (วัดจาก mvhd atom) + เผื่อเวลาตัดฉาก ~1 วิ:
+    //   haruka_skill3 19.82 / haruka_skill2 8.97 / haruka_passive 3.91 วิ
+    harukaOmega:   { img: "/characters/haruka/new_omega.jpg", video: "/characters/haruka/skill3/haruka_skill3.mp4", title: "NEW OMEGA", label: "ปล่อยท่าไม้ตาย", seconds: 21, music: null, afterReveal: false },
+    harukaPunish:  { img: "/characters/haruka/skill2/haruka_skill2.jpg", video: "/characters/haruka/skill2/haruka_skill2.mp4", title: "จงไปสู่สุขติ", label: "จุดชนวนเลือดไหล", seconds: 10, music: null, afterReveal: false },
+    harukaCounter: { img: "/characters/haruka/haruka.webp", video: "/characters/haruka/haruka_passive.mp4", title: "อมาซอน", label: "สวนกลับ + สตั้น", seconds: 5, music: null, afterReveal: false },
   };
 };

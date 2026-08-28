@@ -39,6 +39,8 @@ const hisakawa_sister = require("./hisakawa_sister");
 const ignis = require("./ignis");
 const yuuki = require("./yuuki");
 const eiji = require("./eiji");
+const haruka = require("./haruka");
+const byleth = require("./byleth");
 
 const CHARACTER_MODULES = [
   tohno,
@@ -76,6 +78,8 @@ const CHARACTER_MODULES = [
   ignis,
   yuuki,
   eiji,
+  haruka,
+  byleth,
 ];
 
 const CHAR_HOOKS = {};

@@ -53,7 +53,7 @@ function isTargetable(p, iAmAttacker, c) {
   const normalAttackTarget = iAmAttacker && !friendly && !p.statuses?.seal && (!c.kaiRivalId || p.id === c.kaiRivalId);
   const gunTarget = !!c.gunSel && !self && !friendly;
   const escanorSkillTarget = c.escanorSel && !self && !friendly;
-  return (normalAttackTarget || !!c.anataSel || c.dawnSel || c.appleSel || c.bbSel || c.shSel || c.skSel || c.doomSel || c.saObSel || escanorSkillTarget || c.ignisSel || c.ignisImpactSel || c.bgSel || !!c.bardPending || c.nanayaSel || c.tpSel || c.kaiCreateSel || c.kaiPunishSel || c.msMarkSel || c.msRuptureSel || c.psSealSel || gunTarget) && p.alive;
+  return (normalAttackTarget || !!c.anataSel || c.dawnSel || c.appleSel || c.bbSel || c.shSel || c.skSel || c.doomSel || c.saObSel || escanorSkillTarget || c.ignisSel || c.ignisImpactSel || c.bgSel || !!c.bardPending || c.nanayaSel || c.tpSel || c.kaiCreateSel || c.kaiPunishSel || c.msMarkSel || c.msRuptureSel || c.psSealSel || c.bylethStrikeSel || gunTarget) && p.alive;
 }
 // แตะ/คลิกการ์ดคู่ต่อสู้แล้วต้องทำอะไร — ไล่ตามโหมดเลือกเป้าหมายที่เปิดอยู่ ไม่มีเลยก็โจมตีปกติ
 function resolveAttackPick(id, c) {
@@ -74,6 +74,7 @@ function resolveAttackPick(id, c) {
   if (c.tpSel) return c.pickTp(id);
   if (c.kaiCreateSel) return c.pickKaiCreate(id);
   if (c.kaiPunishSel) return c.pickKaiPunish(id);
+  if (c.bylethStrikeSel) return c.pickBylethStrike(id);
   if (c.msMarkSel) return c.pickMsMark(id);
   if (c.msRuptureSel) return c.pickMsRupture(id);
   if (c.psSealSel) return c.pickPsSeal(id);
@@ -719,7 +720,7 @@ const PHASE_NAMES = { PLAYING: "🎴 สุ่มการ์ด", ATTACK: "⚔�
 //  หมายเหตุ: โคโตเนะไม่อยู่ในตารางนี้ — สถานะ kready คือ "ร่าง [พร้อมลุย]" ที่ต้องยังอยู่ตอนกดท่าไม้ตายในร่าง
 //  (Self-affirmation Explosion! Love Love) ถ้าผูกไว้ที่นี่ ปุ่มท่าไม้ตายจะถูกปิดตลอดเวลาที่อยู่ในร่าง = กด ULT5 ไม่ได้เลย
 //  เงื่อนไขกดซ้ำของโคโตเนะคุมด้วย ktUltLocked ด้านล่าง (+ CHAR_HOOKS.kotone.canUseSkill ฝั่ง server) อยู่แล้ว
-const ULTIMATE_STATUS = { hikaru: "gingastrium", kuwagata: "rachan", banagher: "paradise", temari: "anata", gambler: "golden", eva13: "fourth", appleguy: "chill", shiki: "deatheye", miyako: "miyakoUlt", hakuno: "moonCell", takumi: "takumiBlackout", bat_ben: "batTaunt", princess_shiki: "pshikiUlt" };
+const ULTIMATE_STATUS = { hikaru: "gingastrium", kuwagata: "rachan", banagher: "paradise", temari: "anata", gambler: "golden", eva13: "fourth", appleguy: "chill", shiki: "deatheye", miyako: "miyakoUlt", hakuno: "moonCell", takumi: "takumiBlackout", bat_ben: "batTaunt", princess_shiki: "pshikiUlt", haruka: "harukaOmega" };
 
 // ---------- Apple guy: ของส่งมอบ 3 ชิ้น (สกิลพื้นฐาน เอาแบบนี้ได้ไหม เลือก -> สกิลรอง เอาไปสิ ส่งให้เป้าหมาย) ----------
 const APPLE_ITEMS = [
@@ -943,6 +944,7 @@ const STATUS_INFO = {
   monster:   { icon: "🛡️", label: "MonsterLive", cls: "bg-echo-armor", desc: "MonsterLive: เพดานเกราะ +2 — เกราะลดลงเท่าไหร่ฟื้นเลือดเท่านั้น และความเสียหายที่ได้รับจากการโจมตีลดลง 1 หน่วย (ใช้สกิลรอง Ultlive Ultraman Ginga ไม่ได้)" },
   ginga:     { icon: "✨", label: "Ginga", cls: "bg-echo-gold text-gray-900", desc: "ร่าง Ultraman Ginga: โจมตี +1 และตีหมู่ทุกคน (เหลือคู่ต่อสู้คนเดียว +1 เพิ่ม) — ระหว่างนี้สกิลพื้นฐานเปลี่ยนเป็น UPG!" },
   gingastrium: { icon: "🔥", label: "Ginga Strium", cls: "bg-echo-hp", desc: "ร่าง Ginga Strium: โจมตี +1 (เหลือคู่ต่อสู้คนเดียว +1 เพิ่ม) ติดลุกไหม้ให้เป้าหมายที่โดนโจมตี — ระหว่างนี้สกิลรองเปลี่ยนเป็นลำแสงสโตเรียม" },
+  hbleed:    { icon: "🩸", label: "เลือดไหล", cls: "bg-echo-hp", desc: "เลือดไหล: เสียพลังชีวิต 1 หน่วยทุกเทิร์น (ลดเกราะก่อน ลดลงทีละหน่วยหลังสร้างความเสียหาย) สะสมได้ไม่เกิน 6 หน่วย และระหว่างที่ยังติดอยู่ การฟื้นพลังชีวิตจะเหลือครึ่งเดียว (ฟื้นทีละ 1 หน่วยไม่ถูกลด) — ต้านได้ด้วยต้านสถานะผิดปกติ" },
   hburn:     { icon: "🔥", label: "ลุกไหม้", cls: "bg-echo-hp", desc: "ลุกไหม้: เสียพลังชีวิต 1 หน่วยทุกเทิร์น (ลดเกราะก่อน ลดลงทีละหน่วยหลังสร้างความเสียหาย) สะสมได้ไม่เกิน 6 หน่วย" },
   storium:   { icon: "🌟", label: "สโตเรียม", cls: "bg-echo-magenta", desc: "ลำแสงสโตเรียม: การโจมตีครั้งถัดไปกลายเป็นตีหมู่ — เป้าหมายที่เลือกรับดาเมจปกติ(สูงสุด 4)+ลุกไหม้ที่เหลือ ผู้เล่นอื่นรับดาเมจเท่าลุกไหม้ของตัวเอง" },
   absorb:    { icon: "🛡️", label: "Absorb", cls: "bg-echo-armor", desc: "เกราะที่เสียในเทิร์นนี้แปลงกลับเป็นพลังชีวิต" },
@@ -1025,8 +1027,8 @@ const STATUS_INFO = {
   escanorFlare: { icon: "🔥", label: "เพลิงปะทุ", cls: "bg-echo-hp", desc: "การโจมตีครั้งถัดไปจะมอบลุกไหม้ให้ผู้ถูกโจมตีเพิ่ม +1 (มีผลเทิร์นถัดไป)" },
   escanorFlareNoon: { icon: "🔥", label: "เพลิงปะทุ Noon", cls: "bg-echo-hp", desc: "การโจมตีครั้งถัดไปจะมอบลุกไหม้เพิ่ม +2 และมอบไร้ทางเยียวยา 2 เทิร์น" },
   escanorPunch: { icon: "👊", label: "หมัดสุริยัน", cls: "bg-echo-hp", desc: "การโจมตีครั้งถัดไปพลังโจมตี +1 และมอบลุกไหม้ให้ผู้ถูกโจมตีเพิ่ม +2 (มีผลเทิร์นถัดไป)" },
-  escanorRhitta: { icon: "🪓", label: "Rhitta", cls: "bg-echo-gold text-gray-900", desc: "การโจมตีครั้งถัดไปมอบลุกไหม้เพิ่ม +2" },
-  escanorRhittaNoon: { icon: "🪓", label: "Rhitta Noon", cls: "bg-echo-gold text-gray-900", desc: "เมื่อโจมตีโดน จะบังคับลุกไหม้ 2 หน่วยของเป้าหมายทำงานทันทีในเทิร์นนั้น" },
+  escanorRhitta: { icon: "🪓", label: "Rhitta", cls: "bg-echo-gold text-gray-900", desc: "การโจมตีครั้งถัดไปจะบังคับลุกไหม้ 2 หน่วยที่ติดอยู่บนเป้าหมายให้ทำงานทันทีในเทิร์นนั้น" },
+  escanorRhittaNoon: { icon: "🪓", label: "Rhitta Noon", cls: "bg-echo-gold text-gray-900", desc: "เมื่อโจมตีโดน จะสร้างความเสียหายใส่ผู้เล่นคนอื่นคนละ 1 หน่วย" },
   escanorSun: { icon: "☀️", label: "ดวงอาทิตย์จำลอง", cls: "bg-echo-hp", desc: "การโจมตีครั้งถัดไปเป็นโจมตีหมู่ และพลังโจมตีพื้นฐานถูกตั้งเป็น 0" },
   triggerCircle: { icon: "⚔️", label: "ดาบวงจักร", cls: "bg-echo-cyan text-gray-900", desc: "Circle Arms: การโจมตีมอบแสงสว่าง 2 และฟื้นพลังชีวิต 2 หน่วย" },
   triggerMulti: { icon: "⭕", label: "จักรแห่งแสง", cls: "bg-echo-gold text-gray-900", desc: "Multi Sword Finish: โจมตีใครก็ได้ ถ้าเป้าหมาย HP สูงสุดดาเมจ +1 แต่ถ้าเป้าหมาย HP ต่ำกว่า 5 ดาเมจเหลือ 2 และมอบแสงสว่างเพิ่มอีก 2 หน่วย ใช้แล้วหาย" },
@@ -1090,6 +1092,9 @@ const STATUS_INFO = {
   eijiSwift: { icon: "💨", label: "ความเร็วสูง", cls: "bg-echo-cyan text-gray-900", desc: "ว่องไว: อัตราหลบหลีก +20% (หลบสำเร็จได้ 1 ครั้งต่อเทิร์น · ซ้อนทับกับท่าไม้ตาย +20% และ Ordinal Scale +20%/ครั้ง ได้) · ฟื้นพลังชีวิต +1 ต่อเทิร์นระหว่างมีผล · หมดอายุแล้วคืนแต้มสกิล +2" },
   eijiSword: { icon: "⚔️", label: "ดาบแห่งความทรงจำ", cls: "bg-echo-hp", desc: "ความแค้น: ยกระดับโอกาสดาเมจ 2 เท่าจากฐานติดตัว 20% เป็นค่าที่คิดจากเกราะ + พลังชีวิตของเอจิรวมกัน (1 หน่วย = 10% · ใช้ค่าที่สูงกว่า) — ติดเมื่อไหร่ฟื้นพลังชีวิต +1" },
   eijiUlt: { icon: "🔥", label: "ไม่ว่ายังก็ตาม", cls: "bg-echo-gold text-gray-900", desc: "ไม่ว่ายังก็ตาม: บังคับเปิดสนาม Break Beat Bark! — ทุกคนได้พลังโจมตีปกติ +1 · เวลาเฟสจั่วการ์ดเหลือ 40 วินาที · เอจิหลบหลีก +20% และได้แต้มสกิล +1 ต่อเทิร์น" },
+  // ---------- มิซึซาว่า ฮารุกะ (patch 2.5 new) ----------
+  harukaOmega:  { icon: "🦾", label: "โอเมก้า", cls: "bg-echo-gold text-gray-900", desc: "New Omega: การโจมตีปกติมอบสถานะ \"เลือดไหล\" ให้เป้าหมาย 2 หน่วยทุกครั้ง · พลังโจมตีปกติ +1 · และมีโอกาส 15% สวนกลับผู้ที่โจมตีปกติใส่ฮารุกะเป็นความเสียหาย 1 หน่วย พร้อมมอบสตั้น 1 เทิร์นในเทิร์นถัดไป" },
+  harukaPunish: { icon: "⚖️", label: "จงไปสู่สุขติ", cls: "bg-echo-magenta", desc: "amazon punish: การโจมตีปกติครั้งถัดไปที่ใส่เป้าหมายซึ่งมี \"เลือดไหล\" ตั้งแต่ 3 หน่วยขึ้นไป จะจุดชนวนให้ระเบิดเป็นความเสียหายเพิ่มตามจำนวนหน่วยที่ติดอยู่ แล้วล้างเลือดไหลทั้งหมด — ถ้ายังไม่ถึง 3 หน่วย สถานะนี้จะยังไม่ถูกใช้" },
   // ---------- ซาโตรุ อาเคฟุ (patch 2.0.8.2) ----------
   oblada:   { icon: "🎵", label: "สิ่งแปลกปลอม", cls: "bg-echo-hp", desc: "ObLa Di, ObLa Da: รับความเสียหาย 1 หน่วยทุกๆ 2 เทิร์น เป็นเวลา 4 เทิร์น" },
   // ---------- ริดดี้ มาร์เซนาส (patch 2.0.9) ----------
@@ -1115,6 +1120,9 @@ const STATUS_INFO = {
   hakunoInvertReady:   { icon: "🌓", label: "ข้าขอบัญชา", cls: "bg-echo-cyan text-gray-900", desc: "ข้าขอบัญชา: การโจมตีปกติครั้งถัดไปทำให้เป้าหมายติดผกผัน 3 เทิร์น — คงอยู่จนกว่าจะได้โจมตี" },
   hakunoNoRegenReady:  { icon: "🌕", label: "ข้าขอบัญชา", cls: "bg-echo-magenta", desc: "ข้าขอบัญชา: การโจมตีปกติครั้งถัดไปทำให้เป้าหมายเกราะไม่ฟื้น + ไร้ทางเยียวยา — คงอยู่จนกว่าจะได้โจมตี" },
   moonCell:   { icon: "🌙", label: "MOON*CELL", cls: "bg-echo-magenta", desc: "คำสาปแห่งดวงจันทร์ MOON*CELL: ล้าง/ปิดใช้งานบัฟ ดีบัฟ สกิล และสกิลติดตัวของทุกคน (ยกเว้นเจ้าของท่า) ตามจำนวนเทิร์นที่เหลือ" },
+  // ---------- อาจารย์ ไบเลธ (patch 2.6 new) ----------
+  bylethSword:   { icon: "\u{1F5E1}\uFE0F", label: "ดาบต้องสาป", cls: "bg-echo-hp", desc: "ดาบต้องสาป: พลังโจมตีปกติ +2 หน่วย ใช้ได้ 1 ครั้งภายใน 3 เทิร์น (มีเสียงโจมตีเฉพาะของดาบ) — สลายไปทันทีหลังโจมตี" },
+  bylethNoBasic: { icon: "\u{1F4D5}", label: "ห้ามสกิลพื้นฐาน", cls: "bg-echo-hp", desc: "หลักสูตร พิเศษ (ไบเลธ): กดสกิลพื้นฐานเมื่อเทิร์นก่อน — เทิร์นนี้กดสกิลพื้นฐานไม่ได้" },
   hisakawaLimit: { icon: "🛡️", label: "เท่าที่ไหว", cls: "bg-echo-armor", desc: "ดาเมจที่ได้รับลดลง 1 และเมื่อนากิโจมตีโดนจะมอบผกผัน 3 เทิร์น" },
   hisakawaTempo: { icon: "💨", label: "จังหวะนี้แหละ", cls: "bg-echo-cyan text-gray-900", desc: "ฮายาเตะจะได้โจมตีหลังผู้ชนะ หากแต้มตัวเองต่ำที่สุดแบบไม่เสมอและไม่ไพ่แตก คงอยู่จนกว่าจะใช้" },
   hisakawaStage: { icon: "🎤", label: "เวทีของพวกเรา", cls: "bg-echo-magenta", desc: "แต้มสกิลฟื้นเพิ่ม +1 ทุกเทิร์น" },
@@ -1149,6 +1157,11 @@ function statusEntries(p, full) {
     out.push({ key: "stamina", v: 1, icon: "🏇", label: `Stamina ชาร์จ ${p.stamina || 0}/${p.oguriChargeCap || 52}`, cls: "bg-echo-cyan text-gray-900", desc: "Stamina ชาร์จ: ทรัพยากรของท่าไม้ตาย — ได้รับอัตโนมัติทุกเทิร์น 8-16 หน่วย (สุ่ม) ความจุพื้นฐาน 52 (Training เพิ่มความจุได้สูงสุด +48 รวม 100) — The Beat of Victory หัก 35 / Ashen Trail หัก 75" });
   }
   // คิชินามิ ฮาคุโนะ (patch 2.2.1): แต้มคำสาปแห่งดวงจันทร์ — สะสมครบ 3 เพื่อเปิด MOON*CELL
+  // อาจารย์ ไบเลธ: แต้มความรู้ + หลักสูตรที่เปิดอยู่ (ทุกคนเห็นได้ เพราะหลักสูตรเปลี่ยนกติกาทั้งสนาม)
+  if (p.character?.id === "byleth") {
+    out.push({ key: "bylethKnowledge", v: 1, icon: "\u{1F4DA}", label: `ความรู้ ${p.bylethKnowledge || 0}/${p.bylethKnowledgeMax || 20}`, cls: "bg-echo-gold text-gray-900", desc: "แต้มความรู้: ได้จากสกิลพื้นฐาน (ทบทวนบทเรียน) ครั้งละ 1 หน่วย สูงสุด 20 — จ่ายให้สกิลรอง (ดาบต้องสาป) ครั้งละ 4 หน่วย และหล่อเลี้ยงท่าไม้ตาย (หลักสูตรการสอน) เทิร์นละ 1 หน่วย" });
+    if (p.bylethCourse) out.push({ key: "bylethCourse", v: 1, icon: "\u{1F393}", label: p.bylethCourse === "normal" ? "หลักสูตร มาตราฐาน" : p.bylethCourse === "ex" ? "หลักสูตร พิเศษ" : "หลักสูตร จบการศึกษา", cls: "bg-echo-magenta", desc: "หลักสูตรการสอนที่เปิดอยู่ — เปลี่ยนกติกาทั้งสนามจนกว่าความรู้จะหมดหรือไบเลธกดปิดเอง" });
+  }
   if (p.character?.id === "hakuno") out.push({ key: "hakunoMoon", v: 1, icon: "🌙", label: `คำสาปแห่งดวงจันทร์ ${p.hakunoMoonPoints || 0}/3`, cls: "bg-echo-magenta", desc: "แต้มคำสาปแห่งดวงจันทร์: สะสมจากข้าขอบัญชา (ทั้งสองร่าง) ครั้งละ +1 — ครบ 3 หน่วยเปิดใช้ท่าไม้ตาย MOON*CELL ได้ (ใช้หมดตอนกด)" });
   if ((p.phenexPain || 0) > 0) out.push({ key: "phenexPain", v: p.phenexPain, icon: "💔", label: "ความเจ็บปวด", cls: "bg-echo-hp", desc: "ความเจ็บปวดสะสม (ไม่อยากให้ใครต้องเจ็บปวด) — ปลดปล่อยเป็นความเสียหายใส่เป้าหมายที่เลือกตอนตกรอบจริง (ไม่สนการหลบหลีก)" });
   // Bard: ท่อนทำนองสะสม + โน้ตในช่องประพันธ์เพลง (ทุกคนเห็นได้)
@@ -1219,7 +1232,7 @@ function StatusChips({ p, left, compact, max = 5 }) {
 // สถานะที่เป็นสแตคถาวร/ตัวนับเรื่อยๆ ไม่ใช่ตัวนับถอยหลังเทิร์น (ต้องตรงกับรายการยกเว้นในลูปลดเทิร์นสถานะทั่วไปที่ server.js
 //  ไม่งั้น StatusModal จะโชว์ "เหลือ N เทิร์น" หลอกๆ ทั้งที่ค่า v ที่แท้จริงคือจำนวนสแตคสะสม ไม่ใช่เทิร์นที่เหลือ)
 const PERMANENT_STATUS_KEYS = new Set([
-  "dawn", "chill", "hburn", "melody", "star", "emeraude", "saphir", "lance", "takutoThirdAtk",
+  "dawn", "chill", "hburn", "hbleed", "melody", "star", "emeraude", "saphir", "lance", "takutoThirdAtk",
   "doomCrucible", "fortune", "rsHopper", "cassius", "yaak", "spear", "ohger", "evade", "empower",
   "miyakoHeal", "miyakoCombo", "miyakoUlt", "hakunoInvertReady", "hakunoNoRegenReady", "kotoneLove", "kotoneReady", "kready",
   "deathline", "tepeuCook", "tepeuPonder", "hisakawaTempo", "graybeast", "grit", "healthfull", "overweight",
@@ -1965,6 +1978,119 @@ function AppleItemModal({ me, onPick, onClose }) {
   );
 }
 
+// ---------- อาจารย์ ไบเลธ (patch 2.6 new) ----------
+//  หลักสูตรทั้ง 3 — สีประจำหลักสูตรใช้ทั้งกับป้าย UI และออร่าขอบจอ (field-fx-byleth-*)
+const BYLETH_COURSES = [
+  { key: "normal", icon: "📗", name: "หลักสูตร มาตราฐาน", color: "#2E9E4B",
+    desc: "ผู้ชนะของเทิร์นติดสตั้น 1 เทิร์นในเทิร์นหน้า (ยกเว้นไบเลธ) · ผู้แพ้ได้แต้มสกิลฟื้นเพิ่ม 1 หน่วย · คนที่ไพ่แตกไม่รับความเสียหายจากแต้มเกิน 21" },
+  { key: "ex", icon: "📕", name: "หลักสูตร พิเศษ", color: "#C0392B",
+    desc: "มีผลกับทุกคนยกเว้นไบเลธ — กดสกิลรองเทิร์นนี้ = โจมตีไม่ได้ · กดท่าไม้ตายเทิร์นนี้ = รับความเสียหาย 1 หน่วย · กดสกิลพื้นฐานเทิร์นนี้ = เทิร์นหน้ากดสกิลพื้นฐานไม่ได้" },
+  { key: "end", icon: "📘", name: "หลักสูตร จบการศึกษา", color: "#3B82C4",
+    desc: "การจั่วของทุกคนบีบเวลาเฟสจั่วลงครั้งละ 2 วิ · สกิลรอง/ท่าไม้ตายของทุกคนถูกลง 1 แต้ม · ไบเลธแต้มน้อยสุดแบบไพ่ไม่แตกแล้วถูกผู้ชนะตี = ได้ตีตอบทันที · ไบเลธรับความเสียหายน้อยลง 1" },
+];
+const BYLETH_COURSE_BY_KEY = Object.fromEntries(BYLETH_COURSES.map((c) => [c.key, c]));
+
+// ดาบต้องสาป (สกิลรอง): ต้องเลือกแบบก่อนเสมอ — ลดความรู้ 4 หน่วยเท่ากันทั้งสองแบบ
+function BylethSwordModal({ me, onPick, onClose }) {
+  const strikeUsed = !!me.bylethStrikeUsed;
+  const swordOn = (me.statuses?.bylethSword || 0) > 0;
+  return (
+    <div className="fixed inset-0 z-40 bg-black/60 grid place-items-center p-4" onClick={onClose}>
+      <div className="bg-echo-navy rounded-2xl p-5 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="text-lg font-black text-echo-gold">🗡️ ดาบต้องสาป — เลือกรูปแบบ</div>
+        <div className="text-sm opacity-80 mb-3">ใช้แต้ม "ความรู้" 4 หน่วย (มีอยู่ {me.bylethKnowledge || 0}/{me.bylethKnowledgeMax || 20}) — ไม่ใช้แต้มสกิล</div>
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => { if (!strikeUsed) { clickSound(); onPick("strike"); } }}
+            disabled={strikeUsed}
+            className={`text-left rounded-xl border px-3 py-2 transition ${strikeUsed ? "opacity-50 cursor-not-allowed border-white/10 bg-white/5" : "bg-white/5 hover:bg-white/15 border-white/15"}`}
+          >
+            <div className="font-bold text-echo-gold">แบบที่ 1 · ฟาดทันที{strikeUsed ? " (ใช้ครบโควตาเทิร์นนี้แล้ว)" : ""}</div>
+            <div className="text-sm opacity-80">เลือกผู้เล่นอื่น 1 คน สร้างความเสียหาย 2 หน่วยทันที — ใช้ได้ 1 ครั้งต่อเทิร์น</div>
+          </button>
+          <button
+            onClick={() => { if (!swordOn) { clickSound(); onPick("buff"); } }}
+            disabled={swordOn}
+            className={`text-left rounded-xl border px-3 py-2 transition ${swordOn ? "opacity-50 cursor-not-allowed border-white/10 bg-white/5" : "bg-white/5 hover:bg-white/15 border-white/15"}`}
+          >
+            <div className="font-bold text-echo-gold">แบบที่ 2 · เสริมพลังดาบ{swordOn ? " (ดาบยังอยู่ กดซ้ำไม่ได้)" : ""}</div>
+            <div className="text-sm opacity-80">พลังโจมตีปกติ +2 หน่วย ใช้โจมตีได้ 1 ครั้งภายใน 3 เทิร์น (มีเสียงโจมตีเฉพาะของดาบ)</div>
+          </button>
+        </div>
+        <Button className="mt-3 w-full" onClick={() => { clickSound(); onClose(); }}>ปิด</Button>
+      </div>
+    </div>
+  );
+}
+
+// หลักสูตรการสอน (ท่าไม้ตาย): เลือก 1 หลักสูตรทุกครั้งที่กด — เปิดอยู่แล้วกดปิด/สลับหลักสูตรได้
+function BylethCourseModal({ me, onPick, onClose }) {
+  const cur = me.bylethCourse || null;
+  const know = me.bylethKnowledge || 0;
+  return (
+    <div className="fixed inset-0 z-40 bg-black/60 grid place-items-center p-4" onClick={onClose}>
+      <div className="bg-echo-navy rounded-2xl p-5 max-w-lg w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="text-lg font-black text-echo-gold">🎓 หลักสูตรการสอน — เลือกหลักสูตร</div>
+        <div className="text-sm opacity-80 mb-3">
+          ความรู้ {know}/{me.bylethKnowledgeMax || 20} — เปิดค้างไว้จะลดลงเทิร์นละ 1 หน่วย จนกว่าจะหมดหรือกดปิดเอง (ระหว่างเปิดอยู่กดสกิลพื้นฐานไม่ได้)
+        </div>
+        <div className="flex flex-col gap-2">
+          {BYLETH_COURSES.map((c) => {
+            const active = cur === c.key;
+            const locked = !cur && know < 4;
+            return (
+              <button
+                key={c.key}
+                onClick={() => { if (!active && !locked) { clickSound(); onPick(c.key); } }}
+                disabled={active || locked}
+                className={`text-left rounded-xl border px-3 py-2 transition ${active ? "bg-echo-gold/20 border-echo-gold" : locked ? "opacity-50 cursor-not-allowed border-white/10 bg-white/5" : "bg-white/5 hover:bg-white/15 border-white/15"}`}
+                style={active ? undefined : { borderColor: `${c.color}66` }}
+              >
+                <div className="font-bold" style={{ color: c.color }}>{c.icon} {c.name}{active ? " · ใช้อยู่" : ""}{locked ? " (ต้องมีความรู้ 4 แต้ม)" : ""}</div>
+                <div className="text-sm opacity-80">{c.desc}</div>
+              </button>
+            );
+          })}
+        </div>
+        {cur && (
+          <Button variant="gold" className="mt-3 w-full py-3" onClick={() => { clickSound(); onPick("off"); }}>⏹️ ปิดใช้งานหลักสูตร</Button>
+        )}
+        <Button className="mt-2 w-full" onClick={() => { clickSound(); onClose(); }}>ปิด</Button>
+      </div>
+    </div>
+  );
+}
+
+// UI พิเศษของไบเลธ: แต้มความรู้ (ทรัพยากรหลัก) + ผลทบทวนบทเรียนที่รอไพ่ใบถัดไป + หลักสูตรที่เปิดอยู่
+function BylethKnowledgePanel({ me, ch }) {
+  if (!ch || ch.id !== "byleth" || me.bylethKnowledge == null) return null;
+  const max = me.bylethKnowledgeMax || 20;
+  const know = me.bylethKnowledge || 0;
+  const pct = Math.max(0, Math.min(100, (know / max) * 100));
+  const course = me.bylethCourse ? BYLETH_COURSE_BY_KEY[me.bylethCourse] : null;
+  const next = me.bylethNextDraw; // "study" | "rest" | null
+  const uses = me.bylethSkillUses || 0;
+  const usesMax = me.bylethSkillMax || 5;
+  return (
+    <div className="rounded-xl bg-black/55 border border-echo-gold/50 px-2.5 py-1.5 text-left w-full max-w-xs">
+      <div className="flex items-center justify-between gap-2 text-[11px] font-bold">
+        <span className="text-echo-gold">📚 ความรู้ {know}/{max}</span>
+        <span className="opacity-80">สกิล {uses}/{usesMax} ครั้ง</span>
+      </div>
+      <div className="mt-1 h-2 rounded-full bg-white/15 overflow-hidden">
+        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: "linear-gradient(90deg,#E5B33B,#9B4F96)" }} />
+      </div>
+      <div className="mt-1 flex flex-wrap gap-1 text-[10px] font-bold">
+        {next === "study" && <span className="rounded-full px-1.5 py-0.5 bg-echo-gold text-gray-900">📖 ศึกษาเพิ่ม — ไพ่ใบหน้า "บวก" + ฟื้นเลือด 1</span>}
+        {next === "rest" && <span className="rounded-full px-1.5 py-0.5 bg-echo-magenta">💤 พักผ่อน — ไพ่ใบหน้า "ลบ" ออกจากแต้ม</span>}
+        {course && <span className="rounded-full px-1.5 py-0.5" style={{ background: course.color }}>{course.icon} {course.name}</span>}
+        {(me.statuses?.bylethSword || 0) > 0 && <span className="rounded-full px-1.5 py-0.5 bg-echo-hp">🗡️ ดาบต้องสาป +2</span>}
+        {me.bylethRevived && <span className="rounded-full px-1.5 py-0.5 bg-white/20">⏳ sothis ใช้แล้ว</span>}
+      </div>
+    </div>
+  );
+}
+
 // ---------- โทโนะ ชิกิ (สกิลพื้นฐาน): เมนูเลือกระดับมีดพับประจำตระกูล ----------
 const TOHNO_LEVELS = [
   { level: 1, name: "1. ปิดใช้งานสกิลติดตัว (ค่าเริ่มต้น)", desc: "ทุกครั้งที่ได้โจมตี ฟื้นพลังชีวิต +2" },
@@ -2533,6 +2659,9 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
   const [tpSel, setTpSel] = useState(false);          // เทเปา: โหมดเลือกเป้าหมาย นายเป็นคนทำตัวเองนะ (เลือกตัวเองไม่ได้)
   const [kaiCreateSel, setKaiCreateSel] = useState(false);   // ไค: โหมดเลือกเป้าหมายมือซ้ายแห่งการรังสรรค์ (เลือกตัวเองได้)
   const [kaiPunishSel, setKaiPunishSel] = useState(false);   // ไค: โหมดเลือกเป้าหมายมือขวาแห่งการลงทัณฑ์ (เลือกตัวเองได้)
+  const [bylethSwordOpen, setBylethSwordOpen] = useState(false);   // ไบเลธ: หน้าต่างเลือกแบบของ "ดาบต้องสาป"
+  const [bylethCourseOpen, setBylethCourseOpen] = useState(false);  // ไบเลธ: หน้าต่างเลือกหลักสูตรของท่าไม้ตาย
+  const [bylethStrikeSel, setBylethStrikeSel] = useState(false);    // ไบเลธ: โหมดเลือกเป้าหมายฟาดดาบ (เลือกตัวเองไม่ได้)
   const [msMarkSel, setMsMarkSel] = useState(false);         // ผู้สังหารเมจ: โหมดเลือกเป้าหมาย Witch Mark (เลือกตัวเองไม่ได้)
   const [msRuptureSel, setMsRuptureSel] = useState(false);   // ผู้สังหารเมจ: โหมดเลือกเป้าหมาย Mana Rupture (เลือกตัวเองไม่ได้)
   const [gunSel, setGunSel] = useState(null);                // ปืนหน่วย GUTS Select: กระสุนที่เลือกไว้ รอจิ้มเป้าหมายบนกระดาน (เลือกตัวเองไม่ได้)
@@ -2666,6 +2795,24 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
   const eijiOrdinalUsable = !!(isEiji && phase === "PLAYING" && me?.alive && !done && !me?.locked &&
     (me?.eijiOrdinal || 0) < (me?.eijiOrdinalMax || 5) && (me?.skillPoints || 0) >= 1);
   const useEijiOrdinal = () => { socket.emit("eijiOrdinalScale"); };
+  // ---------- มิซึซาว่า ฮารุกะ (patch 2.5 new) ----------
+  const isHaruka = ch?.id === "haruka";
+  //  ไข่ต้ม และอาหารเสริม: ไม่นับเป็นการใช้สกิลของเทิร์น — กดได้ 2 ครั้ง/เทิร์น แล้วยังใช้สกิลอื่นได้อีก 1 ครั้ง
+  const harukaBasicLocked = isHaruka && (me?.harukaBasicUses || 0) >= (me?.harukaBasicMax || 2);
+  //  amazon punish: ต้องมี "โอเมก้า" อยู่ และ "จงไปสู่สุขติ" ต้องไม่ค้างอยู่
+  const harukaSecLocked = isHaruka && (!(me?.statuses?.harukaOmega > 0) || (me?.statuses?.harukaPunish || 0) > 0);
+  // ---------- อาจารย์ ไบเลธ (patch 2.6 new) ----------
+  const isByleth = ch?.id === "byleth";
+  const bylethKnow = me?.bylethKnowledge || 0;
+  const bylethCourse = me?.bylethCourse || null;
+  //  ภูมิปัญญา: ทุกช่องไม่นับเป็นการใช้สกิลของเทิร์น แต่รวมกันได้ 5 ครั้ง/เทิร์น
+  const bylethBudgetLocked = isByleth && (me?.bylethSkillUses || 0) >= (me?.bylethSkillMax || 5);
+  //  ทบทวนบทเรียน: กดไม่ได้ระหว่างหลักสูตรเปิดอยู่ หรือโดนหลักสูตร "พิเศษ" สั่งห้ามไว้
+  const bylethBasicLocked = isByleth && (!!bylethCourse || (me?.statuses?.bylethNoBasic || 0) > 0);
+  //  ดาบต้องสาป: ต้องมีความรู้ 4 หน่วย และต้องยังมีแบบที่กดได้อย่างน้อย 1 แบบ
+  const bylethSecLocked = isByleth && (bylethKnow < 4 || (!!me?.bylethStrikeUsed && (me?.statuses?.bylethSword || 0) > 0));
+  //  หลักสูตรการสอน: เปิดอยู่แล้วกดได้เสมอ (สลับ/ปิด) · ยังไม่เปิดต้องมีความรู้ 4 หน่วย
+  const bylethUltLocked = isByleth && !bylethCourse && bylethKnow < 4;
   // ---------- เจ้าแห่งเน็ตบ้าน ----------
   const isBroadband = ch?.id === "broadband_man";
   const lanLocked = isBroadband && !me?.contractPartnerId;    // กระชากสายแลน: ใช้ได้ก็ต่อเมื่อมีคู่สัญญาแล้ว
@@ -2806,6 +2953,9 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
     if (tier === "basic" && ch?.id === "tohno") { setTohnoOpen(true); setSkillOpen(false); return; }
     // นานายะ ชิกิ: สกิลพื้นฐาน (อันนี้ของนายรึเปล่า) เข้าโหมดเลือกเป้าหมายก่อนส่งไป server
     if (tier === "basic" && ch?.id === "nanaya") { setNanayaSel(true); setSkillOpen(false); return; }
+    // อาจารย์ ไบเลธ: สกิลรองเปิดหน้าต่างเลือกแบบ (ฟาดทันที/เสริมดาบ) · ท่าไม้ตายเปิดหน้าต่างเลือกหลักสูตร
+    if (tier === "secondary" && ch?.id === "byleth") { setBylethSwordOpen(true); setSkillOpen(false); return; }
+    if (tier === "ultimate" && ch?.id === "byleth") { setBylethCourseOpen(true); setSkillOpen(false); return; }
     // เจ้าแห่งเน็ตบ้าน: ท่าไม้ตายเข้าโหมดเลือกเป้าหมายยื่นข้อเสนอสัญญา
     if (tier === "ultimate" && ch?.id === "broadband_man") { setBbSel(true); setSkillOpen(false); return; }
     // ชเรด เอลัน: สกิลรอง (แสงจันทร์ส่องวิญญาณ) เข้าโหมดเลือกเป้าหมายก่อนส่งไป server
@@ -2913,6 +3063,20 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
   const pickKaiPunish = (id) => {
     socket.emit("useSkill", { tier: "secondary", targets: [id] });
     setKaiPunishSel(false);
+  };
+  // อาจารย์ ไบเลธ: เลือกแบบของดาบต้องสาป / เลือกหลักสูตร / เลือกเป้าหมายฟาดดาบ -> ส่งไป server
+  const pickBylethSword = (mode) => {
+    setBylethSwordOpen(false);
+    if (mode === "strike") { setBylethStrikeSel(true); return; } // แบบที่ 1 ต้องเลือกเป้าหมายก่อน
+    socket.emit("useSkill", { tier: "secondary", item: "buff" });
+  };
+  const pickBylethStrike = (id) => {
+    socket.emit("useSkill", { tier: "secondary", item: "strike", targets: [id] });
+    setBylethStrikeSel(false);
+  };
+  const pickBylethCourse = (course) => {
+    socket.emit("useSkill", { tier: "ultimate", item: course });
+    setBylethCourseOpen(false);
   };
   // เลือกเป้าหมาย Witch Mark / Mana Rupture (ผู้สังหารเมจ) -> ส่งไป server ทันที
   const pickMsMark = (id) => {
@@ -3054,6 +3218,11 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
   useEffect(() => {
     if (msMarkSel && (phase !== "PLAYING" || me?.skillUsed || done)) setMsMarkSel(false);
   }, [msMarkSel, phase, me?.skillUsed, done]);
+  // ไบเลธ: ปิดหน้าต่าง/โหมดเลือกเป้าหมายเองเมื่อออกจากเฟสจั่วการ์ด (สกิลของไบเลธไม่ผูกกับ me.skillUsed)
+  useEffect(() => {
+    if (phase === "PLAYING" && !done) return;
+    setBylethSwordOpen(false); setBylethCourseOpen(false); setBylethStrikeSel(false);
+  }, [phase, done]);
   // ไอคอนไอเทม: ดึงมาแคชไว้ตั้งแต่เข้าเกม กันโหลดช้าตอนเปิดร้าน/กระเป๋าครั้งแรก
   useEffect(() => { for (const src of ITEM_PRELOAD_IMGS) { const im = new Image(); im.src = src; } }, []);
   // ปืน GUTS Select: หลุดโหมดเลือกเป้าหมายเมื่อออกจากช่วงจั่วไพ่/เปิดไพ่แล้ว หรือกระสุนนัดนั้นถูกใช้ไปแล้ว
@@ -3110,6 +3279,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
   const targetChain = {
     anataSel, dawnSel, appleSel, bbSel, shSel, skSel, doomSel, saObSel, escanorSel, ignisSel, ignisImpactSel, bgSel, bardPending, nanayaSel, tpSel,
     kaiCreateSel, kaiPunishSel, msMarkSel, msRuptureSel, psSealSel, pickPsSeal, gunSel, pickGunTarget,
+    bylethStrikeSel, pickBylethStrike,
     pickAnata, pickDawn, pickGive, pickBb, pickSh, pickSk, pickDoom, pickSaOb, pickEscanor, pickIgnis, pickIgnisImpact, pickBg, pickBard, pickNanaya, pickTp,
     pickKaiCreate, pickKaiPunish, pickMsMark, pickMsRupture,
     kaiRivalId,
@@ -3261,7 +3431,19 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
             <button onClick={() => { clickSound(); setKaiPunishSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
           </div>
         )}
-        {msMarkSel && (
+        {bylethStrikeSel && (
+          <div className="shrink-0 text-center mt-1.5 text-hard">
+            <span className="text-lg font-black text-echo-hp animate-pulse">🗡️ แตะเลือกเป้าหมายของ "ดาบต้องสาป"</span>
+            <button onClick={() => { clickSound(); setBylethStrikeSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
+          </div>
+        )}
+        {bylethStrikeSel && (
+        <div className="shrink-0 text-center mt-1.5 text-hard">
+          <span className="text-lg font-black text-echo-hp animate-pulse">🗡️ แตะเลือกเป้าหมายของ "ดาบต้องสาป"</span>
+          <button onClick={() => { clickSound(); setBylethStrikeSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
+        </div>
+      )}
+      {msMarkSel && (
           <div className="shrink-0 text-center mt-1.5 text-hard">
             <span className="text-lg font-black text-echo-hp animate-pulse">🩸 แตะเลือกเป้าหมาย Witch Mark</span>
             <button onClick={() => { clickSound(); setMsMarkSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
@@ -3349,6 +3531,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
                 <TakutoStarBadge me={me} ch={ch} />
                 <TakumiGearBadge me={me} ch={ch} />
                 <EijiDodgeBadge me={me} ch={ch} />
+                <BylethKnowledgePanel me={me} ch={ch} />
                 <span className="ml-auto flex items-center gap-1.5">
                   <span className="flex gap-1 p-1 rounded-lg bg-black/25">
                     {Array.from({ length: me.maxSkill }, (_, i) => (
@@ -3370,13 +3553,13 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
               {/* ช่องสกิล 3 อัน — ทรงพัด: ช่องกลาง (สกิลรอง) ยกสูงกว่าอีก 2 ช่อง */}
               <div className="grid grid-cols-3 gap-2 mt-3 items-end">
                 <div className="translate-y-1.5">
-                  <SkillSlot label="สกิลพื้นฐาน" tier="basic" skill={ch?.basic} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoHealPending || hakunoSecondaryPending || beatBasicLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || witchMarkCooldown || (me.skillUsed && !gambleRepeat && !isApple && !isBard && !isTohno && !isHakuno && !isDoomguy && !isKai && !isTakumi) || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || cassiusLocked || veilLocked || ktBasicLocked || (isHakuno && me.hakunoGenderSwitched) || doomBasicLocked || takutoBasicPending || tepeuCookLocked || tepeuPonderLocked || batStealthLocked || psBladeLocked} onUse={requestSkillUse} cooldown={witchMarkCd} ammo={isGambler ? me.gamblerUses : undefined} cost={isGambler && goldenOn ? halfCost(ch?.basic) : undefined} />
+                  <SkillSlot label="สกิลพื้นฐาน" tier="basic" skill={ch?.basic} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoHealPending || hakunoSecondaryPending || beatBasicLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || witchMarkCooldown || (me.skillUsed && !gambleRepeat && !isByleth && !isHaruka && !isApple && !isBard && !isTohno && !isHakuno && !isDoomguy && !isKai && !isTakumi) || harukaBasicLocked || bylethBasicLocked || bylethBudgetLocked || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || cassiusLocked || veilLocked || ktBasicLocked || (isHakuno && me.hakunoGenderSwitched) || doomBasicLocked || takutoBasicPending || tepeuCookLocked || tepeuPonderLocked || batStealthLocked || psBladeLocked} onUse={requestSkillUse} cooldown={witchMarkCd} ammo={isGambler ? me.gamblerUses : undefined} cost={isGambler && goldenOn ? halfCost(ch?.basic) : undefined} />
                 </div>
                 <div className="-translate-y-2">
-                  <SkillSlot label="สกิลรอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || (me.skillUsed && !isBard && !isDoomguy && !isKai && !isTakumi) || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked || batKarmaLocked || psSealLocked || burdenCooldown} onUse={requestSkillUse} cooldown={burdenCd} ammo={isApple ? me.appleGiveUses : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : undefined} />
+                  <SkillSlot label="สกิลรอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || (me.skillUsed && !isByleth && !isBard && !isDoomguy && !isKai && !isTakumi) || bylethSecLocked || bylethBudgetLocked || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked || batKarmaLocked || psSealLocked || harukaSecLocked || burdenCooldown} onUse={requestSkillUse} cooldown={burdenCd} ammo={isApple ? me.appleGiveUses : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : undefined} />
                 </div>
                 <div className="translate-y-1.5">
-                  {isBard ? <BardComposeSlot me={me} /> : isKai ? <KaiOverhaulSlot me={me} /> : <SkillSlot label="ท่าไม้ตาย" tier="ultimate" skill={ch?.ultimate} points={me.skillPoints} disabled={(done || phase !== "PLAYING" || noSkill || moonCellOn || beatMe || me.skillUsed || ultimateActive || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || takumiBudgetLocked || fourthLocked || doomUltLocked || takutoUltLockedNow || tepeuCookLocked || tepeuPonderLocked || offerLocked || ktUltLocked || shUltLocked || shCharging || rgCharging || phenexTaunting || hikaruUltLocked)} onUse={requestSkillUse} cost={undefined} />}
+                  {isBard ? <BardComposeSlot me={me} /> : isKai ? <KaiOverhaulSlot me={me} /> : <SkillSlot label="ท่าไม้ตาย" tier="ultimate" skill={ch?.ultimate} points={me.skillPoints} disabled={(done || phase !== "PLAYING" || noSkill || moonCellOn || beatMe || (me.skillUsed && !isByleth) || bylethUltLocked || bylethBudgetLocked || ultimateActive || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || takumiBudgetLocked || fourthLocked || doomUltLocked || takutoUltLockedNow || tepeuCookLocked || tepeuPonderLocked || offerLocked || ktUltLocked || shUltLocked || shCharging || rgCharging || phenexTaunting || hikaruUltLocked)} onUse={requestSkillUse} cost={undefined} />}
                 </div>
               </div>
               {noSkill && phase === "PLAYING" && !done && (
@@ -3516,6 +3699,9 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
         <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} timeLeft={state.timeLeft} flash={flash} notice={notice} cycleFx={cycleFx} overloadForce={state.overloadForce} />
         <FlyingCardsLayer flights={cardFlights} onDone={removeCardFlight} />
         {state.yunaFieldFx === "beatbark" && <div className="field-fx-beatbark" />}
+        {state.bylethFieldFx && <div className={`field-fx-byleth-${state.bylethFieldFx}`} />}
+        {bylethSwordOpen && me && <BylethSwordModal me={me} onPick={pickBylethSword} onClose={() => setBylethSwordOpen(false)} />}
+        {bylethCourseOpen && me && <BylethCourseModal me={me} onPick={pickBylethCourse} onClose={() => setBylethCourseOpen(false)} />}
 
         {/* ---------- แบนเนอร์รอบถัดไป ---------- */}
         {phase === "TRANSITION" && (
@@ -3798,6 +3984,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
                   <TakutoStarBadge me={me} ch={ch} />
                   <TakumiGearBadge me={me} ch={ch} />
                   <EijiDodgeBadge me={me} ch={ch} />
+                  <BylethKnowledgePanel me={me} ch={ch} />
                 </div>
                 {isHakuno && <HakunoCommandButton me={me} usable={hakunoCmdUsable} onOpen={() => setHakunoCmdOpen(true)} className="w-14 h-11 shrink-0 mt-1" />}
                 {isEiji && <EijiOrdinalButton me={me} usable={eijiOrdinalUsable} onPress={useEijiOrdinal} className="w-14 h-11 shrink-0 mt-1" />}
@@ -3908,13 +4095,13 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
               <div className="flex flex-col items-center gap-1.5">
                 <div className="flex items-end gap-2 sm:gap-3">
                   <div className="w-40 sm:w-48">
-                    <SkillSlot size="lg" label="พื้นฐาน" tier="basic" skill={ch?.basic} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoHealPending || hakunoSecondaryPending || beatBasicLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || witchMarkCooldown || (me.skillUsed && !gambleRepeat && !isApple && !isBard && !isTohno && !isHakuno && !isDoomguy && !isKai && !isTakumi) || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || cassiusLocked || veilLocked || ktBasicLocked || (isHakuno && me.hakunoGenderSwitched) || doomBasicLocked || takutoBasicPending || tepeuCookLocked || tepeuPonderLocked || batStealthLocked || psBladeLocked} onUse={requestSkillUse} cooldown={witchMarkCd} ammo={isGambler ? me.gamblerUses : undefined} cost={isGambler && goldenOn ? halfCost(ch?.basic) : undefined} />
+                    <SkillSlot size="lg" label="พื้นฐาน" tier="basic" skill={ch?.basic} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoHealPending || hakunoSecondaryPending || beatBasicLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || witchMarkCooldown || (me.skillUsed && !gambleRepeat && !isByleth && !isHaruka && !isApple && !isBard && !isTohno && !isHakuno && !isDoomguy && !isKai && !isTakumi) || harukaBasicLocked || bylethBasicLocked || bylethBudgetLocked || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || cassiusLocked || veilLocked || ktBasicLocked || (isHakuno && me.hakunoGenderSwitched) || doomBasicLocked || takutoBasicPending || tepeuCookLocked || tepeuPonderLocked || batStealthLocked || psBladeLocked} onUse={requestSkillUse} cooldown={witchMarkCd} ammo={isGambler ? me.gamblerUses : undefined} cost={isGambler && goldenOn ? halfCost(ch?.basic) : undefined} />
                   </div>
                   <div className="w-40 sm:w-48">
-                    <SkillSlot size="lg" label="รอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || (me.skillUsed && !isBard && !isDoomguy && !isKai && !isTakumi) || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked || batKarmaLocked || psSealLocked || burdenCooldown} onUse={requestSkillUse} cooldown={burdenCd} ammo={isApple ? me.appleGiveUses : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : undefined} />
+                    <SkillSlot size="lg" label="รอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || (me.skillUsed && !isByleth && !isBard && !isDoomguy && !isKai && !isTakumi) || bylethSecLocked || bylethBudgetLocked || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked || batKarmaLocked || psSealLocked || harukaSecLocked || burdenCooldown} onUse={requestSkillUse} cooldown={burdenCd} ammo={isApple ? me.appleGiveUses : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : undefined} />
                   </div>
                   <div className="w-40 sm:w-48">
-                    {isBard ? <BardComposeSlot me={me} /> : isKai ? <KaiOverhaulSlot me={me} /> : <SkillSlot size="lg" label="ท่าไม้ตาย" tier="ultimate" skill={ch?.ultimate} points={me.skillPoints} disabled={(done || phase !== "PLAYING" || noSkill || moonCellOn || beatMe || me.skillUsed || ultimateActive || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || takumiBudgetLocked || monsterMe || fourthLocked || doomUltLocked || takutoUltLockedNow || tepeuCookLocked || tepeuPonderLocked || offerLocked || ktUltLocked || shUltLocked || shCharging || rgCharging || phenexTaunting)} onUse={requestSkillUse} cost={undefined} />}
+                    {isBard ? <BardComposeSlot me={me} /> : isKai ? <KaiOverhaulSlot me={me} /> : <SkillSlot size="lg" label="ท่าไม้ตาย" tier="ultimate" skill={ch?.ultimate} points={me.skillPoints} disabled={(done || phase !== "PLAYING" || noSkill || moonCellOn || beatMe || (me.skillUsed && !isByleth) || bylethUltLocked || bylethBudgetLocked || ultimateActive || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || takumiBudgetLocked || monsterMe || fourthLocked || doomUltLocked || takutoUltLockedNow || tepeuCookLocked || tepeuPonderLocked || offerLocked || ktUltLocked || shUltLocked || shCharging || rgCharging || phenexTaunting)} onUse={requestSkillUse} cost={undefined} />}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -3996,6 +4183,9 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
       <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} timeLeft={state.timeLeft} flash={flash} notice={notice} cycleFx={cycleFx} overloadForce={state.overloadForce} />
       <FlyingCardsLayer flights={cardFlights} onDone={removeCardFlight} />
       {state.yunaFieldFx === "beatbark" && <div className="field-fx-beatbark" />}
+      {state.bylethFieldFx && <div className={`field-fx-byleth-${state.bylethFieldFx}`} />}
+      {bylethSwordOpen && me && <BylethSwordModal me={me} onPick={pickBylethSword} onClose={() => setBylethSwordOpen(false)} />}
+      {bylethCourseOpen && me && <BylethCourseModal me={me} onPick={pickBylethCourse} onClose={() => setBylethCourseOpen(false)} />}
 
       {/* ---------- แบนเนอร์รอบถัดไป ---------- */}
       {phase === "TRANSITION" && (

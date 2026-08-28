@@ -11,6 +11,7 @@
 //         fragile (เปราะบาง: ดาเมจที่ได้รับ +N) / sleep (หลับใหล) / stun (สตั้น)
 //         nodraw (ห้ามจั่ว) / noskill (ห้ามใช้สกิล) / nohealing (ไร้ทางเยียวยา: ฟื้นเลือดจริงไม่ได้)
 //         invert (ผกผัน: กลับด้านบัฟ/การฟื้นฟูทั้งหมด) / hburn (ลุกไหม้: ดาเมจ 1/เทิร์น สะสมได้ — ดู tickBurn)
+//         hbleed (เลือดไหล: ดาเมจ 1/เทิร์น สะสมได้ เหมือนลุกไหม้ + ทำให้การฟื้นพลังชีวิตเหลือครึ่ง — ดู tickBleed/bleedHealPenalty)
 //         chaa (สภาพชา: กดจั่วการ์ด 1 ครั้ง ได้ไพ่ 2 ใบ — จุดทำงานจริงอยู่ใน hit() ของ server.js)
 //  บัฟ (ต่อ): netramana (เนตรมณะ: โจมตีปกติมีโอกาสสังหารทันที NETRAMANA_KILL_CHANCE — ดู netramanaActive)
 //  จำนวน (amount) ของสถานะเก็บแยกใน p.statusAmt[key] — p.statuses[key] เก็บจำนวนเทิร์น/ครั้งตามเดิม
@@ -80,7 +81,7 @@ function coolReduction(p, isNormalAttack) {
 }
 
 // ดีบัฟพื้นฐานที่ "ต้านสถานะผิดปกติ" ล้างออกได้ทั้งหมด
-const BASIC_DEBUFF_CLEAR = ["discord", "sleep", "stun", "nodraw", "noskill", "weak", "fragile", "spellburden", "oblada", "hburn", "phenexBanUlt", "nanayaSeal", "miyakoSeal", "invert", "nohealing", "manaSeal", "chaa",
+const BASIC_DEBUFF_CLEAR = ["discord", "sleep", "stun", "nodraw", "noskill", "weak", "fragile", "spellburden", "oblada", "hburn", "hbleed", "phenexBanUlt", "nanayaSeal", "miyakoSeal", "invert", "nohealing", "manaSeal", "chaa",
   // ผู้สังหารเมจ: ตราล่าเวท/ดูดซับเวท ถูกลบล้างได้ด้วย "ต้านทานสถานะผิดปกติ"
   //  (mageslayerMarkedId ฝั่งผู้ร่ายถูก reconcile ให้เองที่ tickWitchMark ท้ายเทิร์น — ดู characters/mageslayer.js)
   "mageslayerMark", "manaLeech"];
@@ -153,6 +154,68 @@ function tickBurn(engine, p) {
   if (p.statuses.hburn <= 0) delete p.statuses.hburn;
 }
 
+// ---------- "เลือดไหล" (hbleed, สถานะ Universal patch 2.5) ----------
+//  กลไกหลักเหมือน "ลุกไหม้" ทุกอย่าง: ทำดาเมจ 1 หน่วยทุกต้นเทิร์น (ลดเกราะก่อน) แล้วลดจำนวนลง 1
+//  สะสมได้สูงสุด HBLEED_MAX · ต้านได้ด้วย "ต้านสถานะผิดปกติ" (อยู่ใน BASIC_DEBUFF_CLEAR) · ตัวละครไหนก็ติด/ให้ติดได้
+//  ต่างจากลุกไหม้ตรงผลข้างเคียง: ระหว่างที่ยังเลือดไหลอยู่ "การฟื้นพลังชีวิตเหลือครึ่งเดียว"
+//  (ยกเว้นการฟื้นทีละ 1 หน่วย ซึ่งไม่ถูกลด — ไม่งั้นการฟื้นรายเทิร์นของหลายตัวละครจะกลายเป็น 0 ไปเลย)
+//  ฮุคเฉพาะตัวละครแบบเดียวกับลุกไหม้: hbleedImmune(p) / hbleedHeals(p) / hbleedLabel(p) / hbleedHarmless(p)
+//   — hbleedHarmless คุมเฉพาะ "ผลข้างเคียงลดการฟื้นเลือด" (ฮารุกะไม่โดน) แยกจาก hbleedHeals ที่คุมจังหวะติก
+const HBLEED_MAX = 6;
+
+function bleedActive(p) {
+  return !!p && ((p.statuses && p.statuses.hbleed) || 0) > 0;
+}
+
+// ใส่ "เลือดไหล" n หน่วย (เพดาน HBLEED_MAX) — คืนจำนวนที่ติดเพิ่มจริง, 0 = โดนต้านสถานะกันไว้/เต็มเพดานแล้ว
+function applyBleed(p, n) {
+  if (!p || !(n > 0)) return 0;
+  if (resistActive(p)) return 0;
+  const before = (p.statuses.hbleed || 0);
+  p.statuses.hbleed = Math.min(HBLEED_MAX, before + n);
+  return p.statuses.hbleed - before;
+}
+
+// จำนวนที่ฟื้นพลังชีวิตได้จริงหลังโดน "เลือดไหล" หักครึ่ง — ผู้เรียกคือ healHp() ใน server.js
+//  amount <= 1 ไม่ลด · ปัดลง แต่ไม่ต่ำกว่า 1 (ฟื้น 2-3 -> 1)
+function bleedHealPenalty(engine, p, amount) {
+  if (!bleedActive(p) || amount <= 1) return amount;
+  const hooks = engine && engine.CHAR_HOOKS && engine.CHAR_HOOKS[p.characterId];
+  if (hooks && hooks.hbleedHarmless && hooks.hbleedHarmless(p)) return amount;
+  return Math.max(1, Math.floor(amount / 2));
+}
+
+// ติกต้นเทิร์นของ "เลือดไหล" — โครงเดียวกับ tickBurn ทุกประการ (ดูคอมเมนต์ด้านบนของ tickBurn)
+function tickBleed(engine, p) {
+  if (!p || !p.alive || !bleedActive(p)) return;
+  const hooks = engine.CHAR_HOOKS && engine.CHAR_HOOKS[p.characterId];
+  const immune = !!(hooks && hooks.hbleedImmune && hooks.hbleedImmune(p));
+  const heals = !!(hooks && hooks.hbleedHeals && hooks.hbleedHeals(p));
+  const label = (hooks && hooks.hbleedLabel && hooks.hbleedLabel(p)) || "เลือดไหล";
+  if (immune) {
+    engine.log(`🩸 ${p.name} ${label} — ไม่รับความเสียหาย (เหลืออีก ${p.statuses.hbleed - 1} หน่วย)`);
+  } else if (heals) {
+    // ฮารุกะ (สกิลติดตัว อมาซอน): เลือดไหลไม่ทำร้ายเธอ กลับกลายเป็นการฟื้นพลังชีวิตแทน
+    const heal = engine.healHp(p, 1);
+    engine.log(`❤️‍🩹 ${p.name} ${label} — เลือดไหลกลายเป็นการฟื้นฟู ฟื้นพลังชีวิต +${heal} (เหลืออีก ${p.statuses.hbleed - 1} หน่วย)`);
+  } else {
+    p._statusDamage = true;   // ดาเมจจากสถานะ ไม่ใช่จากสกิล/การโจมตี (ดูคอมเมนต์ใน tickBurn)
+    engine.dealMixed(p, 1);   // เลือดไหล: ลดเกราะก่อน ถ้าไม่มีเกราะจึงเข้าเลือดจริง
+    p._statusDamage = false;
+    engine.log(`🩸 ${p.name} เลือดไหล — เสียหาย -1 (ลดเกราะก่อน) (เหลืออีก ${p.statuses.hbleed - 1} หน่วย)`);
+    engine.maybeBeatSave(p);
+    engine.maybeBeatMode(p);
+    engine.maybeEva3(p);
+    engine.maybeWakeKotone(p);
+    if (p.alive && p.hp <= 0) {
+      engine.instantDeath(p);
+      if (!p.alive) engine.log(`💀 ${p.name} เลือดจริงหมด ตกรอบ!`);
+    }
+  }
+  p.statuses.hbleed = Math.max(0, p.statuses.hbleed - 1);
+  if (p.statuses.hbleed <= 0) delete p.statuses.hbleed;
+}
+
 // "เนตรมณะ" (netramana, สถานะ Universal patch 2.2.7 — เจ้าหญิงราก "ทุกอย่างจะต้องราบรื่น"):
 //  ผู้ที่ติดบัฟนี้ โจมตีปกติแล้วมีโอกาสสังหารเป้าหมายทันที 20% — ตัวละครไหนก็ติด/ให้ติดได้
 //  จุดโรลจริงอยู่ใน doAttack() ของ server.js (ต้องใช้ cutscene/lastAttack/เฟสโจมตี จึงเป็น pure predicate ที่นี่)
@@ -207,7 +270,7 @@ function tickEvadeStacks(engine, p) {
 //  ใช้ร่วมกับแฝดที่ "พักอยู่" ของฮิซาคาว่า (characters/hisakawa_sister.js) เพื่อให้กติกาการนับเวลา
 //  ของแฝดสองคนตรงกัน — เดิมฝั่งที่พักลดเทิร์นทุก key ทำให้มาร์กถาวรสลายไปเองระหว่างพัก
 const NO_TICK_STATUS = new Set([
-  "dawn", "chill", "hburn", "melody", "star", "emeraude", "saphir", "lance", "takutoThirdAtk",
+  "dawn", "chill", "hburn", "hbleed", "melody", "star", "emeraude", "saphir", "lance", "takutoThirdAtk",
   "doomCrucible", "doomDrain", "doomExplode", "doomLockon", "fortune", "linked", "rsHopper",
   "cassius", "yaak", "spear", "ohger", "evade", "empower", "miyakoHeal", "miyakoCombo", "miyakoUlt",
   "hakunoInvertReady", "hakunoNoRegenReady", "kotoneLove", "kotoneReady", "kready", "deathline", "tepeuCook", "tepeuPonder",
@@ -234,6 +297,11 @@ module.exports = {
   noHealActive,
   invertActive,
   tickBurn,
+  HBLEED_MAX,
+  bleedActive,
+  applyBleed,
+  bleedHealPenalty,
+  tickBleed,
   NETRAMANA_KILL_CHANCE,
   netramanaActive,
   EVADE_STACK_MAX,

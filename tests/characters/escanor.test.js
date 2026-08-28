@@ -404,21 +404,47 @@ test('a pending secondary cannot be bought again before Escanor attacks', () => 
   }
 });
 
-test('Rhitta applies two burn without attack damage bonus and Noon forces two burn ticks', () => {
-  const p = mkPlayer({ escanorCharge: 6, statuses: { escanorNoon: 999 }, statusAmt: { escanorNoon: 1 } });
+test('Rhitta forces two existing burn stacks and never adds burn or attack damage', () => {
+  const p = mkPlayer({ statuses: { escanorMorning: 999 }, statusAmt: { escanorMorning: 1 } });
   const target = mkTarget('p2', { hp: 8 });
+  target.statuses.hburn = 3;
   const engine = mkEngine({ p1: p, p2: target });
+
   escanor.applySkill(engine, p, 'ultimate', []);
-  assert.equal(escanor.adjustOutgoingDamage(engine, p, target, 1), 2, 'only Noon passive adds attack damage');
+  assert.equal(p.statuses.escanorRhitta, 999);
+  assert.equal(p.statuses.escanorRhittaNoon || 0, 0, 'ร่าง Morning ไม่ได้ผลเสริมของ Noon');
+  assert.equal(escanor.adjustOutgoingDamage(engine, p, target, 1), 2, 'Rhitta ไม่บวกพลังโจมตี — +1 มาจากร่าง Morning');
+
   assert.equal(escanor.onAttackLanded(engine, p, target), true);
-  assert.equal(target.statuses.hburn, 1, 'three burn are applied, then two stacks trigger immediately');
+  assert.equal(target.statuses.hburn, 2, 'ลุกไหม้เดิม 3 -> ตี +1 จากร่าง Morning = 4 แล้วถูกบังคับทำงาน 2 หน่วย');
   assert.equal(target.hp, 6);
   assert.deepEqual(engine.cutscenes, ['escanorUltimate1']);
 });
 
+test('Noon Rhitta also damages every other player for one', () => {
+  const p = mkPlayer({ escanorCharge: 6, statuses: { escanorNoon: 999 }, statusAmt: { escanorNoon: 1 } });
+  const target = mkTarget('p2', { hp: 8 });
+  const other1 = mkTarget('p3');
+  const other2 = mkTarget('p4');
+  const engine = mkEngine({ p1: p, p2: target, p3: other1, p4: other2 });
+
+  escanor.applySkill(engine, p, 'ultimate', []);
+  assert.equal(p.statuses.escanorRhitta, 999);
+  assert.equal(p.statuses.escanorRhittaNoon, 999);
+
+  escanor.onAttackLanded(engine, p, target);
+  assert.equal(other1.hp, 2);
+  assert.equal(other2.hp, 2);
+  assert.equal(p.hp, 7, 'เอสคานอร์ไม่โดนความเสียหายของตัวเอง');
+  assert.equal(p.statuses.escanorRhitta || 0, 0);
+  assert.equal(p.statuses.escanorRhittaNoon || 0, 0);
+  assert.ok(engine.damageCalls.every((c) => c.isNormalAttack === false));
+});
+
 test('forced burn ticks resolve lethal damage immediately', () => {
-  const p = mkPlayer({ escanorCharge: 6, statuses: { escanorNoon: 999, escanorRhitta: 999, escanorRhittaNoon: 999 } });
+  const p = mkPlayer({ escanorCharge: 6, statuses: { escanorNoon: 999, escanorRhitta: 999 } });
   const target = mkTarget('p2', { hp: 2 });
+  target.statuses.hburn = 2; // ต้องมีลุกไหม้ติดอยู่ก่อน Rhitta ถึงจะบังคับให้ทำงานได้
   const engine = mkEngine({ p1: p, p2: target });
   escanor.onAttackLanded(engine, p, target);
   assert.equal(target.alive, false);
@@ -426,8 +452,8 @@ test('forced burn ticks resolve lethal damage immediately', () => {
 });
 
 test('remaining forced burn ticks stop damaging after the target revives into Last Stand', () => {
-  const attacker = mkPlayer({ id: 'p1', escanorCharge: 6, statuses: { escanorNoon: 999, escanorRhitta: 999, escanorRhittaNoon: 999 } });
-  const target = mkPlayer({ id: 'p2', hp: 1, armor: 0, escanorCharge: 3, statuses: { escanorNoon: 999 } });
+  const attacker = mkPlayer({ id: 'p1', escanorCharge: 6, statuses: { escanorNoon: 999, escanorRhitta: 999 } });
+  const target = mkPlayer({ id: 'p2', hp: 1, armor: 0, escanorCharge: 3, statuses: { escanorNoon: 999, hburn: 3 } });
   const engine = mkEngine({ p1: attacker, p2: target });
   escanor.onAttackLanded(engine, attacker, target);
   assert.equal(escanor.formOf(target), 'last');

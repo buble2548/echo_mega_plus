@@ -63,6 +63,8 @@ const FILES = {
   kaiVoice5: "/characters/kai/voice/kai_voice5.m4a",
   // ผู้สังหารเมจ: เสียงโจมตีปกติเฉพาะตัว / เสียงหลัง Mana Rupture / เพลงระหว่างมี Mana Burden (spellburden) ติดตัวเอง
   mageslayer_attack: "/characters/mageslayer/BA.mp3",
+  // มิซึซาว่า ฮารุกะ: เสียงโจมตีปกติระหว่างสถานะ "โอเมก้า" (ท่าไม้ตาย New Omega)
+  haruka_attack: "/characters/haruka/hit_haruka.mp3",
   mageslayer_skill2: "/characters/mageslayer/SFX_Skill_2.mp3",
   mageslayer_ult: "/characters/mageslayer/BGM_Ult.mp3",
   // เสียงอาวุธ DoomGuy (patch 2.2 full): เสียงโจมตี/เสียงใช้สกิลรอง Weapon แยกตามอาวุธที่ถืออยู่
@@ -103,6 +105,15 @@ const FILES = {
   hisakawa_hayate_3: "/characters/hisakawa_sister/voice/hayate_voice3.m4a",
   // เอจิ (patch 2.4 new): ท่าไม้ตาย ไม่ว่ายังก็ตาม — ไฟล์แรกของลำดับเพลง (ดู MUSIC_SEQUENCES ด้านล่าง)
   eiji_ult: "/characters/eiji/skill3/eiji_skill3_connect.m4a",
+  // อาจารย์ ไบเลธ (patch 2.6 new): เพลงประจำ 3 หลักสูตร แยกไฟล์กลางวัน/กลางคืน
+  //  สลับช่วงเวลาแล้วเพลงอีกไฟล์ต้องเล่น "ต่อจากตำแหน่งเดิม" ไม่เริ่มใหม่ (ดู MUSIC_POSITION_GROUPS)
+  byleth_normal_day: "/characters/byleth/normal/day_normal.mp3",
+  byleth_normal_night: "/characters/byleth/normal/night_normal.mp3",
+  byleth_ex_day: "/characters/byleth/ex/day_ex.mp3",
+  byleth_ex_night: "/characters/byleth/ex/night_ex.mp3",
+  byleth_end_day: "/characters/byleth/end/day_end.mp3",
+  byleth_end_night: "/characters/byleth/end/night_end.mp3",
+  byleth_hit: "/characters/byleth/hit_sound.mp3", // เสียงโจมตีของ "ดาบต้องสาป"
   action_button: "/effect_sound/action_button.wav",
   trun_change: "/effect_sound/trun_change.wav",
   attack: "/effect_sound/attack.wav",
@@ -120,6 +131,15 @@ const MUSIC_SEQUENCES = {
     "/characters/eiji/skill3/eiji_skill3_connect.m4a",
     "/characters/yuna/Break Beat Bark!.mp3",
   ],
+};
+
+// เพลงที่อยู่กลุ่มเดียวกัน = สลับไฟล์กันแล้ว "เล่นต่อจากตำแหน่งเดิม" ไม่เริ่มนับหนึ่งใหม่
+//  ใช้กับหลักสูตรของไบเลธ: ไฟล์กลางวัน/กลางคืนของแต่ละหลักสูตรเป็นเพลงเดียวกันคนละเวอร์ชัน
+//  พอถึงเวลาสลับช่วงเวลา (หรือสลับหลักสูตร) เพลงใหม่จะเริ่มที่วินาทีเดียวกับที่เพลงเก่าเล่นค้างไว้
+const MUSIC_POSITION_GROUPS = {
+  byleth_normal_day: "byleth", byleth_normal_night: "byleth",
+  byleth_ex_day: "byleth", byleth_ex_night: "byleth",
+  byleth_end_day: "byleth", byleth_end_night: "byleth",
 };
 
 // ระดับเสียงพื้นฐานต่อชนิด (ก่อนคูณ master) — บาลานซ์ให้ดังใกล้เคียงกัน
@@ -191,6 +211,13 @@ function getMusic(name) {
 export function playMusic(name, seq) {
   if (!FILES[name]) return;
   const a = getMusic(name);
+  // สลับเพลงภายในกลุ่มเดียวกัน (กลางวัน <-> กลางคืนของหลักสูตรไบเลธ): จำตำแหน่งเพลงเดิมไว้เล่นต่อ
+  const group = MUSIC_POSITION_GROUPS[name];
+  let carryPos = null;
+  if (group && currentMusic && currentMusic !== name && MUSIC_POSITION_GROUPS[currentMusic] === group) {
+    const prev = getMusic(currentMusic);
+    carryPos = prev.currentTime || 0;
+  }
   // seq เดิมของเพลงนี้ (จำข้ามการพัก/สลับเพลง) — เปลี่ยนเมื่อไหร่ค่อยเริ่มเพลงใหม่จากต้น
   const isNewSeq = seq != null && seq !== musicSeq[name];
   if (isNewSeq) {
@@ -202,6 +229,11 @@ export function playMusic(name, seq) {
       a._echoSequenceStage = 0;
     }
     a.currentTime = 0; // การเปิดร่างครั้งใหม่ (กดใหม่/โดนคนอื่นทับ) -> เริ่มจากต้น
+  }
+  if (carryPos != null) {
+    // เพลงใหม่อาจสั้นกว่าเพลงเดิม -> วนตำแหน่งด้วย modulo (ยังไม่รู้ความยาว = ใส่ตรงๆ แล้วปล่อยให้เบราว์เซอร์ clamp)
+    const dur = a.duration;
+    try { a.currentTime = dur && isFinite(dur) && dur > 0 ? carryPos % dur : carryPos; } catch { /* metadata ยังไม่มา */ }
   }
   if (currentMusic === name) {
     if (isNewSeq || a.paused) a.play().catch(() => {}); // ไม่ใช่ seq ใหม่ = เล่นต่อจากตำแหน่งเดิม

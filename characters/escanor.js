@@ -355,8 +355,13 @@ function onAttackLanded(engine, attacker, target) {
   if (attacker.statuses?.escanorFlare > 0) { addBurn(engine, target, 1, "เพลิงปะทุ"); clearStatus(attacker, "escanorFlare"); }
   if (attacker.statuses?.escanorFlareNoon > 0) { addBurn(engine, target, 2, "เพลิงปะทุ Noon"); engine.applyDebuff(target, "nohealing", 2, 1); clearStatus(attacker, "escanorFlareNoon"); }
   if (attacker.statuses?.escanorPunch > 0) { addBurn(engine, target, 2, "หมัดเพลิงสุริยัน"); clearStatus(attacker, "escanorPunch"); }
-  if (attacker.statuses?.escanorRhitta > 0) { addBurn(engine, target, 2, "Divin Axe Rhitta"); clearStatus(attacker, "escanorRhitta"); }
-  if (attacker.statuses?.escanorRhittaNoon > 0) { forceBurnTicks(engine, target, 2); clearStatus(attacker, "escanorRhittaNoon"); }
+  // Divin Axe Rhitta: บังคับลุกไหม้ 2 หน่วยที่ "ติดอยู่แล้ว" บนเป้าหมายให้ทำงานทันทีในเทิร์นนั้น (ไม่ใส่ลุกไหม้เพิ่ม)
+  if (attacker.statuses?.escanorRhitta > 0) { forceBurnTicks(engine, target, 2); clearStatus(attacker, "escanorRhitta"); }
+  // ร่าง Noon เพิ่มเติม: การโจมตีครั้งนั้นสร้างความเสียหายใส่ผู้เล่นคนอื่นคนละ 1 หน่วย (เว้นเป้าหมายที่ถูกโจมตี)
+  if (attacker.statuses?.escanorRhittaNoon > 0) {
+    for (const o of enemies(engine, attacker)) if (o.id !== target.id) dealSkillDamage(engine, o, 1);
+    clearStatus(attacker, "escanorRhittaNoon");
+  }
   if (attacker.statuses?.escanorSun > 0) {
     for (const o of enemies(engine, attacker)) if (o.id !== target.id) dealSkillDamage(engine, o, 1);
     forceBurnTicks(engine, target, target.statuses?.hburn || 0);

@@ -39,6 +39,11 @@ const {
   noHealActive,
   invertActive,
   tickBurn,
+  HBLEED_MAX,
+  bleedActive,
+  applyBleed,
+  bleedHealPenalty,
+  tickBleed,
   EVADE_STACK_MAX,
   EVADE_STACK_TURNS,
   grantEvadeStack,
@@ -398,6 +403,9 @@ function healHp(p, amount) {
     return 0;
   }
   if (noHealActive(p)) return 0;
+  // เลือดไหล (hbleed, สถานะ Universal patch 2.5): การฟื้นพลังชีวิตเหลือครึ่งเดียว
+  //  (ฟื้นทีละ 1 หน่วยไม่ถูกลด · ฮารุกะไม่โดนผลนี้ — ตรรกะเต็มอยู่ characters/_universal_status.js)
+  amount = bleedHealPenalty(engine, p, amount);
   const heal = Math.min(maxHpOf(p) - p.hp, amount);
   if (heal > 0) { p.hp += heal; hisakawaSyncOut(p); }
   if (heal > 0 && !linkMirror) {
@@ -653,7 +661,8 @@ const SHIKI_CANCELABLE_ULTS = ["gingastrium", "rachan", "paradise", "golden", "f
   "riddhentd", "riddheguard", // patch 2.0.9: ท่าไม้ตายริดดี้ มาร์เซนาส ทั้งสองท่า
   "phenexNtd", "phenexTaunt", // patch 2.1.6: ท่าไม้ตายริต้า เบอร์นัล ทั้งสองท่า
   "batTaunt",                 // patch 2.2.7: เข้ามาเลย (แบทแมน)
-  "pshikiUlt"];               // patch 2.2.7: ทุกอย่างจะต้องราบรื่น (เจ้าหญิงราก)
+  "pshikiUlt",                // patch 2.2.7: ทุกอย่างจะต้องราบรื่น (เจ้าหญิงราก)
+  "harukaOmega"];             // patch 2.5: New Omega (มิซึซาว่า ฮารุกะ) — สถานะล้วน ลบทิ้งได้ตรงๆ ไม่มี mirror ต้องเก็บกวาด
 // ชื่อท่าไม้ตายจาก status (ใช้ตอนยกเลิกย้อนหลัง — บางท่าไม่มีใน TRANSFORMS/ข้อมูลสกิล)
 function shikiUltNameOf(p, key) {
   if (key === "shradecharge") return "แด่เพื่อนรักของฉัน";
@@ -1181,6 +1190,8 @@ function applySpecialCardEffect(p, card) {
 }
 // เรียกทุกครั้งที่มีการ์ดถูกเพิ่มเข้ามือ (แจกเริ่มรอบ / hit / บังคับจั่ว) เพื่อเช็คทริกเกอร์ที่ทำงานทันที
 function onCardDrawn(p, card) {
+  // อาจารย์ ไบเลธ (characters/byleth.js): ผล "ศึกษาเพิ่ม"/"พักผ่อน" ที่รอไพ่ใบถัดไปอยู่ — ทำงานก่อนทริกเกอร์อื่น
+  if (p.characterId === "byleth") CHAR_HOOKS.byleth.onCardDraw(engine, p, card);
   checkBlueTrigger(p);
   applySpecialCardEffect(p, card);
   applyOverloadOverdrawPenalty(p);
@@ -1463,6 +1474,8 @@ function instantDeath(p) {
   // Ultraman Trigger: ตายในร่างพิเศษถือว่าตายจริง ไม่คืนร่างแทน
   // ริต้า เบอร์นัล (สกิลติดตัว 1 patch 2.1.6, characters/phenex.js): ตายครั้งแรก -> เกิดใหม่แทนที่จะตกรอบ (ครั้งเดียวต่อเกม)
   if (p.characterId === "phenex" && CHAR_HOOKS.phenex.tryRebirth(engine, p)) return;
+  // อาจารย์ ไบเลธ (สกิลติดตัว 2 sothis, characters/byleth.js): ตายครั้งแรก -> ย้อนเวลากลับมาด้วยเลือด 1 เกราะ 0 (ครั้งเดียวต่อเกม)
+  if (p.characterId === "byleth" && CHAR_HOOKS.byleth.tryRevive(engine, p)) return;
   // ริต้า เบอร์นัล (สกิลติดตัว 2 patch 2.1.7, characters/phenex.js): ตกรอบจริงขณะท่าไม้ตาย 2 ยังทำงานอยู่ -> ปลดปล่อยความเจ็บปวดที่สะสมทั้งหมดก่อนตาย
   if (p.characterId === "phenex") CHAR_HOOKS.phenex.maybeReleasePainOnDeath(engine, p);
   p.hp = 0; p.alive = false; p.result = "dead"; p.locked = true;
@@ -1551,6 +1564,8 @@ function displayImg(p) {
   if (p.characterId === "kotone") { const kimg = CHAR_HOOKS.kotone.displayImg(p); if (kimg) return kimg; }
   // เอจิ: ระหว่างท่าไม้ตาย ไม่ว่ายังก็ตาม ทำงาน = ภาพ eiji_change.jpg (null = ใช้ภาพปกติ)
   if (p.characterId === "eiji") { const eimg = CHAR_HOOKS.eiji.displayImg(p); if (eimg) return eimg; }
+  // ฮารุกะ: ระหว่างสถานะ "โอเมก้า" จากท่าไม้ตาย New Omega = ภาพ new_omega.jpg (null = ใช้ภาพปกติ)
+  if (p.characterId === "haruka") { const himg = CHAR_HOOKS.haruka.displayImg(p); if (himg) return himg; }
   // โอเบรอน: ร่างสลับตามช่วงเวลากลางวัน/กลางคืนเสมอ
   if (p.characterId === "oberon") return isNightRound(roundNumber) ? OBERON_NIGHT_IMG : OBERON_MORNING_IMG;
   // ชเรด เอลัน: รวมร่างทำนองเพลงแล้ว = ร่างอควาเรียน สปาด้า ถาวร
@@ -1668,6 +1683,10 @@ function activeSkillMusic() {
     }
   }
   if (bestBard) return bestBard;
+  // อาจารย์ ไบเลธ (characters/byleth.js): เพลงประจำหลักสูตรที่เปิดค้างอยู่ — สลับไฟล์ตามกลางวัน/กลางคืน
+  //  (ฝั่ง client เล่นไฟล์ใหม่ต่อจากตำแหน่งเดิมผ่าน MUSIC_POSITION_GROUPS จึงไม่มีรอยสะดุดตอนสลับช่วงเวลา)
+  const bestByleth = CHAR_HOOKS.byleth.activeMusic(engine, isNightRound(roundNumber));
+  if (bestByleth) return bestByleth;
   // เข้ามาเลย (แบทแมน patch 2.2.7): เพลง bat_ben_theme เล่นค้างตลอดที่ล่อเป้าอยู่
   let bestBat = null;
   for (const p of alivePlayers()) {
@@ -1841,6 +1860,9 @@ function loseArmor(p) {
 function damageSoft(p) {
   hisakawaSyncIn(p);
   if (!p.alive || sealActive(p) || friendlyEffectBlocked(p)) return;
+  // อมาซอน (ฮารุกะ, characters/haruka.js): ไม่มีเกราะแล้วโดนดาเมจ = เลือดไหลตัวเอง — damageSoft ไม่ผ่าน
+  //  adjustIncomingDamage() จึงต้องเรียกฮุคเองที่นี่ ไม่งั้นดาเมจแพ้จั่วจะไม่นับเป็น "ความเสียหายทางใดก็ตาม"
+  if (p.characterId === "haruka") CHAR_HOOKS.haruka.onDamaged(engine, p);
   if (p.shield > 0) { p.shield--; hisakawaSyncOut(p); return; }
   if (p.armor > 0) loseArmor(p);
   else loseHp(p);
@@ -2107,6 +2129,8 @@ function resetCombat(p) {
   p.senaNext = false;       // โดนท่านประธานเซนะจังเจอตัว -> เทิร์นถัดไปสตั้น 1 เทิร์น
   p.kotoneExtraAtk = false; // Self-affirmation Explosion! Love Love: รอ postAttackFollowup อ่านเพื่อโจมตีเพิ่มอีก 1 ครั้ง
   // ---------- เอจิ (patch 2.4 new) ----------
+  CHAR_HOOKS.byleth.resetCombat(p); // ความรู้/หลักสูตร/ผลทบทวนบทเรียนที่ค้าง + ธงสตั้น-ห้ามสกิลพื้นฐานที่หลักสูตรของไบเลธตั้งไว้ให้คนอื่น
+  CHAR_HOOKS.haruka.resetCombat(p); // harukaBasicUses / harukaBleedProcs (โควตารายเทิร์น) + harukaStunPending (สตั้นค้างจากการสวนกลับ)
   CHAR_HOOKS.eiji.resetCombat(p); // eijiOrdinal (สแตค Ordinal Scale ของเทิร์นนี้) + eijiDodgeUsedRound (โควตาหลบ 1 ครั้ง/เทิร์น)
   // ---------- เจ้าแห่งเน็ตบ้าน (patch 1.9) ----------
   p.contractPartner = null; // เจ้าแห่งเน็ตบ้าน: id คู่สัญญาปัจจุบัน (มีได้ 1 คน)
@@ -2363,6 +2387,11 @@ function buildStateFor(viewerId) {
     winnerId: (gameState === "SUMMARY" || gameState === "ATTACK") ? roundWinnerId : null,
     skillMusic: sm ? sm.music : null,
     skillMusicSeq: sm ? sm.at : 0, // เปลี่ยน = การเปิดร่างครั้งใหม่ -> client เริ่มเพลงใหม่
+    // อาจารย์ ไบเลธ: ออร่าขอบจอตามหลักสูตรที่เปิดอยู่ (normal/ex/end — คนละสีกัน) เกตเดียวกับผลจริงของหลักสูตร
+    bylethFieldFx: (() => {
+      const owner = Object.values(players).find((o) => o.alive && o.characterId === "byleth" && o.bylethCourse && !passiveSealed(o));
+      return owner ? owner.bylethCourse : null;
+    })(),
     yunaFieldFx: yunaBeatBarkActive() ? "beatbark" : null, // Break Beat Bark!: ออร่าขอบจอแดงทั้งสนาม (เกตเดียวกับผลจริง)
     cutscene: gameState === "CUTSCENE" ? cutsceneInfo : null,
     attack: gameState === "ATTACKING" ? lastAttack : null,
@@ -2474,12 +2503,14 @@ function buildStateFor(viewerId) {
       // กลางคืน (patch 2.1.7): สุ่มแล้วให้สกิลพื้นฐานหรือสกิลรอง (อย่างใดอย่างหนึ่ง) ใช้แต้มมากขึ้น +1 — ไม่มีผลกับท่าไม้ตาย
       //  ซ้อนกับกระแสเวท/ภาระเวทได้ แต่ตัวปรับขาขึ้นรวมกันแล้วต้องไม่ดันราคาเกิน SKILL_COST_MAX
       //  (สกิลที่ค่าใช้พลังงานถึงเพดานอยู่แล้วจะไม่แพงขึ้นไปอีก — ต้องตรงกับ useSkill() เป๊ะ)
+      //  อาจารย์ ไบเลธ หลักสูตร "จบการศึกษา": สกิลรอง/ท่าไม้ตายถูกลง 1 แต้ม — หักก่อนกระแสเวทเหมือนใน useSkill()
       const showCost = (pub, tierName) => Math.min(
         SKILL_COST_MAX,
-        Math.max(0, pub.cost - spellflowAmt) + spellburdenAmt + (p.nightTaxTier === tierName ? 1 : 0),
+        Math.max(0, Math.max(0, pub.cost - CHAR_HOOKS.byleth.costDiscount(engine, tierName)) - spellflowAmt) + spellburdenAmt + (p.nightTaxTier === tierName ? 1 : 0),
       );
       if (basicPub) basicPub.cost = showCost(basicPub, "basic");
       if (secondaryPub) secondaryPub.cost = showCost(secondaryPub, "secondary");
+      if (ultimatePub) ultimatePub.cost = showCost(ultimatePub, "ultimate");
       return {
         id: p.id,
         isBoss: isYuuki(p),
@@ -2543,6 +2574,18 @@ function buildStateFor(viewerId) {
         eijiOrdinal: p.characterId === "eiji" ? CHAR_HOOKS.eiji.ordinalStacks(p) : undefined,    // สแตค Ordinal Scale ที่กดไปแล้ว
         eijiOrdinalMax: p.characterId === "eiji" ? CHAR_HOOKS.eiji.ORDINAL_MAX : undefined,
         eijiDodgeUsed: p.characterId === "eiji" ? !!p.eijiDodgeUsedRound : undefined,            // ใช้โควตาหลบของเทิร์นนี้ไปแล้วหรือยัง
+        // ---------- มิซึซาว่า ฮารุกะ (patch 2.5 new): โควตาสกิลพื้นฐาน 2 ครั้ง/เทิร์น (UI ใช้ปิดปุ่มเมื่อครบ) ----------
+        // ---------- อาจารย์ ไบเลธ (patch 2.6 new): UI แต้มความรู้ + สถานะหลักสูตร (ทุกคนเห็นได้ เพราะหลักสูตรมีผลทั้งสนาม) ----------
+        bylethKnowledge: p.characterId === "byleth" ? CHAR_HOOKS.byleth.knowledgeOf(p) : undefined,
+        bylethKnowledgeMax: p.characterId === "byleth" ? CHAR_HOOKS.byleth.KNOWLEDGE_MAX : undefined,
+        bylethCourse: p.characterId === "byleth" ? (p.bylethCourse || null) : undefined,          // หลักสูตรที่เปิดค้างอยู่
+        bylethNextDraw: p.characterId === "byleth" ? (p.bylethNextDraw || null) : undefined,      // ผลทบทวนบทเรียนที่รอไพ่ใบถัดไป
+        bylethSkillUses: p.characterId === "byleth" ? (p.bylethSkillUsesRound || 0) : undefined,  // ภูมิปัญญา: กดสกิลไปแล้วกี่ครั้งในเทิร์นนี้
+        bylethSkillMax: p.characterId === "byleth" ? CHAR_HOOKS.byleth.SKILL_USES_PER_TURN : undefined,
+        bylethStrikeUsed: p.characterId === "byleth" ? !!p.bylethStrikeUses : undefined,          // ดาบต้องสาป (ฟาดทันที) ใช้โควตาเทิร์นนี้ไปแล้วหรือยัง
+        bylethRevived: p.characterId === "byleth" ? !!p.bylethRevived : undefined,                // sothis: ใช้ฟื้นคืนชีพไปแล้วหรือยัง
+        harukaBasicUses: p.characterId === "haruka" ? (p.harukaBasicUses || 0) : undefined,
+        harukaBasicMax: p.characterId === "haruka" ? CHAR_HOOKS.haruka.BASIC_USES_PER_TURN : undefined,
         shradeForm: !!p.shradeForm,        // ชเรด เอลัน: รวมร่างทำนองเพลงแล้ว (อควาเรียน สปาด้า — ถาวร)
         bardNotes: p.bardNotes || [],      // Bard: โน้ตในช่องประพันธ์เพลง (ทุกคนเห็นได้)
         bardNotesUsed: p.bardNotesUsed || 0, // Bard: โน้ตที่เติมไปแล้วเทิร์นนี้ (จำกัด 2)
@@ -3164,6 +3207,8 @@ function dealRound() {
 
     // ---------- ลุกไหม้ (hburn, สถานะ Universal): ดาเมจ 1/เทิร์น สะสมสูงสุด 6 — ย้าย body ไป characters/_universal_status.js แล้ว ----------
     tickBurn(engine, p);
+    // ---------- เลือดไหล (hbleed, สถานะ Universal patch 2.5): ดาเมจ 1/เทิร์น สะสมสูงสุด 6 (ฮารุกะฟื้นเลือดแทน) ----------
+    tickBleed(engine, p);
     // ---------- [โดนดูด] (doomDrain, Plasma Rifle — DoomGuy): ดาเมจ 1/เทิร์น 3 เทิร์น เจาะเกราะก่อน ----------
     CHAR_HOOKS.doomguy.tickDrain(engine, p);
     // ---------- บานาจ (patch 2.1.2, characters/banagher.js): Full Assault — ตีหมู่ทุกคนต่อเนื่องทุกต้นเทิร์นที่ผลยังอยู่ ----------
@@ -3208,6 +3253,20 @@ function dealRound() {
     CHAR_HOOKS.kotone.onRoundStartTick(engine, p);
     // ---------- เอจิ (characters/eiji.js): รีเซ็ตโควตาหลบหลีก/Ordinal Scale + ฟื้นเลือดจากความเร็วสูง ----------
     if (p.characterId === "eiji") CHAR_HOOKS.eiji.onRoundStartTick(engine, p);
+    // ---------- มิซึซาว่า ฮารุกะ (characters/haruka.js): รีเซ็ตโควตาสกิลพื้นฐาน 2 ครั้ง + โควตาเลือดไหลของสกิลติดตัว ----------
+    if (p.characterId === "haruka") CHAR_HOOKS.haruka.onRoundStartTick(engine, p);
+    // ---------- อาจารย์ ไบเลธ (characters/byleth.js): รีเซ็ตโควตาสกิล 5 ครั้ง + หลักสูตรกินความรู้เทิร์นละ 1 ----------
+    if (p.characterId === "byleth") CHAR_HOOKS.byleth.onRoundStartTick(engine, p);
+    // สตั้น/ห้ามใช้สกิลพื้นฐาน ที่หลักสูตรของไบเลธตั้งไว้เมื่อเทิร์นก่อน -> เริ่มมีผลตอนนี้
+    //  ต้องอยู่ "ก่อน" บล็อกเช็คสตั้นด้านล่าง (เหตุผลเดียวกับ Gargorgon Ray) ไม่งั้นสตั้นจะเลื่อนไปอีกเทิร์น
+    CHAR_HOOKS.byleth.applyPendingFromCourses(engine, p);
+    // อมาซอน (ฮารุกะ สกิลติดตัว): โดนสวนกลับเมื่อเทิร์นก่อน -> สตั้นเริ่มมีผลตอนนี้
+    //  ต้องอยู่ "ก่อน" บล็อกเช็คสตั้นด้านล่างเหมือน Gargorgon Ray ไม่งั้นสตั้นจะเลื่อนไปอีกเทิร์นหนึ่ง
+    if (p.harukaStunPending > 0) {
+      const turns = p.harukaStunPending;
+      p.harukaStunPending = 0;
+      if (applyDebuff(p, "stun", null, turns)) lastLog.push(`🌑 ${p.name} โดนอมาซอนสวนกลับเมื่อเทิร์นก่อน — ติดสถานะสตั้น ${turns} เทิร์น!`);
+    }
     // Gargorgon Ray (ปืนหน่วย GUTS Select): ผลหน่วง 1 เทิร์น — เช็คต้านสถานะตอนนี้ (เป้าหมายซื้อยาต้านมากันไว้ทัน)
     //  ต้องอยู่ "ก่อน" บล็อกเช็คสตั้นด้านล่าง ไม่งั้นสตั้นจะข้ามไปมีผลอีกเทิร์นหนึ่ง
     if (p.gutsGargorgonPending) {
@@ -3294,7 +3353,11 @@ function hit(id) {
     drawn = drawCardFor(p);
     if (drawn) p.cards.push(drawn);
   }
-  if (drawn) { onCardDrawn(p, drawn); CHAR_HOOKS.escanor.onCardDraw(engine, p); CHAR_HOOKS.eiji.onCardDraw(engine, p); }
+  if (drawn) {
+    onCardDrawn(p, drawn); CHAR_HOOKS.escanor.onCardDraw(engine, p); CHAR_HOOKS.eiji.onCardDraw(engine, p);
+    // อาจารย์ ไบเลธ หลักสูตร "จบการศึกษา": การจั่วของผู้เล่นทุกคนบีบเวลาเฟสจั่วลงครั้งละ 2 วินาที
+    CHAR_HOOKS.byleth.onAnyCardDraw(engine, p);
+  }
   // สภาพชา (ดีบัฟ Universal — Thunder Bullet): กดจั่ว 1 ครั้ง ได้ไพ่ 2 ใบ
   //  ใบที่ 2 จั่วแบบสุ่มปกติเสมอ (โชคลาภช่วยแค่ใบแรก) และไม่เช็คเพดานแต้มซ้ำ — แตกได้ตามสภาพ
   if ((p.statuses.chaa || 0) > 0) {
@@ -3523,6 +3586,8 @@ function useSkill(id, tier, targets, item) {
     ignisImpactTarget = CHAR_HOOKS.ignis.prepareImpactTarget(engine, p, targets);
     if (!ignisImpactTarget) return;
   }
+  // อาจารย์ ไบเลธ หลักสูตร "จบการศึกษา": สกิลรอง/ท่าไม้ตายของทุกคนใช้แต้มสกิลลดลง 1 (สูตรเดียวกับที่ publicState โชว์บนปุ่ม)
+  cost = Math.max(0, cost - CHAR_HOOKS.byleth.costDiscount(engine, tier));
   // กระแสเวท / ภาระเวท (สถานะพื้นฐาน patch 2.0.8): ใช้พลังงานลดลง/เพิ่มขึ้นตามจำนวนที่ระบุ
   cost = Math.max(0, cost - statusAmtOf(p, "spellflow"));
   //  ตัวปรับราคาขาขึ้นทั้งหมด (กลางคืน + ภาระเวท) รวมกันแล้วดันราคาได้ไม่เกิน SKILL_COST_MAX
@@ -3563,7 +3628,15 @@ function useSkill(id, tier, targets, item) {
   const isTakumiGearUp = p.characterId === "takumi" && tier === "basic";
   const isTakumiGearDown = p.characterId === "takumi" && tier === "secondary";
   const isTakumiBlackout = p.characterId === "takumi" && tier === "ultimate";
-  if (p.skillUsedRound && !gambleRepeat && !isApplePick && !isTohnoPick && !isHakunoGender && !isDoomguyPick && !isKaiPick && !isTakumiPick) return; // ใช้สกิลได้เพียง 1 อันต่อเทิร์น (ซ้ำ/ซ้อนไม่ได้)
+  // มิซึซาว่า ฮารุกะ: ไข่ต้ม และอาหารเสริม — ไม่นับเป็นการใช้สกิลของเทิร์น (แพทเทิร์นเดียวกับไค/ดูมกาย)
+  //  กดได้ 2 ครั้งต่อเทิร์นตามโควตา harukaBasicUses แล้วยังเหลือสิทธิ์ใช้สกิลอื่นอีก 1 ครั้งตามปกติ
+  const isHarukaBasic = p.characterId === "haruka" && tier === "basic";
+  if (isHarukaBasic && (p.harukaBasicUses || 0) >= CHAR_HOOKS.haruka.BASIC_USES_PER_TURN) return;
+  // อาจารย์ ไบเลธ: สกิลติดตัว "ภูมิปัญญา" — ทุกช่องไม่นับเป็นการใช้สกิลของเทิร์น แต่รวมกันได้ 5 ครั้งต่อเทิร์น
+  //  (แพทเทิร์นเดียวกับทาคุมิ กว้างขึ้นครอบคลุมทั้ง 3 ช่อง — เงื่อนไขเฉพาะท่าอยู่ที่ CHAR_HOOKS.byleth.canUseSkill)
+  const isBylethPick = p.characterId === "byleth";
+  if (isBylethPick && (p.bylethSkillUsesRound || 0) >= CHAR_HOOKS.byleth.SKILL_USES_PER_TURN) return;
+  if (p.skillUsedRound && !gambleRepeat && !isBylethPick && !isHarukaBasic && !isApplePick && !isTohnoPick && !isHakunoGender && !isDoomguyPick && !isKaiPick && !isTakumiPick) return; // ใช้สกิลได้เพียง 1 อันต่อเทิร์น (ซ้ำ/ซ้อนไม่ได้)
   // MOON*CELL (คิชินามิ ฮาคุโนะ): ต้องมีแต้มคำสาปแห่งดวงจันทร์ครบ 3 เท่านั้น
   if (st === "moonCell" && (p.hakunoMoonPoints || 0) < HAKUNO_MOONCELL_NEED) return;
   // ข้าขอบัญชา (ชาย/หญิง คิชินามิ ฮาคุโนะ): กดซ้ำไม่ได้จนกว่าผลเดิมจะหมด
@@ -3629,6 +3702,20 @@ function useSkill(id, tier, targets, item) {
   // ---------- เอจิ (characters/eiji.js) ----------
   const isEiji = p.characterId === "eiji";
   if (isEiji && !CHAR_HOOKS.eiji.canUseSkill(engine, p, tier)) return;
+  // ---------- มิซึซาว่า ฮารุกะ (characters/haruka.js) ----------
+  //  พื้นฐาน: โควตา 2 ครั้ง/เทิร์น · รอง: ต้องมี "โอเมก้า" และ "จงไปสู่สุขติ" ต้องไม่ค้างอยู่ · ท่าไม้ตาย: กดซ้ำไม่ได้ระหว่างโอเมก้า
+  const isHaruka = p.characterId === "haruka";
+  if (isHaruka && !CHAR_HOOKS.haruka.canUseSkill(engine, p, tier)) return;
+  // ---------- อาจารย์ ไบเลธ (characters/byleth.js) ----------
+  //  พื้นฐาน: กดไม่ได้ระหว่างหลักสูตรเปิดอยู่ · รอง: ต้องเลือกแบบ (strike/buff) และมีความรู้พอ · ท่าไม้ตาย: ต้องเลือกหลักสูตร/กดปิด
+  let bylethStrikeTarget = null;
+  if (isBylethPick) {
+    if (!CHAR_HOOKS.byleth.canUseSkill(engine, p, tier, item)) return;
+    if (tier === "secondary" && item === "strike") {
+      bylethStrikeTarget = CHAR_HOOKS.byleth.prepareStrikeTarget(engine, p, targets);
+      if (!bylethStrikeTarget) return;
+    }
+  }
   // ---------- ชเรด เอลัน (patch พิเศษ) ----------
   const isShrade = p.characterId === "shrade_elan";
   const isShradeBasic = isShrade && tier === "basic";                        // เชิญรับฟัง
@@ -3784,7 +3871,7 @@ function useSkill(id, tier, targets, item) {
     if (p.statuses.freecast <= 0) delete p.statuses.freecast;
     lastLog.push(`👸 ${p.name} การ์ดราชินี — ใช้สกิลนี้โดยไม่เสียแต้มสกิล`);
   }
-  if (!isApplePick && !isTohnoPick && !isHakunoGender && !isDoomguyPick && !isKaiPick && !isTakumiPick && !isHisakawaFreeAction) p.skillUsedRound = true; // สลับ/ชุบแฝด, เอาแบบนี้ได้ไหม, มีดพับ, สลับเพศ, Quick Swap-Weapon, รังสรรค์-ลงทัณฑ์ และขึ้น-ลงเกียร์ ไม่นับโควตาสกิลหลัก
+  if (!isApplePick && !isTohnoPick && !isHakunoGender && !isDoomguyPick && !isKaiPick && !isTakumiPick && !isHarukaBasic && !isBylethPick && !isHisakawaFreeAction) p.skillUsedRound = true; // สลับ/ชุบแฝด, เอาแบบนี้ได้ไหม, มีดพับ, สลับเพศ, Quick Swap-Weapon, รังสรรค์-ลงทัณฑ์, ขึ้น-ลงเกียร์ และไข่ต้ม-อาหารเสริม ไม่นับโควตาสกิลหลัก
   if (isKaiPick) p.kaiSkillUsesRound = (p.kaiSkillUsesRound || 0) + 1;
   if (isTakumiPick) p.takumiSkillUsesRound = (p.takumiSkillUsesRound || 0) + 1;
 
@@ -3840,6 +3927,10 @@ function useSkill(id, tier, targets, item) {
   }
   // ---------- เอจิ (characters/eiji.js): ว่องไว / ความแค้น / ไม่ว่ายังก็ตาม ----------
   if (isEiji) flashSuffix = CHAR_HOOKS.eiji.applyInstantSkill(engine, p, tier) || flashSuffix;
+  // ---------- มิซึซาว่า ฮารุกะ (characters/haruka.js): ไข่ต้ม และอาหารเสริม / amazon punish / New Omega ----------
+  if (isHaruka) flashSuffix = CHAR_HOOKS.haruka.applyInstantSkill(engine, p, tier) || flashSuffix;
+  // ---------- อาจารย์ ไบเลธ (characters/byleth.js): ทบทวนบทเรียน / ดาบต้องสาป / หลักสูตรการสอน ----------
+  if (isBylethPick) flashSuffix = CHAR_HOOKS.byleth.applyInstantSkill(engine, p, tier, item, bylethStrikeTarget) || flashSuffix;
   // ---------- ชเรด เอลัน (characters/shrade_elan.js) ----------
   if (isShradeBasic) flashSuffix = CHAR_HOOKS.shrade_elan.applyBasicEffect(engine, p);
   if (isShradeMoon && shradeMoonTarget) flashSuffix = CHAR_HOOKS.shrade_elan.applyMoonEffect(engine, p, shradeMoonTarget, skill.name);
@@ -4027,7 +4118,7 @@ function useSkill(id, tier, targets, item) {
     io.emit("skillFlash", { name: skill.name + flashSuffix, img: flashImg, by: p.name, color: POSITION_COLORS[p.position] || "#9B4F96", sound: flashSound });
   }
   // จำสกิลที่ใช้ในรอบ (ท่าไม้ตายมี cutscene ของตัวเอง / สกิลหลังเปิดไพ่ไปโชว์ตอนโจมตี)
-  roundSkills.push({ playerId: id, name: skill.name, img: skill.img || null, status: st });
+  roundSkills.push({ playerId: id, tier, name: skill.name, img: skill.img || null, status: st }); // tier: หลักสูตร "พิเศษ" ของไบเลธอ่านว่าใครกดสกิลระดับไหนในเทิร์นนี้
 
   p.busted = bustedOf(p);
   if (p.busted) { voidUltimateOnBust(p); maybeMoonBurst(p); CHAR_HOOKS.mageslayer.onBustOrLoseRoll(engine, p); }
@@ -4566,6 +4657,10 @@ function resolveRound() {
   //  การหาผู้ชนะ เพราะผล "บังคับแตก" เปลี่ยนผู้ชนะของรอบนี้ (เหตุผลเดียวกับ ANATA ด้านบน)
   CHAR_HOOKS.kotone.resolveFormUlts(engine);
 
+  // อาจารย์ ไบเลธ หลักสูตร "พิเศษ" (characters/byleth.js): ลงโทษคนที่กดท่าไม้ตาย/สกิลพื้นฐานในเทิร์นนี้
+  //  อยู่ก่อนการหาผู้ชนะเพราะความเสียหาย 1 หน่วยอาจทำให้มีคนตกรอบก่อนสรุปผล (เหตุผลเดียวกับ ANATA/โคโตเนะ)
+  CHAR_HOOKS.byleth.applyExPunish(engine);
+
   // ตอนสรุปรอบยูกิจั่วแก้มือได้อีกไม่เกิน 2 ใบ แล้วจึงล็อกมือ
   yuukiReactiveDrawCredits = 0;
   autoPlayYuuki(true, 2);
@@ -4608,6 +4703,8 @@ function resolveRound() {
     w.result = "win";
     // เทเปา (characters/tepeu.js): รีเซ็ตเคาน์เตอร์แพ้ติดกัน + สมองอันชาญฉลาด
     CHAR_HOOKS.tepeu.onRoundWin(engine, w, combatants);
+    // อาจารย์ ไบเลธ หลักสูตร "มาตราฐาน": ผู้ชนะติดสตั้น 1 เทิร์นในเทิร์นหน้า (ยกเว้นตัวไบเลธเอง)
+    CHAR_HOOKS.byleth.onRoundWinner(engine, w);
     // ระบบเหรียญ (patch 2.2 full): ชนะการจั่วได้เหรียญเพิ่ม +1 (เพดาน 30)
     if (!isYuuki(w)) addGold(w, GOLD_WIN_BONUS);
     // patch 2.1.3.5: ชนะจั่วการ์ดไม่ได้แต้มสกิลอีกต่อไป
@@ -4622,6 +4719,10 @@ function resolveRound() {
     for (const l of combatants.filter((p) => val(p) === worst && p.id !== roundWinnerId)) {
       l.isLoser = true;
       l.result = "lose";
+      // อาจารย์ ไบเลธ หลักสูตร "มาตราฐาน": ผู้แพ้ได้แต้มสกิลฟื้นเพิ่มอีก 1 หน่วย (มีผลกับทุกคน)
+      CHAR_HOOKS.byleth.onRoundLoser(engine, l);
+      // อาจารย์ ไบเลธ หลักสูตร "จบการศึกษา": ไบเลธแต้มน้อยสุดแบบไพ่ไม่แตก -> ปลดล็อกการโจมตีตอบหลังผู้ชนะตี
+      if (l.characterId === "byleth" && !bustedOf(l)) CHAR_HOOKS.byleth.markLowestScore(engine, l);
       if (sealActive(l)) {
         // เรจูอาคมบัญชา (อมตะ): ไม่รับความเสียหายใดๆ เทิร์นนี้
         addSkill(l, 1);
@@ -4641,6 +4742,13 @@ function resolveRound() {
         addSkill(l, 1);
         firePassive(l, "lose");
         lastLog.push(`🦖 ${l.name} ร่างไคจู — ไม่รับความเสียหายจากการแพ้`);
+        continue;
+      }
+      if (bustedOf(l) && CHAR_HOOKS.byleth.bustDamageImmune(engine, l)) {
+        // อาจารย์ ไบเลธ หลักสูตร "มาตราฐาน": คนที่ไพ่แตกไม่รับความเสียหายจากการที่แต้มเกิน 21 (ยังได้แต้มสกิลตามปกติ)
+        addSkill(l, 1);
+        firePassive(l, "lose");
+        lastLog.push(`📗 ${l.name} หลักสูตร มาตราฐาน — ไม่รับความเสียหายจากการที่ไพ่แตก`);
         continue;
       }
       if (bustedOf(l) && CHAR_HOOKS.escanor.bustDamageImmune(l)) {
@@ -4814,6 +4922,13 @@ function afterSummary() {
     return;
   }
 
+  // อาจารย์ ไบเลธ หลักสูตร "พิเศษ" (characters/byleth.js): คนที่กดสกิลรองในเทิร์นนี้จะโจมตีไม่ได้
+  if (winner && winner.alive && CHAR_HOOKS.byleth.blocksAttack(engine, winner)) {
+    lastLog.push(`📕 ${winner.name} กดสกิลรองระหว่าง "หลักสูตร พิเศษ" — ไม่มีเทิร์นโจมตี`);
+    endTurn();
+    return;
+  }
+
   // แบทแมน (characters/bat_ben.js): ระหว่างเร้นเงา ออกจากเงามืดมาโจมตีไม่ได้
   if (winner && winner.alive && CHAR_HOOKS.bat_ben.cannotAttack(winner)) {
     lastLog.push(`🌑 ${winner.name} ยังเร้นเงาอยู่ — ไม่ออกมาจากความมืด ไม่มีเทิร์นโจมตี`);
@@ -4902,6 +5017,17 @@ function postAttackFollowup(attacker) {
   if (attacker && attacker.alive && attacker.characterId === "kotone") {
     if (CHAR_HOOKS.kotone.startExtraAttack(engine, attacker)) return;
   }
+  // อาจารย์ ไบเลธ หลักสูตร "จบการศึกษา" (characters/byleth.js): ถูกผู้ชนะตีทั้งที่แต้มน้อยสุดแบบไพ่ไม่แตก -> ได้ตีตอบในเทิร์นเดียวกัน
+  if (CHAR_HOOKS.byleth.startCounterAttack(engine, attacker)) {
+    gameState = "ATTACK";
+    startPhaseTimer(ATTACK_TIME, () => {
+      const t = attackableTargets(attackerId);
+      if (t.length) doAttack(attackerId, t[Math.floor(Math.random() * t.length)].id);
+      else endTurn();
+    });
+    broadcastState();
+    return;
+  }
   if (CHAR_HOOKS.hisakawa_sister.startHayateAssistAttack(engine, attacker)) {
     gameState = "ATTACK";
     startPhaseTimer(ATTACK_TIME, () => {
@@ -4926,6 +5052,15 @@ function nanayaCancelReattack(id) {
 // ตัวละครที่ย้าย contribution มาไว้ที่ characters/<id>.js's damageBonus()/attackBaseOverride() แล้ว:
 // oberon, broadband_man, eva13, kuwagata, appleguy, kotone, shrade_elan, phenex, takuto, hakuno,
 // doomguy, gambler, oguri, riddhe, banagher, miyako, hikaru — ที่เหลือ (ungated/flag-only) ยังอยู่ที่นี่
+// เสียงโจมตีปกติเฉพาะตัวละคร (คีย์ใน client/src/audio.js) — null = ใช้เสียง "attack" กลาง
+//  ฮารุกะ: ระหว่างสถานะ "โอเมก้า" เท่านั้น (ออกจากร่างแล้วกลับไปใช้เสียงกลางตามเดิม)
+function attackSoundOf(attacker) {
+  if (!attacker) return undefined;
+  if (attacker.characterId === "mageslayer") return "mageslayer_attack";           // BA.mp3
+  if (CHAR_HOOKS.haruka.omegaActive(attacker)) return "haruka_attack";             // hit_haruka.mp3
+  if (CHAR_HOOKS.byleth.swordActive(attacker)) return "byleth_hit";                // hit_sound.mp3 (ดาบต้องสาป)
+  return undefined;
+}
 function computeAttackBase(engine, attacker, target) {
   const hookCtx = {};
   const hook = engine.CHAR_HOOKS && engine.CHAR_HOOKS[attacker.characterId];
@@ -5045,7 +5180,7 @@ function doAttack(byId, targetId) {
         id: ++attackSeq,
         byName: attacker.name, byImg: displayImg(attacker), byColor: POSITION_COLORS[attacker.position] || "#888",
         byDoomWeapon: attacker.characterId === "doomguy" ? attacker.doomWeapon : undefined, // DoomGuy: อาวุธที่ใช้ยิงตอนนี้ (เสียงยิงฝั่ง client)
-        byAttackSound: attacker.characterId === "mageslayer" ? "mageslayer_attack" : undefined, // ผู้สังหารเมจ: เสียงโจมตีปกติเฉพาะตัว (BA.mp3)
+        byAttackSound: attackSoundOf(attacker), // เสียงโจมตีปกติเฉพาะตัว (ผู้สังหารเมจ / ฮารุกะระหว่างโอเมก้า)
         targetName: target.name, targetImg: displayImg(target), targetColor: POSITION_COLORS[target.position] || "#888",
         dmg: 0, dodge: true, fxMs: ATTACKFX_TIME * 1000,
         skills: [{ name: `หลบหลีก (${evadePct}%)`, img: BARD_CRIMSON_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888", side: "def" }],
@@ -5144,7 +5279,7 @@ function doAttack(byId, targetId) {
         id: ++attackSeq,
         byName: attacker.name, byImg: displayImg(attacker), byColor: POSITION_COLORS[attacker.position] || "#888",
         byDoomWeapon: attacker.characterId === "doomguy" ? attacker.doomWeapon : undefined, // DoomGuy: อาวุธที่ใช้ยิงตอนนี้ (เสียงยิงฝั่ง client)
-        byAttackSound: attacker.characterId === "mageslayer" ? "mageslayer_attack" : undefined, // ผู้สังหารเมจ: เสียงโจมตีปกติเฉพาะตัว (BA.mp3)
+        byAttackSound: attackSoundOf(attacker), // เสียงโจมตีปกติเฉพาะตัว (ผู้สังหารเมจ / ฮารุกะระหว่างโอเมก้า)
         targetName: target.name, targetImg: displayImg(target), targetColor: POSITION_COLORS[target.position] || "#888",
         dmg: 0, dodge: true, fxMs: ATTACKFX_TIME * 1000,
         skills: [{ name: "อย่าได้ไล่ตามหัวหน้า (การโจมตีถูกลบล้าง)", img: SATORU_PROFILE_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888", side: "def" }],
@@ -5234,6 +5369,10 @@ function doAttack(byId, targetId) {
   // เอจิ (characters/eiji.js): ดาบแห่งความทรงจำ — โอกาสคูณดาเมจ 2 เท่า (คิดท้ายสุดเพื่อให้คูณยอดสุทธิจริง)
   const eijiSwordFx = {};
   dmg = CHAR_HOOKS.eiji.applySwordDouble(engine, attacker, dmg, eijiSwordFx);
+  // ฮารุกะ (characters/haruka.js): จงไปสู่สุขติ — จุดชนวน "เลือดไหล" ของเป้าหมายให้ระเบิดรวมกับหมัดนี้
+  //  ต้องอ่านค่าเลือดไหล "ก่อน" ความเสียหายลง และก่อนที่โอเมก้าจะแปะเลือดไหลก้อนใหม่ (onAttackLanded ด้านล่าง)
+  const harukaPunishFx = {};
+  dmg = CHAR_HOOKS.haruka.applyPunish(engine, attacker, target, dmg, harukaPunishFx);
 
   // ---------- ริต้า เบอร์นัล (characters/phenex.js): ฝันไปเถอะ — ตั้งรับ สะท้อนความเสียหายทั้งหมดกลับผู้โจมตีแทนที่จะรับเอง ----------
   if (CHAR_HOOKS.phenex.tryReflectHit(engine, attacker, target, dmg)) return;
@@ -5292,6 +5431,11 @@ function doAttack(byId, targetId) {
   CHAR_HOOKS.kotone.onAttackConsumeLove(engine, attacker);
   // เอจิ (characters/eiji.js): Smile for You ลงตัวเอง -> ฟื้นเลือด · Delete ลงเป้าหมาย -> มอบ "ผุพัง"
   CHAR_HOOKS.eiji.onAttackLanded(engine, attacker, target);
+  // ฮารุกะ (characters/haruka.js): โอเมก้า — การโจมตีปกติแปะ "เลือดไหล" ให้เป้าหมาย 2 หน่วย
+  const harukaBleedApplied = CHAR_HOOKS.haruka.onAttackLanded(engine, attacker, target);
+  // อาจารย์ ไบเลธ (characters/byleth.js): ดาบต้องสาปใช้ได้ครั้งเดียว -> สลายหลังหมัดนี้ · และถ้าเป้าหมายคือไบเลธที่แต้มน้อยสุด เตรียมโจมตีตอบ
+  const bylethSwordUsed = CHAR_HOOKS.byleth.onAttackLanded(engine, attacker);
+  CHAR_HOOKS.byleth.onAttacked(engine, attacker, target);
   // Ginga Strium (ฮิคารุ, characters/hikaru.js): โจมตีโดนเป้าหมาย -> ติดลุกไหม้ให้เป้าหมาย / ถูกโจมตีขณะอยู่ในร่างนี้ -> ผู้โจมตีติดลุกไหม้สวนกลับ
   CHAR_HOOKS.hikaru.onAttackBurnApply(engine, attacker, target);
   const escanorAttackVideoQueued = CHAR_HOOKS.escanor.onAttackLanded(engine, attacker, target);
@@ -5398,6 +5542,8 @@ function doAttack(byId, targetId) {
   const pshikiBladeHeal = CHAR_HOOKS.princess_shiki.applyBladeHeal(engine, attacker);
   // แบทแมน (characters/bat_ben.js): เข้ามาเลย — ความเสียหายที่ลงกับแบทแมน เกิดกับผู้โจมตีด้วยเท่ากัน
   const batReflectDmg = CHAR_HOOKS.bat_ben.applyTauntReflect(engine, attacker, target, dmg);
+  // ฮารุกะ (characters/haruka.js): อมาซอน — ระหว่างโอเมก้า มีโอกาส 15% สวนกลับผู้โจมตี + สตั้นเทิร์นถัดไป
+  const harukaCounterFx = CHAR_HOOKS.haruka.tryCounter(engine, attacker, target);
   // หอกแห่งแคสเซียส (เอวา 13 patch 2.2 alpha, characters/eva13.js): การโจมตีปกติฟื้นเลือดตามความเสียหายที่ทำได้ — ใช้แล้วหมดไป
   CHAR_HOOKS.eva13.onAttackConsumeCassius(engine, attacker, dmg);
   // ย๊ากก! (อาริมะ มิยาโกะ patch 2.2.1 alpha): พลังโจมตี +1 ต่อการโจมตี — ถ้าใช้ร่วมกับเพลงหมัดอาริมะ
@@ -5567,6 +5713,11 @@ function doAttack(byId, targetId) {
   if (phenexTaunted) addFx({ name: "ไม่อยากให้ใครต้องเจ็บปวด (ล่อเป้ามาที่ตัวเอง)", img: PHENEX_NTD_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
   if (batTaunted) addFx({ name: "เข้ามาเลย (ล่อเป้ามาที่ตัวเอง)", img: BAT_SKILL3_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
   if (batReflectDmg > 0) addFx({ name: `เข้ามาเลย — ความเสียหายเกิดกับผู้โจมตีด้วย -${batReflectDmg}`, img: BAT_SKILL3_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
+  // ---------- มิซึซาว่า ฮารุกะ (characters/haruka.js) ----------
+  if (harukaPunishFx.punishStacks > 0) addFx({ name: `จงไปสู่สุขติ — ระเบิดเลือดไหล +${harukaPunishFx.punishStacks}`, img: CHAR_HOOKS.haruka.IMG.skill2, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
+  if (bylethSwordUsed > 0) addFx({ name: `ดาบต้องสาป +${bylethSwordUsed}`, img: CHAR_HOOKS.byleth.IMG.skill2, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
+  if (harukaBleedApplied > 0) addFx({ name: `โอเมก้า — เลือดไหล +${harukaBleedApplied}`, img: CHAR_HOOKS.haruka.IMG.ult, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
+  if (harukaCounterFx) addFx({ name: `อมาซอน — สวนกลับ -${harukaCounterFx.dmg}${harukaCounterFx.stunned ? " + สตั้นเทิร์นหน้า" : ""}`, img: CHAR_HOOKS.haruka.IMG.base, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
   if (pshikiBladeHeal > 0) addFx({ name: `อืม ฉันเข้าใจแล้ว (ฟื้นเลือด +${pshikiBladeHeal})`, img: "/characters/princess_shiki/p_shiki_skill1.jpg", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
 
   // อนิเมชันบอกว่าใครตีใคร
@@ -5574,7 +5725,7 @@ function doAttack(byId, targetId) {
     id: ++attackSeq,
     byName: attacker.name, byImg: displayImg(attacker), byColor: POSITION_COLORS[attacker.position] || "#888",
         byDoomWeapon: attacker.characterId === "doomguy" ? attacker.doomWeapon : undefined, // DoomGuy: อาวุธที่ใช้ยิงตอนนี้ (เสียงยิงฝั่ง client)
-        byAttackSound: attacker.characterId === "mageslayer" ? "mageslayer_attack" : undefined, // ผู้สังหารเมจ: เสียงโจมตีปกติเฉพาะตัว (BA.mp3)
+        byAttackSound: attackSoundOf(attacker), // เสียงโจมตีปกติเฉพาะตัว (ผู้สังหารเมจ / ฮารุกะระหว่างโอเมก้า)
     targetName: target.name, targetImg: displayImg(target), targetColor: POSITION_COLORS[target.position] || "#888",
     dmg, aoe: ginga || beamPlusAtk || unibeam2Atk || storiumAtk, revenge: isRevenge, skills: fxSkills,
     fxMs: (fxSkills.length ? ATTACKFX_TIME + 2 : ATTACKFX_TIME) * 1000,
@@ -5590,7 +5741,7 @@ function doAttack(byId, targetId) {
   //  / อย่าอยู่เลย แกน่ะ! (ริต้า เบอร์นัล patch 2.1.6) / ฉันยัง...มองเห็นอยู่!!! กันตาย + อย่างนายน่ะ จะไปเข้าใจอะไร (สึงาชิ ทาคุโตะ patch 2.2.4):
   //  เล่นวีดีโอที่ค้างคิวก่อน แล้วค่อยขึ้นสรุปความเสียหาย
   //  (ปกติทุกท่าอื่นจะขึ้นสรุปความเสียหายก่อนแล้วค่อยเล่นวีดีโอค้างคิวตอนจบ — ท่าเหล่านี้กลับลำดับเฉพาะตัว)
-  if ((yuukiAttackVideoQueued || isYuuki(target) || beamPlusAtk || (beam && attacker.characterId === "banagher") || unibeam2Atk || storiumAtk || phenexPurgeAtk || miyakoUltAtk || triggerMultiAtk || triggerZeperionAtk || escanorAttackVideoQueued || (beatSaveFired && target.characterId === "takuto") || takutoUlt2VideoQueued || eijiSwordFx.videoQueued) && cutsceneQueue.length) runCutsceneQueue(showAttackFx);
+  if ((yuukiAttackVideoQueued || isYuuki(target) || beamPlusAtk || (beam && attacker.characterId === "banagher") || unibeam2Atk || storiumAtk || phenexPurgeAtk || miyakoUltAtk || triggerMultiAtk || triggerZeperionAtk || escanorAttackVideoQueued || (beatSaveFired && target.characterId === "takuto") || takutoUlt2VideoQueued || eijiSwordFx.videoQueued || harukaPunishFx.videoQueued || (harukaCounterFx && harukaCounterFx.videoQueued)) && cutsceneQueue.length) runCutsceneQueue(showAttackFx);
   else showAttackFx();
 }
 
@@ -5646,6 +5797,7 @@ function endTurn() {
       if (k === "chill") continue;  // ชิวๆครับน้องๆ (Apple guy): คงอยู่จนกว่าจะถูกโจมตี ไม่ลดเทิร์น
       // โหมงานหนัก (โคโตเนะ patch พิเศษ): คงอยู่ 3 เทิร์นแล้วหมดเอง (หรือลบก่อนด้วย Sleeping time ตอนกลางคืน)
       // ksleep (Sleeping time patch 2.1.3): นับถอยหลังตามปกติ 2 เทิร์นตายตัว — ตื่นเองแล้วรับ [เช้าที่สดใส] (ดูด้านล่าง)
+      if (k === "hbleed") continue;  // เลือดไหล (patch 2.5): ลดลงเองในตอนต้นเทิร์นหลังสร้างผล (tickBleed) ไม่ลดซ้ำที่นี่
       if (k === "hburn") continue;   // ลุกไหม้ (ฮิคารุ patch 2.1.3): ลดลงเองในตอนต้นเทิร์นหลังสร้างผล (ดูด้านล่าง) ไม่ลดซ้ำที่นี่
       if (k === "melody") continue;  // ท่วงทำนอง (ชเรด เอลัน): สแตคถาวร สะสมจนครบ 5 เพื่อรวมร่าง
       if (k === "star") continue;    // ดวงดาว (สึงาชิ ทาคุโตะ): สแตคถาวร สะสมจนครบ 5 เพื่อฉันคว้ามันได้แล้ว
@@ -6434,6 +6586,7 @@ const engine = {
   riddheAllied,
   riddheGrantFreeNtdToAlly(rAlly, byId) { return CHAR_HOOKS.riddhe.grantFreeNtdToAlly(engine, rAlly, byId); },
   hasQueuedCutscene() { return cutsceneQueue.length > 0; },
+  get roundSkills() { return roundSkills; }, // สกิลที่ถูกกดในเทิร์นนี้ (หลักสูตร "พิเศษ" ของไบเลธอ่านว่าใครกดระดับไหน)
   takumiBlackoutActive,
   doomWeaponMarkPending,
   get gameState() { return gameState; },
@@ -6534,6 +6687,9 @@ const engine = {
   SOFT_DEBUFF_STEP,
   noHealActive,
   invertActive,
+  HBLEED_MAX,
+  bleedActive,
+  applyBleed, // "เลือดไหล" (สถานะ Universal): จุดเดียวที่ทุกตัวละครใช้ใส่สถานะนี้ (เคารพต้านสถานะ + เพดาน)
   EVADE_STACK_MAX,
   EVADE_STACK_TURNS,
   grantEvadeStack,
@@ -6583,6 +6739,7 @@ const engine = {
 //  — ฟังก์ชันอื่นที่เหลือยังเข้าถึงไม่ได้จากภายนอกโดยตั้งใจ ต้องเพิ่มเข้า export นี้เองถ้าจะทดสอบเพิ่ม
 module.exports = {
   computeAttackBase,
+  attackSoundOf, // เสียงโจมตีปกติเฉพาะตัวละคร (เทสต์อ่านตรงนี้)
   engine,
   maxHpOf,
   maxArmorOf,

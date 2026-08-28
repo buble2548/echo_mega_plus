@@ -11,7 +11,7 @@
 server.js (6.3k บรรทัด)          เอนจินกลางทั้งหมด: state, เฟส, การ์ด, ดาเมจ, สกิล, socket handler
 characters.js (1.7k)             DATA ล้วน — roster/ชื่อสกิล/desc/cost/img + POSITION_COLORS + publicRoster()
 characters/index.js              มัดรวม CHAR_HOOKS = { [characterId]: module } — ตัวละครใหม่ต้อง require+push ที่นี่
-characters/<id>.js               LOGIC ของตัวละครนั้น (35 ตัว) — export { id, ...methods(engine, ...) }
+characters/<id>.js               LOGIC ของตัวละครนั้น (37 ตัว) — export { id, ...methods(engine, ...) }
 characters/_universal_status.js  บัฟ/ดีบัฟกลาง (pure function ไม่พึ่ง engine)
 characters/_transforms.js        ตาราง metadata คัตซีน (TRANSFORMS) — data ล้วน
 characters/yuna.js               "ไอดอลประจำสนาม" ไม่ใช่ตัวละครที่เล่นได้ (ไม่อยู่ใน CHAR_HOOKS, require ตรง)
@@ -169,6 +169,17 @@ cost = min(SKILL_COST_MAX /* 8 */,
 
 **คอสที่ไม่ใช่แต้มสกิล**: ท่าไม้ตายในร่าง [พร้อมลุย] ของโคโตเนะจ่าย **6 แต้มสกิล + 6 เหรียญ** — ด่านเงินเช็คที่
 `CHAR_HOOKS.kotone.canUseSkill()` (ก่อนหักแต้ม) และหักจริงที่ `payFormUltGold()` ในส่วน effect
+· **อาจารย์ ไบเลธ (patch 2.6)** จ่ายด้วยทรัพยากรเฉพาะตัว "ความรู้" (`p.bylethKnowledge` เพดาน 20 — แก้ผ่าน
+`CHAR_HOOKS.byleth.addKnowledge()` เท่านั้น): สกิลรอง 4 หน่วย · ท่าไม้ตายต้องมี ≥ 4 แล้วกิน 1 หน่วยต่อเทิร์นจนหมด/กดปิด
+
+**ไบเลธ — ท่าไม้ตายที่เป็น "สวิตช์กติกาสนาม"** (`p.bylethCourse` = `normal` | `ex` | `end` | `null`) ไม่ใช่สถานะนับเทิร์น
+จึงไม่อยู่ในลูปลดเทิร์นของ `endTurn()` — ปิดตัวเองที่ `onRoundStartTick()` เมื่อความรู้หมด จุดที่ engine เรียกใช้:
+`resolveRound()` (มาตราฐาน: สตั้นผู้ชนะ/แต้มสกิลผู้แพ้/ยกเว้นดาเมจไพ่แตก · พิเศษ: ลงโทษคนกดสกิลจาก `engine.roundSkills`)
+· `afterSummary()` (พิเศษ: คนกดสกิลรองโจมตีไม่ได้) · `hit()` + `postAttackFollowup()` + `useSkill()`/`publicState()`
+(จบการศึกษา: บีบเวลา 2 วิ/การจั่ว · โจมตีตอบ · ส่วนลดสกิล 1 แต้มที่ต้องคิดเหมือนกันทั้งสองที่)
+สถานะ "เริ่มมีผลเทิร์นหน้า" (สตั้นผู้ชนะ / ห้ามสกิลพื้นฐาน) ใช้ธง `bylethStunPending` / `bylethNoBasicPending`
+แล้วแปลงเป็นสถานะจริงที่ `dealRound()` ผ่าน `applyPendingFromCourses()` — ต้องอยู่ก่อนบล็อกเช็คสตั้นเสมอ
+เทสต์: [tests/characters/byleth.test.js](tests/characters/byleth.test.js)
 
 ---
 
@@ -180,13 +191,22 @@ cost = min(SKILL_COST_MAX /* 8 */,
 
 **บัฟกลาง** (`_universal_status.js`): `spellflow` (สกิลถูกลง) · `might`/`empower` (เสริมพลัง) · `guard` (คุ้มครอง) · `resist` (ต้านสถานะ) · `fortune` (โชคลาภ) · `evade` (หลบหลีก) · `netramana` (โอกาสสังหาร 20%)
 
-**ดีบัฟกลาง**: `spellburden` (ภาระเวท — ดูกล่องด้านล่าง) · `weak` · `fragile` · `sleep` · `stun` · `nodraw` · `noskill` · `nohealing` · `invert` (ผกผัน) · `hburn` (ลุกไหม้) · `chaa` (จั่ว 1 ครั้งได้ 2 ใบ) · `decay` (ผุพัง เกราะไม่ฟื้น)
+**ดีบัฟกลาง**: `spellburden` (ภาระเวท — ดูกล่องด้านล่าง) · `weak` · `fragile` · `sleep` · `stun` · `nodraw` · `noskill` · `nohealing` · `invert` (ผกผัน) · `hburn` (ลุกไหม้) · `hbleed` (เลือดไหล — ดูกล่องด้านล่าง) · `chaa` (จั่ว 1 ครั้งได้ 2 ใบ) · `decay` (ผุพัง เกราะไม่ฟื้น)
 
 **ดีบัฟเฉพาะผู้สังหารเมจ** (อยู่ใน `BASIC_DEBUFF_CLEAR` — ต้านสถานะผิดปกติล้างได้ทั้งคู่)
 - `mageslayerMark` (ตราล่าเวท) — ไม่ลดเทิร์น (`continue` ใน `endTurn`) ถาวรจนย้ายมาร์ก/ถูกล้าง · ฝั่งผู้ร่ายเก็บที่
   `ms.mageslayerMarkedId` + `target.mageslayerMarks[msId]` และ reconcile ให้เองที่ `tickWitchMark()` ท้ายเทิร์น
 - `manaLeech` (ดูดซับเวท) — ลดเทิร์นตามปกติ · ทริกที่ `useSkill()` และที่ `addSkill()` ที่มี `src`
   · `applyManaBurden()` ตั้งเวลาผ่าน `setTurnsNoRefresh()` (ไม่ต่ออายุเหมือนภาระเวท)
+
+**เลือดไหล (`hbleed`) — สถานะ Universal (patch 2.5)**
+กลไกเหมือน `hburn` ทุกอย่าง: ดาเมจ 1 หน่วยต่อเทิร์น (เกราะก่อน) แล้วลดสแตคลง 1 ที่ `tickBleed()` ต้นเทิร์น (เรียกคู่กับ `tickBurn` ใน `dealRound`)
+- ใส่สถานะผ่าน **`engine.applyBleed(p, n)`** เท่านั้น (เคารพ `resist` + เพดาน `HBLEED_MAX = 6`) — ห้ามเขียน `p.statuses.hbleed` ตรงๆ
+- อยู่ใน `BASIC_DEBUFF_CLEAR` (ต้านสถานะล้างได้) และ `NO_TICK_STATUS` (ลูป `endTurn` ต้องไม่ลดซ้ำ)
+- **ผลข้างเคียงที่ต่างจากลุกไหม้**: ระหว่างติดอยู่ การฟื้นพลังชีวิตเหลือครึ่ง (`bleedHealPenalty` ใน `healHp()`) — ฟื้น 1 หน่วยไม่ถูกลด
+- ฮุครายตัวละคร (ไม่ต้องแก้ `_universal_status.js`): `hbleedImmune(p)` / `hbleedHeals(p)` / `hbleedLabel(p)` / `hbleedHarmless(p)`
+  (`hbleedHarmless` คุมเฉพาะการลดครึ่งของ `healHp` — ฮารุกะคืน `true` ทั้ง `hbleedHeals`/`hbleedHarmless` จึงไม่มีผลเสียกับเธอเลย)
+- เทสต์: [tests/characters/haruka.test.js](tests/characters/haruka.test.js)
 
 **ภาระเวท (`spellburden`) — กฎกลาง ห้าม bypass**
 ทุกแหล่งต้องเรียก **`engine.applySpellburden(p, turns)`** เท่านั้น (`_universal_status.js` → wrapper ใน `server.js`)
@@ -241,6 +261,9 @@ cost = min(SKILL_COST_MAX /* 8 */,
 - **เกราะฟื้น +1 ทุกเทิร์นเลขคู่** เหมือนกันทั้งวัน/คืน (บล็อกโดย `armorLocked` / `decay` / MOON*CELL)
 - `cycleShift` = ตัวเลื่อนวงจรทั้งเกม (Lie Like Vortigern / ชเรด รีเซ็ตกลางคืน) — **ต้องคำนวณใหม่ตรงๆ ห้ามบวกสะสม** (มีคอมเมนต์เตือนบั๊กเดิมที่ `engine.extendNight`)
 - มิติมายาบรรเลงของ Bard **override วงจรทั้งหมด** (โลหิต = กลางวัน, วิญญาณ = กลางคืน)
+- **หลักสูตรของไบเลธมีเพลงแยกกลางวัน/กลางคืนต่อหลักสูตร** — `CHAR_HOOKS.byleth.activeMusic(engine, night)` เลือกไฟล์ให้
+  `activeSkillMusic()` และฝั่ง client มี `MUSIC_POSITION_GROUPS` (`client/src/audio.js`) ที่ทำให้เพลงอีกไฟล์ในกลุ่มเดียวกัน
+  **เล่นต่อจากวินาทีเดิม** ตอนสลับช่วงเวลา/สลับหลักสูตร (ไม่เริ่มนับหนึ่งใหม่)
 
 ---
 
