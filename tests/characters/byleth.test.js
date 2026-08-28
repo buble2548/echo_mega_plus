@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { engine } = require('../../server.js');
+const { engine, resolveRound } = require('../../server.js');
 const byleth = require('../../characters/byleth.js');
 
 const saved = {
@@ -243,6 +243,53 @@ test('หลักสูตร จบการศึกษา: ส่วนล�
   assert.equal(byleth.startCounterAttack(engine, a), true);
   assert.equal(engine.attackerId, 'B');
   engine.setAttackerId(null);
+});
+
+// บั๊กเดิม: markLowestScore ถูกวางไว้ในลูป "ผู้แพ้ของเทิร์น" ซึ่งกรองด้วย val(p) === worst
+//  แต่ val() ให้คนไพ่แตกเป็น -1 -> มีใครไพ่แตกสักคน worst ก็เป็น -1 ทันที ลูปนั้นเหลือแต่คนไพ่แตก
+//  ไบเลธที่ไพ่ไม่แตกจึงไม่เคยถูกมาร์ก = "โจมตีตอบ" ไม่ทำงานทุกเทิร์นที่มีคนไพ่แตก
+test('หลักสูตร จบการศึกษา: ได้ตีตอบแม้เทิร์นนั้นมีคนอื่นไพ่แตก', () => {
+  const { b, a } = setup();
+  const c = mk('C', 'temari', 3);
+  engine.players.C = c;
+  byleth.addKnowledge(b, 6);
+  byleth.applyInstantSkill(engine, b, 'ultimate', 'end');
+
+  a.cards = [{ value: 10, color: 'red' }, { value: 10, color: 'blue' }];        // 20 = ผู้ชนะ
+  b.cards = [{ value: 5, color: 'green' }];                                      // 5  = น้อยสุดแบบไพ่ไม่แตก
+  c.cards = [{ value: 10, color: 'yellow' }, { value: 10, color: 'red' }, { value: 5, color: 'blue' }]; // 25 = ไพ่แตก
+  for (const p of [a, b, c]) p.locked = true;
+  assert.equal(engine.bustedOf(c), true, 'ต้องมีคนไพ่แตกจริงถึงจะครอบบั๊กเดิมได้');
+  assert.equal(engine.bustedOf(b), false);
+
+  withRandom([0.999], () => resolveRound());
+  engine.clearPhaseTimer();
+
+  assert.equal(b.bylethLowScore, true, 'ไบเลธแต้มน้อยสุดแบบไพ่ไม่แตก ต้องถูกมาร์กแม้มีคนไพ่แตก');
+  byleth.onAttacked(engine, a, b);
+  assert.equal(b.bylethCounterReady, true);
+  assert.equal(byleth.startCounterAttack(engine, a), true);
+  assert.equal(engine.attackerId, 'B');
+  engine.setAttackerId(null);
+  delete engine.players.C;
+});
+
+// ไบเลธที่ "ไพ่แตกเอง" ไม่เข้าเงื่อนไข (สเปคระบุว่าต้องแต้มน้อยสุดแบบไพ่ไม่แตก)
+test('หลักสูตร จบการศึกษา: ไบเลธไพ่แตกเอง ไม่ได้ตีตอบ', () => {
+  const { b, a } = setup();
+  byleth.addKnowledge(b, 6);
+  byleth.applyInstantSkill(engine, b, 'ultimate', 'end');
+  a.cards = [{ value: 10, color: 'red' }, { value: 10, color: 'blue' }];
+  b.cards = [{ value: 10, color: 'yellow' }, { value: 10, color: 'red' }, { value: 5, color: 'blue' }];
+  for (const p of [a, b]) p.locked = true;
+  assert.equal(engine.bustedOf(b), true);
+
+  withRandom([0.999], () => resolveRound());
+  engine.clearPhaseTimer();
+
+  assert.equal(b.bylethLowScore, false);
+  byleth.onAttacked(engine, a, b);
+  assert.equal(byleth.startCounterAttack(engine, a), false);
 });
 
 test('sothis: ฟื้นคืนชีพ 1 ครั้งต่อเกมด้วยเลือด 1 เกราะ 0', () => {

@@ -4721,14 +4721,29 @@ function resolveRound() {
     }
   }
 
+  // ---------- อาจารย์ ไบเลธ หลักสูตร "จบการศึกษา": ปลดล็อกการโจมตีตอบหลังผู้ชนะตี ----------
+  //  เงื่อนไขคือ "ไบเลธแต้มน้อยสุดของเทิร์นแบบไพ่ไม่แตก" ซึ่ง **ไม่ใช่ชุดเดียวกับ "ผู้แพ้ของเทิร์น"**
+  //  บั๊กเดิม: มาร์กนี้ถูกวางไว้ในลูปผู้แพ้ซึ่งกรองด้วย val(p) === worst — แต่ val() ให้คนไพ่แตกเป็น -1
+  //  ทำให้ worst = -1 ทันทีที่มีใครไพ่แตกแม้แต่คนเดียว ลูปนั้นจึงเหลือแต่คนไพ่แตก และเงื่อนไข
+  //  !bustedOf(l) ที่คร่อมไว้ก็เป็นเท็จเสมอ = ไบเลธไม่เคยถูกมาร์กเลยทุกเทิร์นที่มีคนไพ่แตก
+  //  (ผลคือ "ตีตอบ" แทบไม่ทำงานจริงในเกม) -> คิดจากกลุ่ม "ไพ่ไม่แตก" แยกออกมาต่างหาก
+  {
+    const unbusted = combatants.filter((p) => !bustedOf(p));
+    if (unbusted.length > 1) {
+      const lowest = Math.min(...unbusted.map((p) => scoreOf(p)));
+      for (const l of unbusted) {
+        if (l.characterId !== "byleth" || l.id === roundWinnerId) continue;
+        if (scoreOf(l) === lowest) CHAR_HOOKS.byleth.markLowestScore(engine, l); // เสมอที่แต้มน้อยสุดก็นับ
+      }
+    }
+  }
+
   if (best !== worst) {
     for (const l of combatants.filter((p) => val(p) === worst && p.id !== roundWinnerId)) {
       l.isLoser = true;
       l.result = "lose";
       // อาจารย์ ไบเลธ หลักสูตร "มาตราฐาน": ผู้แพ้ได้แต้มสกิลฟื้นเพิ่มอีก 1 หน่วย (มีผลกับทุกคน)
       CHAR_HOOKS.byleth.onRoundLoser(engine, l);
-      // อาจารย์ ไบเลธ หลักสูตร "จบการศึกษา": ไบเลธแต้มน้อยสุดแบบไพ่ไม่แตก -> ปลดล็อกการโจมตีตอบหลังผู้ชนะตี
-      if (l.characterId === "byleth" && !bustedOf(l)) CHAR_HOOKS.byleth.markLowestScore(engine, l);
       if (sealActive(l)) {
         // เรจูอาคมบัญชา (อมตะ): ไม่รับความเสียหายใดๆ เทิร์นนี้
         addSkill(l, 1);
@@ -6745,6 +6760,7 @@ const engine = {
 //  — ฟังก์ชันอื่นที่เหลือยังเข้าถึงไม่ได้จากภายนอกโดยตั้งใจ ต้องเพิ่มเข้า export นี้เองถ้าจะทดสอบเพิ่ม
 module.exports = {
   computeAttackBase,
+  resolveRound, // เทสต์เรียกตรงๆ เพื่อพิสูจน์การตัดสินผู้ชนะ/ผู้แพ้จริง (ไม่จำลองเงื่อนไขเอง)
   attackSoundOf, // เสียงโจมตีปกติเฉพาะตัวละคร (เทสต์อ่านตรงนี้)
   engine,
   maxHpOf,
