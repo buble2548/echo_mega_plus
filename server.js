@@ -1195,6 +1195,9 @@ function onCardDrawn(p, card) {
   checkBlueTrigger(p);
   applySpecialCardEffect(p, card);
   applyOverloadOverdrawPenalty(p);
+  // หลักสูตร "จบการศึกษา" ของไบเลธ: นับการ์ดทุกใบของผู้เล่นทุกคนจากจุดรวมนี้
+  // (รวมไพ่จากสภาพชา/สกิล/เอฟเฟกต์บังคับจั่ว ไม่ใช่แค่การกด hit ใบแรก)
+  CHAR_HOOKS.byleth.onAnyCardDraw(engine, p);
   if (!isYuuki(p) && yuukiBoss() && gameState === "PLAYING") yuukiReactiveDrawCredits++;
 }
 // แดง/เขียว/เหลือง ครบ 3 ใบ: ประเมินครั้งเดียวตอนเปิดไพ่ (lock) จากมือสุดท้ายทั้งหมด
@@ -1861,6 +1864,13 @@ function loseArmor(p) {
 function damageSoft(p) {
   hisakawaSyncIn(p);
   if (!p.alive || sealActive(p) || friendlyEffectBlocked(p)) return;
+  // หลักสูตร "จบการศึกษา" ระบุว่าลดความเสียหายทุกช่องทาง จึงครอบคลุมแพ้จั่ว/ไพ่แตกด้วย
+  // เรียกเฉพาะฮุคไบเลธตรงนี้: damageSoft เป็นดาเมจสถานะที่ไม่ควรเปิดระบบหลบ/ลดดาเมจ
+  // ของตัวละครอื่น (เช่น ว่องไวของเอจิหรือ WineBarrel) ซึ่งจงใจใช้ได้กับท่อ skill/attack เท่านั้น
+  if (p.characterId === "byleth" && CHAR_HOOKS.byleth.adjustIncomingDamage(engine, p, 1) <= 0) {
+    hisakawaSyncOut(p);
+    return;
+  }
   // อมาซอน (ฮารุกะ, characters/haruka.js): ไม่มีเกราะแล้วโดนดาเมจ = เลือดไหลตัวเอง — damageSoft ไม่ผ่าน
   //  adjustIncomingDamage() จึงต้องเรียกฮุคเองที่นี่ ไม่งั้นดาเมจแพ้จั่วจะไม่นับเป็น "ความเสียหายทางใดก็ตาม"
   if (p.characterId === "haruka") CHAR_HOOKS.haruka.onDamaged(engine, p);
@@ -1870,6 +1880,7 @@ function damageSoft(p) {
   // คู่แฝดฮิซากาว่า: ดาเมจแพ้จั่ว/แตกก็ต้องสลับให้แฝดอีกคนออกมาคุมทันทีเหมือนท่อดาเมจอื่น
   //  ไม่งั้นจะยืนอยู่ด้วยแฝดที่เลือดหมดตลอดเฟส SUMMARY/ATTACK แล้วค่อยสลับตอน endTurn()
   resolveHisakawaTwinDeath(p);
+  if (p.alive && p.hp <= 0 && p.characterId === "byleth") instantDeath(p);
 }
 // ระเบิด Fourth Impact (เอวา 13 patch 2.2 alpha): เคารพ "หลบหลีก" ของเป้าหมาย (เดิมทะลุหลบหลีกเสมอ) — คืน true ถ้าหลบพ้น
 function evaBlastEvade(o, e) {
@@ -1926,6 +1937,8 @@ function dealDirect(p, n, isNormalAttack) {
   }
   mageslayerMarkSteal(p, n);
   resolveHisakawaTwinDeath(p);
+  // sothis ต้องฟื้นทันทีเมื่อเลือดหมด ไม่รอ sweep ตอนจบเทิร์น
+  if (p.alive && p.hp <= 0 && p.characterId === "byleth") instantDeath(p);
 }
 function dealArmorOnly(p, n, isNormalAttack) {
   if (sealActive(p) || friendlyEffectBlocked(p)) return;
@@ -1951,6 +1964,8 @@ function dealMixed(p, n, isNormalAttack) { // เกราะก่อนแล�
   }
   mageslayerMarkSteal(p, n);
   resolveHisakawaTwinDeath(p);
+  // sothis ต้องฟื้นทันทีเมื่อเลือดหมด ไม่รอ sweep ตอนจบเทิร์น
+  if (p.alive && p.hp <= 0 && p.characterId === "byleth") instantDeath(p);
 }
 // src = แหล่งที่มาของการฟื้นพลังงาน ("item" / "passive" / "card") — ใส่เฉพาะช่องทาง "ฟื้นฟู" จริงๆ
 //  ที่ [ดูดซับเวท] (ผู้สังหารเมจ) ต้องตอบสนอง ไม่ใส่ให้แต้มพื้นฐานจบเทิร์น/ค่าชดเชยการแพ้/การโอนแต้มระหว่างผู้เล่น
@@ -3361,8 +3376,6 @@ function hit(id) {
   }
   if (drawn) {
     onCardDrawn(p, drawn); CHAR_HOOKS.escanor.onCardDraw(engine, p); CHAR_HOOKS.eiji.onCardDraw(engine, p);
-    // อาจารย์ ไบเลธ หลักสูตร "จบการศึกษา": การจั่วของผู้เล่นทุกคนบีบเวลาเฟสจั่วลงครั้งละ 2 วินาที
-    CHAR_HOOKS.byleth.onAnyCardDraw(engine, p);
   }
   // สภาพชา (ดีบัฟ Universal — Thunder Bullet): กดจั่ว 1 ครั้ง ได้ไพ่ 2 ใบ
   //  ใบที่ 2 จั่วแบบสุ่มปกติเสมอ (โชคลาภช่วยแค่ใบแรก) และไม่เช็คเพดานแต้มซ้ำ — แตกได้ตามสภาพ
@@ -5038,15 +5051,8 @@ function postAttackFollowup(attacker) {
   if (attacker && attacker.alive && attacker.characterId === "kotone") {
     if (CHAR_HOOKS.kotone.startExtraAttack(engine, attacker)) return;
   }
-  // อาจารย์ ไบเลธ หลักสูตร "จบการศึกษา" (characters/byleth.js): ถูกผู้ชนะตีทั้งที่แต้มน้อยสุดแบบไพ่ไม่แตก -> ได้ตีตอบในเทิร์นเดียวกัน
-  if (CHAR_HOOKS.byleth.startCounterAttack(engine, attacker)) {
-    gameState = "ATTACK";
-    startPhaseTimer(ATTACK_TIME, () => {
-      const t = attackableTargets(attackerId);
-      if (t.length) doAttack(attackerId, t[Math.floor(Math.random() * t.length)].id);
-      else endTurn();
-    });
-    broadcastState();
+  // อาจารย์ ไบเลธ หลักสูตร "จบการศึกษา": แต้มน้อยสุดแบบไพ่ไม่แตก -> ได้โจมตีเพิ่มในเทิร์นเดียวกัน
+  if (startBylethGraduationAttack()) {
     return;
   }
   if (CHAR_HOOKS.hisakawa_sister.startHayateAssistAttack(engine, attacker)) {
@@ -5061,6 +5067,20 @@ function postAttackFollowup(attacker) {
   }
   if (attacker) { delete attacker.statuses.miyakoHeal; delete attacker.statuses.yaak; }
   endTurn();
+}
+
+// หลักสูตร "จบการศึกษา": เปิดเฟสโจมตีเพิ่มของไบเลธจากจุดจบร่วมของเทิร์น
+// จึงทำงานได้ทั้งหลังผู้ชนะโจมตี และกรณีผู้ชนะไม่มี/สละ/ถูกห้ามโจมตี
+function startBylethGraduationAttack() {
+  if (!CHAR_HOOKS.byleth.startCounterAttack(engine)) return false;
+    gameState = "ATTACK";
+    startPhaseTimer(ATTACK_TIME, () => {
+      const t = attackableTargets(attackerId);
+      if (t.length) doAttack(attackerId, t[Math.floor(Math.random() * t.length)].id);
+      else endTurn();
+    });
+    broadcastState();
+  return true;
 }
 // ยกเลิกการโจมตีซ้ำของหัวใจฆาตกร (characters/nanaya.js) — จบเทิร์นตามปกติ
 function nanayaCancelReattack(id) {
@@ -5778,6 +5798,9 @@ function finishYuukiVictory() {
 }
 
 function endTurn() {
+  // ถ้าเทิร์นกำลังจะจบโดยยังไม่ได้ใช้สิทธิ์โจมตีเพิ่มของไบเลธ ให้เปิดสิทธิ์ตรงนี้
+  // ครอบคลุมผู้ชนะไม่ได้โจมตี, โจมตีพลาด/ถูกลบล้าง และ path ที่ไม่ผ่าน postAttackFollowup
+  if (startBylethGraduationAttack()) return;
   clearPhaseTimer();
   attackerId = null;
 

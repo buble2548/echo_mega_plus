@@ -222,7 +222,7 @@ test('หลักสูตร พิเศษ: ลงโทษคนที่�
   realRoundSkills.length = 0;
 });
 
-test('หลักสูตร จบการศึกษา: ส่วนลดสกิล ลดดาเมจ และโจมตีตอบหลังผู้ชนะตี', () => {
+test('หลักสูตร จบการศึกษา: ส่วนลดสกิล ลดดาเมจ และได้โจมตีเพิ่มโดยไม่ต้องถูกผู้ชนะตี', () => {
   const { b, a } = setup();
   byleth.addKnowledge(b, 6);
   byleth.applyInstantSkill(engine, b, 'ultimate', 'end');
@@ -238,7 +238,6 @@ test('หลักสูตร จบการศึกษา: ส่วนล�
   assert.equal(byleth.startCounterAttack(engine, a), false);
 
   byleth.markLowestScore(engine, b);
-  byleth.onAttacked(engine, a, b);
   assert.equal(b.bylethCounterReady, true);
   assert.equal(byleth.startCounterAttack(engine, a), true);
   assert.equal(engine.attackerId, 'B');
@@ -248,7 +247,7 @@ test('หลักสูตร จบการศึกษา: ส่วนล�
 // บั๊กเดิม: markLowestScore ถูกวางไว้ในลูป "ผู้แพ้ของเทิร์น" ซึ่งกรองด้วย val(p) === worst
 //  แต่ val() ให้คนไพ่แตกเป็น -1 -> มีใครไพ่แตกสักคน worst ก็เป็น -1 ทันที ลูปนั้นเหลือแต่คนไพ่แตก
 //  ไบเลธที่ไพ่ไม่แตกจึงไม่เคยถูกมาร์ก = "โจมตีตอบ" ไม่ทำงานทุกเทิร์นที่มีคนไพ่แตก
-test('หลักสูตร จบการศึกษา: ได้ตีตอบแม้เทิร์นนั้นมีคนอื่นไพ่แตก', () => {
+test('หลักสูตร จบการศึกษา: ได้โจมตีเพิ่มแม้เทิร์นนั้นมีคนอื่นไพ่แตก', () => {
   const { b, a } = setup();
   const c = mk('C', 'temari', 3);
   engine.players.C = c;
@@ -266,12 +265,26 @@ test('หลักสูตร จบการศึกษา: ได้ตี�
   engine.clearPhaseTimer();
 
   assert.equal(b.bylethLowScore, true, 'ไบเลธแต้มน้อยสุดแบบไพ่ไม่แตก ต้องถูกมาร์กแม้มีคนไพ่แตก');
-  byleth.onAttacked(engine, a, b);
   assert.equal(b.bylethCounterReady, true);
   assert.equal(byleth.startCounterAttack(engine, a), true);
   assert.equal(engine.attackerId, 'B');
   engine.setAttackerId(null);
   delete engine.players.C;
+});
+
+test('หลักสูตร จบการศึกษา: เปิดเฟสโจมตีของไบเลธได้แม้ผู้ชนะไม่ได้โจมตี', () => {
+  const { b } = setup();
+  byleth.addKnowledge(b, 6);
+  byleth.applyInstantSkill(engine, b, 'ultimate', 'end');
+  byleth.markLowestScore(engine, b);
+  engine.setGameState('SUMMARY');
+
+  saved.endTurn(); // จำลองทางจบเทิร์นตรงจากผู้ชนะที่โจมตีไม่ได้/ไม่ได้โจมตี
+  assert.equal(engine.gameState, 'ATTACK');
+  assert.equal(engine.attackerId, 'B');
+
+  engine.clearPhaseTimer();
+  engine.setAttackerId(null);
 });
 
 // ไบเลธที่ "ไพ่แตกเอง" ไม่เข้าเงื่อนไข (สเปคระบุว่าต้องแต้มน้อยสุดแบบไพ่ไม่แตก)
@@ -354,14 +367,26 @@ test('โหมด ffa: หลักสูตรยังลงผลกับ�
   assert.equal(byleth.prepareStrikeTarget(engine, b, ['A']).id, 'A');
 });
 
-test('sothis: ฟื้นคืนชีพ 1 ครั้งต่อเกมด้วยเลือด 1 เกราะ 0', () => {
+test('sothis: ฟื้นทันทีผ่านท่อดาเมจ 1 ครั้งต่อเกมด้วยเลือด 1 เกราะ 0', () => {
   const { b } = setup();
-  b.hp = 0; b.armor = 2;
-  assert.equal(byleth.tryRevive(engine, b), true);
+  b.hp = 1; b.armor = 0;
+  engine.dealDirect(b, 1);
   assert.equal(b.hp, 1);
   assert.equal(b.armor, 0);
   assert.equal(b.alive, true);
-  assert.equal(byleth.tryRevive(engine, b), false); // ครั้งที่ 2 ไม่ทำงาน
+  assert.equal(b.bylethRevived, true);
+  engine.dealDirect(b, 1);
+  assert.equal(b.alive, false); // ครั้งที่ 2 ไม่ฟื้น
+});
+
+test('หลักสูตร จบการศึกษา: ดาเมจแพ้จั่ว 1 หน่วยถูกลดเหลือ 0', () => {
+  const { b } = setup();
+  byleth.addKnowledge(b, 6);
+  byleth.applyInstantSkill(engine, b, 'ultimate', 'end');
+  b.hp = 1; b.armor = 0;
+  engine.damageSoft(b);
+  assert.equal(b.hp, 1);
+  assert.equal(b.bylethRevived, false, 'ไม่ควรเสีย sothis เพราะดาเมจถูกหลักสูตรลดจนเหลือ 0');
 });
 
 test('เพลงประจำหลักสูตรสลับไฟล์ตามกลางวัน/กลางคืน', () => {

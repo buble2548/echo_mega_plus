@@ -57,7 +57,7 @@ const COURSES = {
     key: "end",
     name: "หลักสูตร จบการศึกษา",
     icon: "📘",
-    desc: `การจั่วการ์ดของทุกคนบีบเวลาของเฟสจั่วลงครั้งละ ${END_DRAW_TIME_CUT} วินาที · แต้มสกิลที่ต้องใช้ของสกิลรองและท่าไม้ตายลดลง ${END_COST_CUT} แต้ม (ทุกคน) · ถ้าไบเลธแต้มน้อยที่สุดของเทิร์นแบบไพ่ไม่แตก แล้วผู้ชนะเลือกตีไบเลธ ไบเลธจะได้โจมตีตอบทันทีในเทิร์นเดียวกัน · ระหว่างนี้ไบเลธรับความเสียหายน้อยลง ${END_DMG_REDUCE} หน่วย`,
+    desc: `การจั่วการ์ดทุกใบของผู้เล่นทุกคนบีบเวลาของเฟสจั่วลงครั้งละ ${END_DRAW_TIME_CUT} วินาที · แต้มสกิลที่ต้องใช้ของสกิลรองและท่าไม้ตายลดลง ${END_COST_CUT} แต้ม (ทุกคน) · ถ้าไบเลธแต้มน้อยที่สุดของเทิร์นแบบไพ่ไม่แตก ไบเลธจะได้โจมตีเพิ่ม 1 ครั้งในเทิร์นเดียวกัน แม้ผู้ชนะจะไม่ได้โจมตีก็ตาม · ระหว่างนี้ไบเลธรับความเสียหายน้อยลง ${END_DMG_REDUCE} หน่วย`,
     music: { day: "byleth_end_day", night: "byleth_end_night" },
   },
 };
@@ -233,7 +233,9 @@ module.exports = {
   // ---------- หลักสูตรจบการศึกษา: ทุกการจั่วของทุกคนบีบเวลาเฟสจั่ว ----------
   onAnyCardDraw(engine, drawer) {
     const owner = courseOwner(engine, "end");
-    if (!owner || !drawer) return;
+    // แจกไพ่ตั้งต้นเกิดก่อนเริ่มตัวจับเวลา PLAYING จึงไม่นับ ส่วนไพ่ทุกใบที่ถูกเพิ่มเข้ามือ
+    // ระหว่างเฟสจั่ว (กดจั่ว/สภาพชา/สกิลหรือเอฟเฟกต์บังคับจั่ว) นับทั้งหมดที่ onCardDrawn จุดเดียว
+    if (!owner || !drawer || engine.gameState !== "PLAYING") return;
     const left = engine.reduceCardTimer(END_DRAW_TIME_CUT);
     engine.log(`⏳ ${drawer.name} จั่วการ์ดระหว่าง "${COURSES.end.name}" — เวลาของเฟสจั่วลดลง ${END_DRAW_TIME_CUT} วินาที (เหลือ ${left} วิ)`);
   },
@@ -347,26 +349,29 @@ module.exports = {
     return engine.roundSkills.some((e) => e && e.playerId === winner.id && e.tier === "secondary");
   },
 
-  // ---------- หลักสูตร จบการศึกษา: โจมตีตอบผู้ชนะในเทิร์นเดียวกัน ----------
-  //  เงื่อนไข: ไบเลธแต้มน้อยสุดของเทิร์นแบบไพ่ไม่แตก (ตั้งธงที่ resolveRound) และเพิ่งถูกผู้ชนะตี
+  // ---------- หลักสูตร จบการศึกษา: ได้โจมตีเพิ่มในเทิร์นเดียวกัน ----------
+  //  เงื่อนไขเดียวคือไบเลธแต้มน้อยสุดของเทิร์นแบบไพ่ไม่แตก (ตั้งธงที่ resolveRound)
+  //  สิทธิ์นี้ไม่ผูกกับการถูกเลือกเป็นเป้า และยังทำงานเมื่อผู้ชนะโจมตีไม่ได้/ไม่ได้โจมตี
   markLowestScore(engine, p) {
     if (courseOf(p) !== "end" || engine.passiveSealed(p)) return;
     p.bylethLowScore = true;
+    p.bylethCounterReady = true;
   },
   onAttacked(engine, attacker, target) {
     if (!isByleth(target) || !target.alive) return;
     if (courseOf(target) !== "end" || engine.passiveSealed(target)) return;
     if (!target.bylethLowScore || !attacker || attacker.id === target.id) return;
+    // คงฮุคนี้ไว้เพื่อรองรับทางโจมตีเดิม แต่สิทธิ์ถูกตั้งตั้งแต่ markLowestScore แล้ว
     target.bylethCounterReady = true;
   },
-  startCounterAttack(engine, attacker) {
+  startCounterAttack(engine) {
     const p = engine.alivePlayers().find((o) => isByleth(o) && o.bylethCounterReady);
     if (!p) return false;
     p.bylethCounterReady = false;
     if (courseOf(p) !== "end") return false;
     if (!engine.attackableTargets(p.id).length) return false;
     engine.setAttackerId(p.id);
-    engine.log(`📘 ${p.name} "${COURSES.end.name}" — ถูกผู้ชนะตีทั้งที่แต้มน้อยสุดแบบไพ่ไม่แตก จึงได้โจมตีตอบทันทีในเทิร์นเดียวกัน`);
+    engine.log(`📘 ${p.name} "${COURSES.end.name}" — แต้มน้อยสุดแบบไพ่ไม่แตก จึงได้โจมตีเพิ่มทันทีในเทิร์นเดียวกัน`);
     return true;
   },
 

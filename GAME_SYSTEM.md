@@ -175,8 +175,8 @@ cost = min(SKILL_COST_MAX /* 8 */,
 **ไบเลธ — ท่าไม้ตายที่เป็น "สวิตช์กติกาสนาม"** (`p.bylethCourse` = `normal` | `ex` | `end` | `null`) ไม่ใช่สถานะนับเทิร์น
 จึงไม่อยู่ในลูปลดเทิร์นของ `endTurn()` — ปิดตัวเองที่ `onRoundStartTick()` เมื่อความรู้หมด จุดที่ engine เรียกใช้:
 `resolveRound()` (มาตราฐาน: สตั้นผู้ชนะ/แต้มสกิลผู้แพ้/ยกเว้นดาเมจไพ่แตก · พิเศษ: ลงโทษคนกดสกิลจาก `engine.roundSkills`)
-· `afterSummary()` (พิเศษ: คนกดสกิลรองโจมตีไม่ได้) · `hit()` + `postAttackFollowup()` + `useSkill()`/`publicState()`
-(จบการศึกษา: บีบเวลา 2 วิ/การจั่ว · โจมตีตอบ · ส่วนลดสกิล 1 แต้มที่ต้องคิดเหมือนกันทั้งสองที่)
+· `afterSummary()` (พิเศษ: คนกดสกิลรองโจมตีไม่ได้) · `onCardDrawn()` + `postAttackFollowup()`/`endTurn()` + `useSkill()`/`publicState()`
+(จบการศึกษา: บีบเวลา 2 วิ/การ์ดทุกใบที่ผู้เล่นทุกคนจั่วระหว่างเฟส PLAYING · ไบเลธแต้มน้อยสุดแบบไม่แตกได้โจมตีเพิ่มแม้ผู้ชนะไม่ได้โจมตี · ลดค่าใช้สกิลรอง/ท่าไม้ตาย 1 แต้มที่ต้องคิดเหมือนกันทั้งสองที่)
 สถานะ "เริ่มมีผลเทิร์นหน้า" (สตั้นผู้ชนะ / ห้ามสกิลพื้นฐาน) ใช้ธง `bylethStunPending` / `bylethNoBasicPending`
 แล้วแปลงเป็นสถานะจริงที่ `dealRound()` ผ่าน `applyPendingFromCourses()` — ต้องอยู่ก่อนบล็อกเช็คสตั้นเสมอ
 เทสต์: [tests/characters/byleth.test.js](tests/characters/byleth.test.js)
