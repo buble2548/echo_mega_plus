@@ -3,7 +3,7 @@
 //  + สกิลติดตัว "อมาซอน"
 //
 //  แกนกลางของตัวละครคือสถานะ Universal ตัวใหม่ "เลือดไหล" (hbleed — ดู characters/_universal_status.js)
-//    · ฝั่งรุก: ท่าไม้ตาย "โอเมก้า" ทำให้การโจมตีปกติแปะเลือดไหลให้เป้าหมายทีละ 2 หน่วย
+//    · ฝั่งรุก: ท่าไม้ตาย "โอเมก้า" ทำให้การโจมตีปกติแปะเลือดไหลให้เป้าหมายทีละ 3 หน่วย
 //              แล้วสกิลรอง "จงไปสู่สุขติ" จุดชนวนให้ระเบิดออกมาทั้งกองในหมัดเดียว (ต้องสะสมครบ 3 หน่วยก่อน)
 //    · ฝั่งรับ: ฮารุกะไม่เจ็บจากเลือดไหล กลับฟื้นพลังชีวิตแทน — และยิ่งเกราะแตกยิ่งเลือดไหลเอง (สูงสุด 3/เทิร์น)
 //              จึงเป็นตัวละครที่ "ยิ่งโดนตียิ่งฟื้น" ตราบใดที่ยังไม่มีเกราะ
@@ -28,8 +28,9 @@ const PUNISH_BLEED_NEED = 3;     // เป้าหมายต้องมี�
 
 // ---------- New Omega (ท่าไม้ตาย) ----------
 const OMEGA_TURNS = 5;
-const OMEGA_BLEED_ON_ATK = 2;    // ระหว่างโอเมก้า: โจมตีปกติแปะเลือดไหลให้เป้าหมาย 2 หน่วย
-const OMEGA_ATK_BONUS = 1;       // ระหว่างโอเมก้า: พลังโจมตีปกติ +1
+const OMEGA_BLEED_ON_ATK = 3;    // ระหว่างโอเมก้า: โจมตีปกติแปะเลือดไหลให้เป้าหมาย 3 หน่วย
+//  หมายเหตุ: โอเมก้า "ไม่" เพิ่มพลังโจมตีปกติแล้ว (patch 2.5.1) — จุดแข็งทั้งหมดไปอยู่ที่การสะสมเลือดไหลแทน
+//  3 หน่วยต่อหมัดแปลว่าตีหมัดเดียวก็ถึงเกณฑ์ระเบิดของ amazon punish (PUNISH_BLEED_NEED) พอดี
 
 // ---------- สกิลติดตัว อมาซอน ----------
 const SELF_BLEED_PER_TURN = 3;   // ไม่มีเกราะแล้วโดนดาเมจ -> เลือดไหลตัวเอง +1 (สูงสุด 3 ครั้ง/เทิร์น)
@@ -37,6 +38,7 @@ const SELF_BLEED_AMOUNT = 1;
 const COUNTER_CHANCE = 0.15;     // โดนโจมตีปกติ -> 15% ตีคืน (เฉพาะระหว่างโอเมก้าทำงาน)
 const COUNTER_DMG = 1;
 const COUNTER_STUN_TURNS = 1;    // ผู้โจมตีติดสตั้น 1 เทิร์น โดยเริ่มมีผล "เทิร์นถัดไป"
+const COUNTER_BLEED = 2;         // ผู้โจมตีติด "เลือดไหล" 2 หน่วยจากการสวนกลับด้วย
 
 const IMG = {
   base: "/characters/haruka/haruka.webp",
@@ -117,18 +119,13 @@ module.exports = {
     return " — จงไปสู่สุขติ";
   },
 
-  // New Omega: แปลงร่าง 5 เทิร์น — โจมตีปกติแปะเลือดไหล 2 หน่วย + พลังโจมตีปกติ +1
+  // New Omega: แปลงร่าง 5 เทิร์น — โจมตีปกติแปะเลือดไหล 3 หน่วย (ไม่มีโบนัสพลังโจมตีแล้ว)
   applyOmega(engine, p) {
     p.statuses.harukaOmega = OMEGA_TURNS;
     p.transformAt = engine.nextTransformCounter();
     engine.triggerCutscene(p, "harukaOmega"); // haruka_skill3.mp4
-    engine.log(`🦾 ${p.name} New Omega — เข้าสู่สถานะ "โอเมก้า" ${OMEGA_TURNS} เทิร์น: การโจมตีปกติมอบ "เลือดไหล" ${OMEGA_BLEED_ON_ATK} หน่วย · พลังโจมตีปกติ +${OMEGA_ATK_BONUS}`);
+    engine.log(`🦾 ${p.name} New Omega — เข้าสู่สถานะ "โอเมก้า" ${OMEGA_TURNS} เทิร์น: การโจมตีปกติมอบ "เลือดไหล" ${OMEGA_BLEED_ON_ATK} หน่วยให้เป้าหมายทุกครั้ง`);
     return " — โอเมก้า";
-  },
-
-  // ---------- พลังโจมตีปกติ +1 ระหว่างโอเมก้า — เรียกจาก computeAttackBase() ----------
-  damageBonus(engine, attacker) {
-    return omegaOn(attacker) ? OMEGA_ATK_BONUS : 0;
   },
 
   // ---------- สกิลติดตัว อมาซอน (1): ไม่มีเกราะแล้วโดนดาเมจ = เลือดไหลตัวเอง ----------
@@ -153,7 +150,7 @@ module.exports = {
     return n;
   },
 
-  // ---------- สกิลติดตัว อมาซอน (2): ตีคืน 15% ระหว่างโอเมก้า ----------
+  // ---------- สกิลติดตัว อมาซอน (2): ตีคืน 15% ระหว่างโอเมก้า (+ สตั้นเทิร์นหน้า + เลือดไหล 2) ----------
   //  เรียกจาก doAttack() หลังความเสียหายลงตัวฮารุกะแล้ว — คืน { dmg, videoQueued } ให้ผู้เรียกเอาไปทำป้ายสรุป
   //  วีดีโอถูก "คิว" ไว้ (ไม่ triggerCutscene ทันที) เพื่อให้ doAttack เล่นคลิปก่อนแล้วค่อยขึ้นสรุปความเสียหาย
   tryCounter(engine, attacker, target) {
@@ -176,13 +173,18 @@ module.exports = {
       if (!attacker.alive) engine.log(`💀 ${attacker.name} เลือดจริงหมด ตกรอบ!`);
     }
     // สตั้นเริ่มมีผล "เทิร์นถัดไป" — ตั้งธงไว้ให้ dealRound() แปลงเป็นสถานะจริง (แพทเทิร์นเดียวกับ Gargorgon Ray)
+    //  ส่วน "เลือดไหล" ติดทันทีในเทิร์นนี้ (ผ่าน applyBleed จึงโดนต้านสถานะผิดปกติกันได้ตามปกติ)
     let stunned = false;
+    let bled = 0;
     if (attacker.alive) {
       attacker.harukaStunPending = COUNTER_STUN_TURNS;
       stunned = true;
       engine.log(`🌑 ${attacker.name} โดนสวนกลับ — เทิร์นถัดไปจะติดสถานะสตั้น ${COUNTER_STUN_TURNS} เทิร์น`);
+      bled = engine.applyBleed(attacker, COUNTER_BLEED);
+      if (bled > 0) engine.log(`🩸 ${attacker.name} โดนสวนกลับ — ติด "เลือดไหล" +${bled} (รวม ${bleedOf(attacker)} หน่วย)`);
+      else engine.log(`🩸 ${attacker.name} ต้านสถานะผิดปกติ/เลือดไหลเต็มเพดาน — "เลือดไหล" จากการสวนกลับไม่ติด`);
     }
-    return { dmg: COUNTER_DMG, stunned, videoQueued: true };
+    return { dmg: COUNTER_DMG, stunned, bled, videoQueued: true };
   },
 
   // ---------- amazon punish: จุดชนวนเลือดไหลของเป้าหมาย ----------

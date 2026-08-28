@@ -84,6 +84,22 @@ test('พักผ่อน: ไพ่ใบถัดไปถูกนำไป
   assert.equal(b.bylethNextDraw, null); // ใช้ผลไปแล้ว
 });
 
+test('พักผ่อน: ลบเกินแต้มที่มี แต้มหยุดที่ 0 ไม่ติดลบ และไม่ค้างค่าลบไว้กินไพ่ใบถัดไป', () => {
+  const { b } = setup();
+  b.cards = [{ value: 3, color: 'red' }]; // แต้มปัจจุบัน 3
+  withRandom([0.9], () => byleth.applyInstantSkill(engine, b, 'basic')); // พักผ่อน
+  const card = { value: 9, color: 'blue' };
+  b.cards.push(card);
+  byleth.onCardDraw(engine, b, card);
+  assert.equal(engine.scoreOf(b), 0); // 3 + 9 - 12 = 0 (ไม่ใช่ -6)
+
+  // ไพ่ใบถัดไปต้องบวกได้ตามปกติ ไม่โดนค่าลบค้างหักซ้ำ
+  const card2 = { value: 7, color: 'green' };
+  b.cards.push(card2);
+  byleth.onCardDraw(engine, b, card2);
+  assert.equal(engine.scoreOf(b), 7);
+});
+
 test('ศึกษาเพิ่ม: ไพ่ใบถัดไปบวกตามปกติ พร้อมฟื้นพลังชีวิต 1 หน่วย', () => {
   const { b } = setup();
   b.hp = 4;

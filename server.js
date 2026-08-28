@@ -1235,7 +1235,8 @@ function scoreCap(p) {
   return 21;
 }
 function scoreOf(p) {
-  const raw = calculateScore(p.cards) + (p.cardBonus || 0);
+  // แต้มมีพื้นล่างที่ 0 เสมอ — cardBonus ติดลบ (เช่น "พักผ่อน" ของไบเลธ) หักได้มากสุดจนเหลือ 0 ไม่ติดลบ
+  const raw = Math.max(0, calculateScore(p.cards) + (p.cardBonus || 0));
   if (p.statuses && p.statuses.upg) return Math.min(raw, CHAR_HOOKS.hikaru.upgCap(p));
   if (p.statuses && p.statuses.fiber) return Math.min(raw, FIBER_CAP);
   return raw;
@@ -5717,7 +5718,7 @@ function doAttack(byId, targetId) {
   if (harukaPunishFx.punishStacks > 0) addFx({ name: `จงไปสู่สุขติ — ระเบิดเลือดไหล +${harukaPunishFx.punishStacks}`, img: CHAR_HOOKS.haruka.IMG.skill2, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
   if (bylethSwordUsed > 0) addFx({ name: `ดาบต้องสาป +${bylethSwordUsed}`, img: CHAR_HOOKS.byleth.IMG.skill2, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
   if (harukaBleedApplied > 0) addFx({ name: `โอเมก้า — เลือดไหล +${harukaBleedApplied}`, img: CHAR_HOOKS.haruka.IMG.ult, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (harukaCounterFx) addFx({ name: `อมาซอน — สวนกลับ -${harukaCounterFx.dmg}${harukaCounterFx.stunned ? " + สตั้นเทิร์นหน้า" : ""}`, img: CHAR_HOOKS.haruka.IMG.base, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
+  if (harukaCounterFx) addFx({ name: `อมาซอน — สวนกลับ -${harukaCounterFx.dmg}${harukaCounterFx.bled > 0 ? ` + เลือดไหล ${harukaCounterFx.bled}` : ""}${harukaCounterFx.stunned ? " + สตั้นเทิร์นหน้า" : ""}`, img: CHAR_HOOKS.haruka.IMG.base, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
   if (pshikiBladeHeal > 0) addFx({ name: `อืม ฉันเข้าใจแล้ว (ฟื้นเลือด +${pshikiBladeHeal})`, img: "/characters/princess_shiki/p_shiki_skill1.jpg", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
 
   // อนิเมชันบอกว่าใครตีใคร

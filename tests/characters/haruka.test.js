@@ -170,6 +170,8 @@ test('อมาซอน: สวนกลับทำงานเฉพาะร
   assert.equal(a.armor, 2, 'สวนกลับ 1 หน่วย (ลดเกราะก่อน)');
   assert.equal(a.harukaStunPending, 1, 'สตั้นเริ่มมีผลเทิร์นถัดไป');
   assert.equal(a.statuses.stun, undefined, 'ยังไม่สตั้นในเทิร์นนี้');
+  assert.equal(fx.bled, 2);
+  assert.equal(a.statuses.hbleed, 2, 'สวนกลับแปะเลือดไหลให้ผู้โจมตี 2 หน่วย');
 });
 
 // ---------------------------------------------------------------- สกิลพื้นฐาน
@@ -211,24 +213,23 @@ test('New Omega: ให้สถานะโอเมก้า 5 เทิร์
   assert.equal(haruka.displayImg(h), haruka.IMG.ult);
 });
 
-test('New Omega: พลังโจมตีปกติ +1 และการโจมตีปกติแปะเลือดไหล 2 หน่วย', () => {
+test('New Omega: การโจมตีปกติแปะเลือดไหล 3 หน่วย', () => {
   const { h, a } = setup();
-  assert.equal(haruka.damageBonus(engine, h), 0);
+  assert.equal(haruka.onAttackLanded(engine, h, a), 0, 'ไม่มีโอเมก้า = ไม่แปะ');
   h.statuses.harukaOmega = 5;
-  assert.equal(haruka.damageBonus(engine, h), 1);
-
-  assert.equal(haruka.onAttackLanded(engine, h, a), 2);
-  assert.equal(a.statuses.hbleed, 2);
-  assert.equal(haruka.onAttackLanded(engine, h, a), 2);
-  assert.equal(a.statuses.hbleed, 4);
+  assert.equal(haruka.onAttackLanded(engine, h, a), 3);
+  assert.equal(a.statuses.hbleed, 3, 'หมัดเดียวถึงเกณฑ์ระเบิดของ amazon punish พอดี');
+  assert.equal(haruka.onAttackLanded(engine, h, a), 3);
+  assert.equal(a.statuses.hbleed, 6, 'สะสมต่อได้จนเต็มเพดาน');
 });
 
-test('New Omega: computeAttackBase คิดโบนัส +1 ให้จริง', () => {
+test('New Omega: ไม่เพิ่มพลังโจมตีปกติแล้ว (ตัดโบนัส +1 ออก)', () => {
   const { h, a } = setup();
   const { computeAttackBase } = require('../../server.js');
+  assert.equal(haruka.damageBonus, undefined, 'ไม่มีฮุค damageBonus อีกแล้ว');
   assert.equal(computeAttackBase(engine, h, a).base, 1);
   h.statuses.harukaOmega = 5;
-  assert.equal(computeAttackBase(engine, h, a).base, 2);
+  assert.equal(computeAttackBase(engine, h, a).base, 1, 'อยู่ในโอเมก้าก็ยังเป็นพลังโจมตีฐาน 1');
 });
 
 // ---------------------------------------------------------------- สกิลรอง
@@ -285,16 +286,14 @@ test('New Omega: เสียงโจมตีปกติเปลี่ยน
 });
 
 // ---------------------------------------------------------------- คอมโบเต็มรูปแบบ
-test('คอมโบ: โอเมก้าแปะเลือดไหล 2 หมัด แล้ว punish ระเบิด 4 หน่วยในหมัดที่ 3', () => {
+test('คอมโบ: โอเมก้าแปะเลือดไหล 1 หมัด แล้ว punish ระเบิดได้ในหมัดที่ 2', () => {
   const { h, a } = setup();
   h.statuses.harukaOmega = 5;
   haruka.onAttackLanded(engine, h, a);
-  haruka.onAttackLanded(engine, h, a);
-  assert.equal(a.statuses.hbleed, 4);
+  assert.equal(a.statuses.hbleed, 3, 'หมัดเดียวก็ถึงเกณฑ์แล้ว');
   h.statuses.harukaPunish = 3;
-  // หมัดที่ 3: อ่านค่าเลือดไหลก่อน (4) -> ระเบิด แล้วค่อยแปะก้อนใหม่หลังดาเมจลง
-  const dmg = haruka.applyPunish(engine, h, a, 2, {});
-  assert.equal(dmg, 6);
+  // หมัดที่ 2: อ่านค่าเลือดไหลก่อน (3) -> ระเบิด แล้วค่อยแปะก้อนใหม่หลังดาเมจลง
+  assert.equal(haruka.applyPunish(engine, h, a, 1, {}), 4, 'โจมตีปกติ 1 + เลือดไหล 3');
   haruka.onAttackLanded(engine, h, a);
-  assert.equal(a.statuses.hbleed, 2, 'กองใหม่เริ่มนับจาก 0 หลังระเบิด');
+  assert.equal(a.statuses.hbleed, 3, 'กองใหม่เริ่มนับจาก 0 หลังระเบิด');
 });

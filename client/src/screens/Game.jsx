@@ -1093,7 +1093,7 @@ const STATUS_INFO = {
   eijiSword: { icon: "⚔️", label: "ดาบแห่งความทรงจำ", cls: "bg-echo-hp", desc: "ความแค้น: ยกระดับโอกาสดาเมจ 2 เท่าจากฐานติดตัว 20% เป็นค่าที่คิดจากเกราะ + พลังชีวิตของเอจิรวมกัน (1 หน่วย = 10% · ใช้ค่าที่สูงกว่า) — ติดเมื่อไหร่ฟื้นพลังชีวิต +1" },
   eijiUlt: { icon: "🔥", label: "ไม่ว่ายังก็ตาม", cls: "bg-echo-gold text-gray-900", desc: "ไม่ว่ายังก็ตาม: บังคับเปิดสนาม Break Beat Bark! — ทุกคนได้พลังโจมตีปกติ +1 · เวลาเฟสจั่วการ์ดเหลือ 40 วินาที · เอจิหลบหลีก +20% และได้แต้มสกิล +1 ต่อเทิร์น" },
   // ---------- มิซึซาว่า ฮารุกะ (patch 2.5 new) ----------
-  harukaOmega:  { icon: "🦾", label: "โอเมก้า", cls: "bg-echo-gold text-gray-900", desc: "New Omega: การโจมตีปกติมอบสถานะ \"เลือดไหล\" ให้เป้าหมาย 2 หน่วยทุกครั้ง · พลังโจมตีปกติ +1 · และมีโอกาส 15% สวนกลับผู้ที่โจมตีปกติใส่ฮารุกะเป็นความเสียหาย 1 หน่วย พร้อมมอบสตั้น 1 เทิร์นในเทิร์นถัดไป" },
+  harukaOmega:  { icon: "🦾", label: "โอเมก้า", cls: "bg-echo-gold text-gray-900", desc: "New Omega: การโจมตีปกติมอบสถานะ \"เลือดไหล\" ให้เป้าหมาย 3 หน่วยทุกครั้ง · และมีโอกาส 15% สวนกลับผู้ที่โจมตีปกติใส่ฮารุกะเป็นความเสียหาย 1 หน่วย พร้อมแปะเลือดไหลให้ผู้โจมตี 2 หน่วย และมอบสตั้น 1 เทิร์นในเทิร์นถัดไป" },
   harukaPunish: { icon: "⚖️", label: "จงไปสู่สุขติ", cls: "bg-echo-magenta", desc: "amazon punish: การโจมตีปกติครั้งถัดไปที่ใส่เป้าหมายซึ่งมี \"เลือดไหล\" ตั้งแต่ 3 หน่วยขึ้นไป จะจุดชนวนให้ระเบิดเป็นความเสียหายเพิ่มตามจำนวนหน่วยที่ติดอยู่ แล้วล้างเลือดไหลทั้งหมด — ถ้ายังไม่ถึง 3 หน่วย สถานะนี้จะยังไม่ถูกใช้" },
   // ---------- ซาโตรุ อาเคฟุ (patch 2.0.8.2) ----------
   oblada:   { icon: "🎵", label: "สิ่งแปลกปลอม", cls: "bg-echo-hp", desc: "ObLa Di, ObLa Da: รับความเสียหาย 1 หน่วยทุกๆ 2 เทิร์น เป็นเวลา 4 เทิร์น" },
@@ -2062,32 +2062,34 @@ function BylethCourseModal({ me, onPick, onClose }) {
 }
 
 // UI พิเศษของไบเลธ: แต้มความรู้ (ทรัพยากรหลัก) + ผลทบทวนบทเรียนที่รอไพ่ใบถัดไป + หลักสูตรที่เปิดอยู่
-function BylethKnowledgePanel({ me, ch }) {
+function BylethKnowledgeBadge({ me, ch }) {
   if (!ch || ch.id !== "byleth" || me.bylethKnowledge == null) return null;
   const max = me.bylethKnowledgeMax || 20;
   const know = me.bylethKnowledge || 0;
-  const pct = Math.max(0, Math.min(100, (know / max) * 100));
   const course = me.bylethCourse ? BYLETH_COURSE_BY_KEY[me.bylethCourse] : null;
   const next = me.bylethNextDraw; // "study" | "rest" | null
-  const uses = me.bylethSkillUses || 0;
-  const usesMax = me.bylethSkillMax || 5;
   return (
-    <div className="rounded-xl bg-black/55 border border-echo-gold/50 px-2.5 py-1.5 text-left w-full max-w-xs">
-      <div className="flex items-center justify-between gap-2 text-[11px] font-bold">
-        <span className="text-echo-gold">📚 ความรู้ {know}/{max}</span>
-        <span className="opacity-80">สกิล {uses}/{usesMax} ครั้ง</span>
-      </div>
-      <div className="mt-1 h-2 rounded-full bg-white/15 overflow-hidden">
-        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: "linear-gradient(90deg,#E5B33B,#9B4F96)" }} />
-      </div>
-      <div className="mt-1 flex flex-wrap gap-1 text-[10px] font-bold">
-        {next === "study" && <span className="rounded-full px-1.5 py-0.5 bg-echo-gold text-gray-900">📖 ศึกษาเพิ่ม — ไพ่ใบหน้า "บวก" + ฟื้นเลือด 1</span>}
-        {next === "rest" && <span className="rounded-full px-1.5 py-0.5 bg-echo-magenta">💤 พักผ่อน — ไพ่ใบหน้า "ลบ" ออกจากแต้ม</span>}
-        {course && <span className="rounded-full px-1.5 py-0.5" style={{ background: course.color }}>{course.icon} {course.name}</span>}
-        {(me.statuses?.bylethSword || 0) > 0 && <span className="rounded-full px-1.5 py-0.5 bg-echo-hp">🗡️ ดาบต้องสาป +2</span>}
-        {me.bylethRevived && <span className="rounded-full px-1.5 py-0.5 bg-white/20">⏳ sothis ใช้แล้ว</span>}
-      </div>
-    </div>
+    <>
+      <span
+        className={`text-xs font-bold rounded-full px-2 py-0.5 whitespace-nowrap ${know > 0 ? "bg-echo-gold text-gray-900" : "bg-black/55"}`}
+        title="แต้มความรู้ — ได้จากทบทวนบทเรียนครั้งละ 1 (สูงสุด 20) · ดาบต้องสาปใช้ 4 หน่วย · หลักสูตรการสอนต้องมี 4 หน่วยขึ้นไป แล้วกินเทิร์นละ 1"
+      >
+        {"\u{1F4DA}"} ความรู้ {know}/{max} · สกิล {me.bylethSkillUses || 0}/{me.bylethSkillMax || 5}
+      </span>
+      {next && (
+        <span
+          className={`text-xs font-bold rounded-full px-2 py-0.5 whitespace-nowrap ${next === "study" ? "bg-echo-cyan text-gray-900" : "bg-echo-magenta"}`}
+          title={next === "study" ? "ศึกษาเพิ่ม: ไพ่ใบถัดไปจะบวกแต้มตามปกติ และฟื้นพลังชีวิต 1 หน่วย" : "พักผ่อน: ไพ่ใบถัดไปจะถูกนำไปลบออกจากแต้มปัจจุบันแทน (แต้มต่ำสุด 0)"}
+        >
+          {next === "study" ? "\u{1F4D6} ศึกษาเพิ่ม (บวก)" : "\u{1F4A4} พักผ่อน (ลบ)"}
+        </span>
+      )}
+      {course && (
+        <span className="text-xs font-bold rounded-full px-2 py-0.5 whitespace-nowrap" style={{ background: course.color }} title={course.desc}>
+          {course.icon} {course.name}
+        </span>
+      )}
+    </>
   );
 }
 
@@ -3531,7 +3533,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
                 <TakutoStarBadge me={me} ch={ch} />
                 <TakumiGearBadge me={me} ch={ch} />
                 <EijiDodgeBadge me={me} ch={ch} />
-                <BylethKnowledgePanel me={me} ch={ch} />
+                <BylethKnowledgeBadge me={me} ch={ch} />
                 <span className="ml-auto flex items-center gap-1.5">
                   <span className="flex gap-1 p-1 rounded-lg bg-black/25">
                     {Array.from({ length: me.maxSkill }, (_, i) => (
@@ -3984,7 +3986,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
                   <TakutoStarBadge me={me} ch={ch} />
                   <TakumiGearBadge me={me} ch={ch} />
                   <EijiDodgeBadge me={me} ch={ch} />
-                  <BylethKnowledgePanel me={me} ch={ch} />
+                  <BylethKnowledgeBadge me={me} ch={ch} />
                 </div>
                 {isHakuno && <HakunoCommandButton me={me} usable={hakunoCmdUsable} onOpen={() => setHakunoCmdOpen(true)} className="w-14 h-11 shrink-0 mt-1" />}
                 {isEiji && <EijiOrdinalButton me={me} usable={eijiOrdinalUsable} onPress={useEijiOrdinal} className="w-14 h-11 shrink-0 mt-1" />}
