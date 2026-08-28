@@ -3,7 +3,7 @@
 //  + สกิลติดตัว 1 ผู้เล่นอันดับ 2 · 2 ฉันอยากเจอเธออีก · 3 กลโกง Ordinal Scale
 //
 //  แกนกลางของตัวละครคือ "อัตราหลบหลีก" ที่ซ้อนทับได้จาก 3 แหล่ง (ดู dodgeChance)
-//    ว่องไว (eijiSwift)  +10%   · ไม่ว่ายังก็ตาม (eijiUlt) +20%  · Ordinal Scale +20% ต่อสแตค (สูงสุด 5)
+//    ว่องไว (eijiSwift)  +20%   · ไม่ว่ายังก็ตาม (eijiUlt) +20%  · Ordinal Scale +20% ต่อสแตค (สูงสุด 5)
 //  ใช้ได้ 1 ครั้งต่อเทิร์น เท่านั้น (p.eijiDodgeUsedRound) — กันทั้งการโจมตีปกติและดาเมจจากสกิล
 //  UI ฝั่ง client โชว์ % ปัจจุบันเป็นป้ายเฉพาะตัว (แบบเกียร์ของทาคุมิ) ไม่ใช่สถานะสะสม
 //
@@ -18,12 +18,14 @@ const EIJI_MAX_ARMOR = 4;           // เกราะพื้นฐาน 4 �
 
 // ---------- ว่องไว (สกิลพื้นฐาน) ----------
 const SWIFT_TURNS = 3;
-const SWIFT_DODGE = 10;             // +10% ต่อการหลบ 1 ครั้ง/เทิร์น
+const SWIFT_DODGE = 20;             // +20% ต่อการหลบ 1 ครั้ง/เทิร์น (รวมกับท่าไม้ตายเป็น 40%)
 const SWIFT_HEAL = 1;               // ระหว่างมีผล ฟื้นพลังชีวิต +1 ต่อเทิร์น
+const SWIFT_ARMOR_ON_CAST = 2;      // กดปุ๊บฟื้นเกราะให้ทันที 2 หน่วย
+const SWIFT_EXPIRE_REFUND = 2;      // "ความเร็วสูง" หมดอายุ -> คืนแต้มสกิลที่ใช้ไป 2 หน่วย
 
 // ---------- ความแค้น (สกิลรอง) ----------
 const SWORD_TURNS = 3;
-const SWORD_PCT_PER_UNIT = 10;      // โอกาสดาเมจ 2 เท่า = (เกราะ + พลังชีวิตของเอจิ) × 10%
+const SWORD_PCT_PER_UNIT = 10;      // ระหว่างมีดาบ: โอกาสดาเมจ 2 เท่า = (เกราะ + พลังชีวิตของเอจิ) × 10%
 
 // ---------- ไม่ว่ายังก็ตาม (ท่าไม้ตาย) ----------
 const ULT_TURNS = 5;
@@ -32,6 +34,8 @@ const ULT_CARD_TIME = 40;           // เวลาช่วงจั่วก�
 const ULT_SKILL_REGEN = 1;          // ระหว่างท่าไม้ตายทำงาน ฟื้นแต้มสกิล +1 ต่อเทิร์น
 
 // ---------- สกิลติดตัว 1: ผู้เล่นอันดับ 2 ----------
+const DOUBLE_BASE_PCT = 20;         // โอกาสดาเมจ 2 เท่าติดตัว 20% แม้ไม่ได้กดสกิลรอง
+const DOUBLE_HIT_HEAL = 1;          // ติดดาเมจ 2 เท่าเมื่อไหร่ ฟื้นพลังชีวิต +1 (คอมโบกับสกิลรอง)
 const DRAW_TIME_CUT = 5;            // จั่ว 1 ใบ = เวลาเทิร์นลด 5 วิ
 const DRAW_TIME_CUT_LONGING = 10;   // ระหว่างมีบัฟ Longing ของยูนะบนตัวเอง ลด 10 วิแทน
 const INTERRUPT_CHANCE = 0.25;      // 25% ขัดจังหวะผู้ชนะที่ไปตีคนอื่น
@@ -119,11 +123,20 @@ module.exports = {
     return "";
   },
 
-  // ว่องไว: บัฟตัวเอง 3 เทิร์น — หลบ +10% และฟื้นพลังชีวิต +1 ต่อเทิร์น
+  // ว่องไว: บัฟตัวเอง 3 เทิร์น — หลบ +20% · ฟื้นเลือด +1 ต่อเทิร์น · กดปุ๊บได้เกราะทันที +2
+  //  และเมื่อหมดอายุจะคืนแต้มสกิลที่ใช้ไป (ดู onSwiftExpire)
   applySwift(engine, p) {
     p.statuses.eijiSwift = SWIFT_TURNS;
-    engine.log(`💨 ${p.name} ว่องไว — ได้สถานะ "ความเร็วสูง" ${SWIFT_TURNS} เทิร์น (หลบหลีก +${SWIFT_DODGE}% · ฟื้นพลังชีวิต +${SWIFT_HEAL} ต่อเทิร์น) · อัตราหลบตอนนี้ ${dodgeChance(p)}%`);
-    return ` — หลบหลีก ${dodgeChance(p)}%`;
+    const armor = engine.healArmor(p, SWIFT_ARMOR_ON_CAST);
+    engine.log(`💨 ${p.name} ว่องไว — ได้สถานะ "ความเร็วสูง" ${SWIFT_TURNS} เทิร์น (หลบหลีก +${SWIFT_DODGE}% · ฟื้นพลังชีวิต +${SWIFT_HEAL} ต่อเทิร์น) · ฟื้นเกราะทันที +${armor} · อัตราหลบตอนนี้ ${dodgeChance(p)}%`);
+    return ` — หลบหลีก ${dodgeChance(p)}% · เกราะ +${armor}`;
+  },
+
+  // "ความเร็วสูง" หมดอายุ — คืนแต้มสกิลที่จ่ายไป เรียกจากลูปลดเทิร์นสถานะใน endTurn()
+  onSwiftExpire(engine, p) {
+    if (!isEiji(p)) return;
+    engine.addSkill(p, SWIFT_EXPIRE_REFUND, "passive");
+    engine.log(`💨 ${p.name} ความเร็วสูงหมดลง — คืนแต้มสกิลที่ใช้ไป +${SWIFT_EXPIRE_REFUND}`);
   },
 
   // ความแค้น: บัฟตัวเอง 3 เทิร์น — โจมตีปกติมีโอกาสดาเมจ 2 เท่า ตาม (เกราะ+พลังชีวิต) ของเอจิเอง
@@ -134,9 +147,15 @@ module.exports = {
     return ` — ดาเมจ 2 เท่า ${pct}%`;
   },
 
-  // โอกาสดาเมจ 2 เท่า: เกราะ + พลังชีวิตรวมกันของเอจิ 1 หน่วย = 10% (เพดาน 100%)
+  // โอกาสดาเมจ 2 เท่า
+  //  สกิลติดตัว 1: ติดตัว 20% เสมอ แม้ไม่ได้กดสกิลรอง
+  //  ระหว่างมี "ดาบแห่งความทรงจำ": ใช้สูตร (เกราะ + พลังชีวิต) × 10% แทน — ใช้ค่าที่สูงกว่า
+  //  เพื่อไม่ให้การกดสกิลรองตอนเลือดน้อยกลายเป็นการ "ลด" โอกาสของตัวเอง
   doubleChance(p) {
-    return Math.max(0, Math.min(100, ((p.hp || 0) + (p.armor || 0)) * SWORD_PCT_PER_UNIT));
+    if (!isEiji(p)) return 0;
+    if (!swordOn(p)) return DOUBLE_BASE_PCT;
+    const sword = Math.min(100, ((p.hp || 0) + (p.armor || 0)) * SWORD_PCT_PER_UNIT);
+    return Math.max(DOUBLE_BASE_PCT, sword);
   },
 
   // ไม่ว่ายังก็ตาม: บังคับเปิดเอฟเฟกต์สนามยูนะ Break Beat Bark! แบบพิเศษ 5 เทิร์น
@@ -279,13 +298,17 @@ module.exports = {
   //  คืนดาเมจใหม่ และตั้ง ctx.videoQueued = true เมื่อคิววีดีโอไว้ เพื่อให้ doAttack รู้ว่าต้องเล่นวีดีโอ
   //  "ก่อน" ขึ้นสรุปความเสียหาย (ค่าเริ่มต้นของ doAttack คือขึ้นสรุปก่อนแล้วค่อยเล่นวีดีโอที่ค้างคิว)
   applySwordDouble(engine, attacker, dmg, ctx) {
-    if (!swordOn(attacker) || dmg <= 0) return dmg;
+    if (!isEiji(attacker) || dmg <= 0) return dmg; // ทำงานตลอด — ฐาน 20% มาจากสกิลติดตัว 1
     const pct = this.doubleChance(attacker);
+    const label = swordOn(attacker) ? "ดาบแห่งความทรงจำ" : "ผู้เล่นอันดับ 2";
     if (Math.random() * 100 >= pct) {
-      engine.log(`⚔️ ${attacker.name} ดาบแห่งความทรงจำ — ไม่ติดดาเมจ 2 เท่า (${pct}%)`);
+      engine.log(`⚔️ ${attacker.name} ${label} — ไม่ติดดาเมจ 2 เท่า (${pct}%)`);
       return dmg;
     }
-    engine.log(`⚔️ ${attacker.name} ดาบแห่งความทรงจำทำงาน (${pct}%) — ความเสียหาย ${dmg} → ${dmg * 2}!`);
+    engine.log(`⚔️ ${attacker.name} ${label} ทำงาน (${pct}%) — ความเสียหาย ${dmg} → ${dmg * 2}!`);
+    // สกิลติดตัว 1: ติดดาเมจ 2 เท่าเมื่อไหร่ ฟื้นพลังชีวิตให้ตัวเอง
+    const heal = engine.healHp(attacker, DOUBLE_HIT_HEAL);
+    if (heal > 0) engine.log(`💚 ${attacker.name} ผู้เล่นอันดับ 2 — ดาเมจ 2 เท่าทำงาน ฟื้นพลังชีวิต +${heal}`);
     engine.queueCutscene(attacker, "eijiSwordHit");
     if (ctx) ctx.videoQueued = true;
     return dmg * 2;

@@ -77,11 +77,11 @@ test('กลโกง Ordinal Scale: กดได้สูงสุด 5 คร�
 test('อัตราหลบซ้อนทับได้จากทั้ง 3 แหล่ง', () => {
   const { e } = setup();
   e.statuses.eijiSwift = 3;
-  assert.equal(eiji.dodgeChance(e), 10);
+  assert.equal(eiji.dodgeChance(e), 20, 'ว่องไว 20%');
   e.statuses.eijiUlt = 5;
-  assert.equal(eiji.dodgeChance(e), 30, 'ว่องไว + ไม่ว่ายังก็ตาม = 30%');
+  assert.equal(eiji.dodgeChance(e), 40, 'ว่องไว + ไม่ว่ายังก็ตาม = 40%');
   eiji.pressOrdinal(engine, e);
-  assert.equal(eiji.dodgeChance(e), 50, 'บวก Ordinal Scale อีก 1 ครั้ง');
+  assert.equal(eiji.dodgeChance(e), 60, 'บวก Ordinal Scale อีก 1 ครั้ง');
 });
 
 test('หลบความเสียหายจากสกิลได้จริง (dealMixed / dealDirect) และได้แต้มสกิลคืน +2', () => {
@@ -248,4 +248,68 @@ test('กดท่าไม้ตายซ้ำระหว่างที่�
   const { e } = setup();
   eiji.applyUlt(engine, e);
   assert.equal(eiji.canUseSkill(engine, e, 'ultimate'), false);
+});
+
+// ---------- ปรับสมดุล: ดาเมจ 2 เท่าติดตัว + ว่องไวคืนแต้ม/ฟื้นเกราะ ----------
+test('สกิลติดตัว 1: โอกาสดาเมจ 2 เท่าติดตัว 20% แม้ไม่ได้กดสกิลรอง', () => {
+  const { e } = setup();
+  assert.equal(eiji.doubleChance(e), 20);
+});
+
+test('สกิลรองยกระดับโอกาสดาเมจ 2 เท่า และไม่มีทางต่ำกว่าฐาน 20%', () => {
+  const { e } = setup();
+  e.hp = 4; e.armor = 4;
+  e.statuses.eijiSword = 3;
+  assert.equal(eiji.doubleChance(e), 80, '(4+4) x 10%');
+  e.hp = 1; e.armor = 0;
+  assert.equal(eiji.doubleChance(e), 20, 'สูตรได้ 10% แต่ต้องไม่ต่ำกว่าฐานติดตัว');
+});
+
+test('ดาเมจ 2 เท่าทำงาน: คูณดาเมจ + ฟื้นพลังชีวิต +1 + คิววีดีโอไว้เล่นก่อนสรุป', () => {
+  const { e } = setup();
+  e.hp = 2; e.armor = 0;              // ยังไม่เต็ม เพื่อให้ฟื้นเลือดได้จริง
+  e.statuses.eijiSword = 3;           // (2+0) x 10% = 20% -> ใช้ฐาน 20%
+  const rnd = Math.random;
+  Math.random = () => 0;              // บังคับให้ติดแน่นอน
+  try {
+    const ctx = {};
+    const out = eiji.applySwordDouble(engine, e, 3, ctx);
+    assert.equal(out, 6, 'ดาเมจถูกคูณ 2');
+    assert.equal(e.hp, 3, 'ฟื้นพลังชีวิต +1');
+    assert.equal(ctx.videoQueued, true, 'ตั้งธงให้ doAttack เล่นวีดีโอก่อนสรุปความเสียหาย');
+  } finally { Math.random = rnd; }
+});
+
+test('ดาเมจ 2 เท่าไม่ติด: ดาเมจเท่าเดิม ไม่ฟื้นเลือด ไม่คิววีดีโอ', () => {
+  const { e } = setup();
+  e.hp = 2; e.armor = 0;
+  const rnd = Math.random;
+  Math.random = () => 0.99;
+  try {
+    const ctx = {};
+    assert.equal(eiji.applySwordDouble(engine, e, 3, ctx), 3);
+    assert.equal(e.hp, 2);
+    assert.ok(!ctx.videoQueued);
+  } finally { Math.random = rnd; }
+});
+
+test('ว่องไว: กดแล้วฟื้นเกราะทันที 2 หน่วย', () => {
+  const { e } = setup();
+  e.armor = 1;
+  eiji.applySwift(engine, e);
+  assert.equal(e.armor, 3);
+  assert.equal(e.statuses.eijiSwift, 3);
+});
+
+test('ว่องไวหมดอายุ: คืนแต้มสกิลที่ใช้ไป +2', () => {
+  const { e } = setup();
+  e.skillPoints = 3;
+  eiji.onSwiftExpire(engine, e);
+  assert.equal(e.skillPoints, 5);
+});
+
+test('ตัวละครอื่นไม่ได้รับผลดาเมจ 2 เท่าของเอจิ', () => {
+  const { a } = setup();
+  assert.equal(eiji.doubleChance(a), 0);
+  assert.equal(eiji.applySwordDouble(engine, a, 3, {}), 3);
 });
