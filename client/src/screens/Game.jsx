@@ -53,7 +53,10 @@ function isTargetable(p, iAmAttacker, c) {
   const normalAttackTarget = iAmAttacker && !friendly && !p.statuses?.seal && (!c.kaiRivalId || p.id === c.kaiRivalId);
   const gunTarget = !!c.gunSel && !self && !friendly;
   const escanorSkillTarget = c.escanorSel && !self && !friendly;
-  return (normalAttackTarget || !!c.anataSel || c.dawnSel || c.appleSel || c.bbSel || c.shSel || c.skSel || c.doomSel || c.saObSel || escanorSkillTarget || c.ignisSel || c.ignisImpactSel || c.bgSel || !!c.bardPending || c.nanayaSel || c.tpSel || c.kaiCreateSel || c.kaiPunishSel || c.msMarkSel || c.msRuptureSel || c.psSealSel || c.bylethStrikeSel || gunTarget) && p.alive;
+  // ดาบต้องสาป (ไบเลธ แบบฟาดทันที): เลือกตัวเอง/เพื่อนร่วมทีมไม่ได้ — เดิมกดเพื่อนได้ ดาเมจถูกเกตทีมกันทิ้ง
+  //  แต่ความรู้ 4 หน่วยถูกหักไปฟรี (ฝั่ง server กันซ้ำที่ prepareStrikeTarget แล้ว)
+  const bylethStrikeTarget = c.bylethStrikeSel && !self && !friendly;
+  return (normalAttackTarget || !!c.anataSel || c.dawnSel || c.appleSel || c.bbSel || c.shSel || c.skSel || c.doomSel || c.saObSel || escanorSkillTarget || c.ignisSel || c.ignisImpactSel || c.bgSel || !!c.bardPending || c.nanayaSel || c.tpSel || c.kaiCreateSel || c.kaiPunishSel || c.msMarkSel || c.msRuptureSel || c.psSealSel || bylethStrikeTarget || gunTarget) && p.alive;
 }
 // แตะ/คลิกการ์ดคู่ต่อสู้แล้วต้องทำอะไร — ไล่ตามโหมดเลือกเป้าหมายที่เปิดอยู่ ไม่มีเลยก็โจมตีปกติ
 function resolveAttackPick(id, c) {

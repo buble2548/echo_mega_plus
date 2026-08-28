@@ -79,6 +79,16 @@ function courseOwner(engine, key) {
   return engine.alivePlayers().find((o) => courseOf(o) === key && !engine.passiveSealed(o)) || null;
 }
 
+// โหมดทีม: ผลด้านลบของไบเลธต้องไม่ลงเพื่อนร่วมทีมตัวเอง (คอนเวนชันเดียวกับเอสคานอร์/บานาจ)
+//  ยืมเกตกลางของ engine มาใช้แทนการเช็ค teamId เอง -> เคารพ teamModeActive/กติกาทีมชุดเดียวกันทั้งเกม
+//  จำเป็นต้องห่อ withEffectSource เพราะ friendlyEffectBlocked อ่านจาก effectSourceId ซึ่งจุดที่เรียก
+//  ฮุคเหล่านี้ (resolveRound / afterSummary) ไม่ได้ห่อไว้ให้
+function friendlyTo(engine, owner, other) {
+  if (!owner || !other || owner.id === other.id) return false;
+  if (typeof engine.withEffectSource !== "function" || typeof engine.friendlyEffectBlocked !== "function") return false;
+  return !!engine.withEffectSource(owner, () => engine.friendlyEffectBlocked(other));
+}
+
 module.exports = {
   id: ID,
   IMG,
@@ -129,6 +139,8 @@ module.exports = {
     const tgs = Array.isArray(targets) ? [...new Set(targets)] : [];
     const t = tgs.length === 1 ? engine.players[tgs[0]] : null;
     if (!t || !t.alive || t.id === p.id) return null;
+    // โหมดทีม: เดิมเลือกเพื่อนร่วมทีมได้ ดาเมจถูกเกตกลางกันไว้จริง แต่ความรู้ 4 หน่วยถูกหักทิ้งฟรี
+    if (friendlyTo(engine, p, t)) return null;
     return t;
   },
 
@@ -279,6 +291,7 @@ module.exports = {
   onRoundWinner(engine, winner) {
     const owner = courseOwner(engine, "normal");
     if (!owner || !winner || !winner.alive || winner.id === owner.id) return;
+    if (friendlyTo(engine, owner, winner)) return; // โหมดทีม: ไม่สตั้นเพื่อนร่วมทีมตัวเอง
     winner.bylethStunPending = 1;
     engine.log(`📗 ${winner.name} เป็นผู้ชนะระหว่าง "${COURSES.normal.name}" — เทิร์นถัดไปจะติดสถานะสตั้น 1 เทิร์น`);
   },
@@ -306,6 +319,7 @@ module.exports = {
       if (!entry || entry.playerId === owner.id) continue;
       const t = engine.players[entry.playerId];
       if (!t || !t.alive) continue;
+      if (friendlyTo(engine, owner, t)) continue; // เดิมดาเมจถูกเกตกลางกัน แต่ "ห้ามสกิลพื้นฐาน" ยังลงเพื่อนร่วมทีม
       if (entry.tier === "ultimate" && !seenUlt.has(t.id)) {
         seenUlt.add(t.id);
         engine.withEffectSource(owner, () => {
@@ -329,6 +343,7 @@ module.exports = {
   blocksAttack(engine, winner) {
     const owner = courseOwner(engine, "ex");
     if (!owner || !winner || winner.id === owner.id) return false;
+    if (friendlyTo(engine, owner, winner)) return false; // โหมดทีม: ไม่ตัดเทิร์นโจมตีของเพื่อนร่วมทีม
     return engine.roundSkills.some((e) => e && e.playerId === winner.id && e.tier === "secondary");
   },
 

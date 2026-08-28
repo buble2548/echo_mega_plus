@@ -292,6 +292,68 @@ test('หลักสูตร จบการศึกษา: ไบเลธ�
   assert.equal(byleth.startCounterAttack(engine, a), false);
 });
 
+// โหมดทีม: ผลด้านลบของหลักสูตรต้องไม่ลงเพื่อนร่วมทีม (คอนเวนชันเดียวกับเอสคานอร์/บานาจ)
+//  บั๊กเดิม: เกตกลางกันได้แค่ "ดาเมจ" เพราะ byleth.js ห่อ withEffectSource ไว้เฉพาะตรง dealMixed
+//  ส่วนสตั้น/ห้ามสกิลพื้นฐาน/ตัดเทิร์นโจมตี ถูกตั้งนอกเกต -> เพื่อนร่วมทีมโดนเต็มๆ (หลักสูตรทำงานครึ่งเดียว)
+test('โหมดทีม: หลักสูตรไม่ลงผลด้านลบกับเพื่อนร่วมทีม แต่ยังลงศัตรูตามปกติ', () => {
+  const { b } = setup();
+  const mate = mk('M', 'temari', 2);
+  const foe = mk('F', 'temari', 3);
+  mate.teamId = 'A'; b.teamId = 'A'; foe.teamId = 'B';
+  mate.armor = 0; foe.armor = 0; // ให้ดาเมจ 1 หน่วยลงเลือดจริงตรงๆ อ่านผลง่าย (dealMixed กินเกราะก่อน)
+  engine.players.M = mate;
+  engine.players.F = foe;
+  engine.setGameMode('duo');
+  try {
+    byleth.addKnowledge(b, 20);
+
+    // ดาบต้องสาป (ฟาดทันที): เลือกเพื่อนไม่ได้ (ไม่งั้นความรู้ 4 หน่วยหายฟรีเพราะดาเมจถูกเกตกัน) แต่เลือกศัตรูได้
+    assert.equal(byleth.prepareStrikeTarget(engine, b, ['M']), null);
+    assert.equal(byleth.prepareStrikeTarget(engine, b, ['F']).id, 'F');
+
+    // หลักสูตร พิเศษ: ลงโทษเฉพาะศัตรู
+    byleth.applyInstantSkill(engine, b, 'ultimate', 'ex');
+    engine.roundSkills.length = 0;
+    engine.roundSkills.push(
+      { playerId: 'M', tier: 'ultimate' }, { playerId: 'M', tier: 'basic' },
+      { playerId: 'F', tier: 'ultimate' }, { playerId: 'F', tier: 'basic' },
+    );
+    const mateHp = mate.hp, foeHp = foe.hp;
+    byleth.applyExPunish(engine);
+    assert.equal(mate.hp, mateHp, 'เพื่อนร่วมทีมต้องไม่โดนดาเมจ');
+    assert.equal(mate.bylethNoBasicPending || 0, 0, 'เพื่อนร่วมทีมต้องไม่โดนห้ามสกิลพื้นฐาน');
+    assert.equal(foe.hp, foeHp - 1, 'ศัตรูยังโดนดาเมจตามปกติ');
+    assert.equal(foe.bylethNoBasicPending, 1, 'ศัตรูยังโดนห้ามสกิลพื้นฐานตามปกติ');
+
+    // หลักสูตร พิเศษ: ไม่ตัดเทิร์นโจมตีของเพื่อนร่วมทีม แต่ยังตัดของศัตรู
+    engine.roundSkills.length = 0;
+    engine.roundSkills.push({ playerId: 'M', tier: 'secondary' }, { playerId: 'F', tier: 'secondary' });
+    assert.equal(byleth.blocksAttack(engine, mate), false);
+    assert.equal(byleth.blocksAttack(engine, foe), true);
+
+    // หลักสูตร มาตราฐาน: ไม่สตั้นเพื่อนร่วมทีมที่ชนะ แต่ยังสตั้นศัตรูที่ชนะ
+    byleth.applyInstantSkill(engine, b, 'ultimate', 'normal');
+    byleth.onRoundWinner(engine, mate);
+    assert.equal(mate.bylethStunPending || 0, 0);
+    byleth.onRoundWinner(engine, foe);
+    assert.equal(foe.bylethStunPending, 1);
+  } finally {
+    engine.setGameMode('ffa');
+    delete engine.players.M;
+    delete engine.players.F;
+  }
+});
+
+// นอกโหมดทีม (ffa) ทุกอย่างต้องยังลงเหมือนเดิม — กันการแก้ข้างบนเผลอปิดผลทั้งหมด
+test('โหมด ffa: หลักสูตรยังลงผลกับทุกคนตามเดิม', () => {
+  const { b, a } = setup();
+  byleth.addKnowledge(b, 20);
+  byleth.applyInstantSkill(engine, b, 'ultimate', 'normal');
+  byleth.onRoundWinner(engine, a);
+  assert.equal(a.bylethStunPending, 1);
+  assert.equal(byleth.prepareStrikeTarget(engine, b, ['A']).id, 'A');
+});
+
 test('sothis: ฟื้นคืนชีพ 1 ครั้งต่อเกมด้วยเลือด 1 เกราะ 0', () => {
   const { b } = setup();
   b.hp = 0; b.armor = 2;
