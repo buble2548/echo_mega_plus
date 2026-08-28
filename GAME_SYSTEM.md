@@ -193,6 +193,16 @@ cost = min(SKILL_COST_MAX /* 8 */,
 
 **ดีบัฟกลาง**: `spellburden` (ภาระเวท — ดูกล่องด้านล่าง) · `weak` · `fragile` · `sleep` · `stun` · `nodraw` · `noskill` · `nohealing` · `invert` (ผกผัน) · `hburn` (ลุกไหม้) · `hbleed` (เลือดไหล — ดูกล่องด้านล่าง) · `chaa` (จั่ว 1 ครั้งได้ 2 ใบ) · `decay` (ผุพัง เกราะไม่ฟื้น)
 
+> ⚠️ **กติกาการมอบ `hburn`/`hbleed` ตอนต้นเทิร์น** — `tickBurn()`/`tickBleed()` ถูกเรียก **ในลูป
+> `for (const p of Object.values(players))` ของ `startRound()`** (ถัดจาก `CHAR_HOOKS.*.onRoundStartTick`
+> ไม่กี่บรรทัด) ดังนั้นฮุค `onRoundStartTick` ที่แจกลุกไหม้/เลือดไหล **ให้ผู้เล่นคนอื่น** ห้ามแปะตรงๆ:
+> คนที่ลูปยังวนไม่ถึงจะถูกติกกินหน่วยที่เพิ่งได้ทิ้งในเทิร์นเดียวกัน ส่วนคนที่วนผ่านไปแล้วถึงจะรอเทิร์นถัดไป
+> จริง = **ผลไม่เท่ากันตามลำดับที่นั่ง** ให้พักไว้ในคิวของตัวเองแล้ว flush หลังลูปจบ (ต้นแบบ:
+> `escanor.queueBurn()` + `escanor.flushPendingBurn(engine)` ที่ถูกเรียกหลังลูปใน `startRound()`)
+> — flush อยู่ก่อน `gameState = "PLAYING"` ดีบัฟจึงติดให้เห็นตลอดเทิร์น แค่ยังไม่ติกจนกว่าจะขึ้นเทิร์นใหม่
+> · ถ้าฮุคใช้ `withEffectSource` อยู่ ต้องเก็บผู้มอบไว้แล้วคืน source ตอน flush ด้วย ไม่งั้น
+> `friendlyEffectBlocked` ในโหมดทีมจะไม่ทำงาน
+
 **ดีบัฟเฉพาะผู้สังหารเมจ** (อยู่ใน `BASIC_DEBUFF_CLEAR` — ต้านสถานะผิดปกติล้างได้ทั้งคู่)
 - `mageslayerMark` (ตราล่าเวท) — ไม่ลดเทิร์น (`continue` ใน `endTurn`) ถาวรจนย้ายมาร์ก/ถูกล้าง · ฝั่งผู้ร่ายเก็บที่
   `ms.mageslayerMarkedId` + `target.mageslayerMarks[msId]` และ reconcile ให้เองที่ `tickWitchMark()` ท้ายเทิร์น

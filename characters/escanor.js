@@ -123,6 +123,32 @@ function addBurn(engine, target, amount, source) {
   if (gained > 0) engine.log?.(`🔥 ${target.name} ติดลุกไหม้ +${gained} จาก ${source || "Escanor"} (รวม ${target.statuses.hburn})`);
   return gained;
 }
+// ลุกไหม้ที่มอบ "ตอนต้นเทิร์น" ต้องรอไปมีผลเทิร์นถัดไปเสมอ (ตามสเปคทุกร่างของเอสคานอร์)
+//  ⚠️ onRoundStartTick ถูกเรียกจากในลูป for (const p of Object.values(players)) ของ startRound()
+//  ซึ่ง tickBurn(engine, p) อยู่ถัดลงไปไม่กี่บรรทัดในลูปเดียวกัน — ถ้า addBurn ตรงๆ ตอนนั้น
+//  ผู้เล่นที่ลูปยังวนไม่ถึงจะโดน tickBurn กินหน่วยที่เพิ่งได้ทิ้งในเทิร์นเดียวกัน ส่วนคนที่วนผ่านไปแล้ว
+//  ถึงจะรอเทิร์นถัดไปจริง = ผลต่างกันตามลำดับที่นั่ง จึงต้องพักไว้แล้ว flush หลังลูปต้นเทิร์นจบ
+//  (flush ก่อน gameState = "PLAYING" ดีบัฟจึงติดให้เห็นตลอดเทิร์น แค่ยังไม่ติกจนกว่าจะขึ้นเทิร์นใหม่)
+//  by = เอสคานอร์ผู้มอบ ต้องเก็บไว้ด้วยเพราะตอน flush เราหลุดออกจาก withEffectSource ของต้นเทิร์นแล้ว
+//  ถ้าไม่คืน effect source ให้ friendlyEffectBlocked โหมดทีมจะเผาเพื่อนร่วมทีมตัวเอง
+function queueBurn(target, amount, source, by) {
+  if (!target || !target.alive || amount <= 0) return;
+  target.escanorPendingBurn = target.escanorPendingBurn || [];
+  target.escanorPendingBurn.push({ amount, source, by });
+}
+function flushPendingBurn(engine) {
+  for (const t of Object.values(engine.players || {})) {
+    const queued = t && t.escanorPendingBurn;
+    if (!queued || !queued.length) continue;
+    t.escanorPendingBurn = [];
+    if (!t.alive) continue; // ตกรอบระหว่างเอฟเฟกต์ต้นเทิร์น -> ทิ้งคิวไป ไม่ต้องแปะดีบัฟให้ศพ
+    for (const q of queued) {
+      const apply = () => addBurn(engine, t, q.amount, q.source);
+      if (q.by && typeof engine.withEffectSource === "function") engine.withEffectSource(q.by, apply);
+      else apply();
+    }
+  }
+}
 function forceBurnTicks(engine, target, ticks) {
   if (!target || !target.alive || ticks <= 0) return;
   const count = Math.min(ticks, target.statuses?.hburn || 0);
@@ -232,8 +258,9 @@ function onRoundStartTick(engine, p, prevNight) {
   clampCharge(p);
 
   if (isLast(p)) {
-    addBurn(engine, p, 4, "Last Stand");
-    for (const o of enemies(engine, p)) addBurn(engine, o, 2, "Last Stand");
+    // มอบผ่านคิว ไม่ใช่ addBurn ตรงๆ — ดูเหตุผลที่ queueBurn (ต้องมีผลเทิร์นถัดไปเท่ากันทุกที่นั่ง)
+    queueBurn(p, 4, "Last Stand", p);
+    for (const o of enemies(engine, p)) queueBurn(o, 2, "Last Stand", p);
     engine.loseHp(p);
     resolveDamageAftermath(engine, p); // ต้องผ่านระบบกันตายกลาง (beatSave/beatMode/eva3) เหมือนดาเมจก้อนอื่นทั้งเกม
     return;
@@ -524,6 +551,7 @@ module.exports = {
   formOf,
   displayImg,
   onRoundStartTick,
+  flushPendingBurn,
   onEndTurnSolar,
   onCardDraw,
   onSkillUsed,

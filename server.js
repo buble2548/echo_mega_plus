@@ -3285,6 +3285,11 @@ function dealRound() {
     CHAR_HOOKS.bard.onRoundStartInterruptCheck(engine, p);
   }
 
+  // ---------- เอสคานอร์ (characters/escanor.js): ลุกไหม้ที่ Last Stand แจกตอนต้นเทิร์น ----------
+  //  ต้องแปะ "หลัง" ลูปต้นเทิร์นจบทั้งวง เพราะ tickBurn ของแต่ละคนอยู่ในลูปด้านบน — ถ้าแปะในลูป
+  //  คนที่ยังวนไม่ถึงจะถูกกินหน่วยที่เพิ่งได้ทิ้งในเทิร์นเดียวกัน (ผลไม่เท่ากันตามลำดับที่นั่ง)
+  CHAR_HOOKS.escanor.flushPendingBurn(engine);
+
   // ความตายที่โรยรา (ชิกิ patch 2.0.8, characters/shiki.js): ทุกเทิร์นที่ท่าไม้ตายยังทำงาน มอบเส้นชีวิต +1 ให้ทุกคนยกเว้นตัวเอง
   CHAR_HOOKS.shiki.onRoundStartWitherTick(engine);
 

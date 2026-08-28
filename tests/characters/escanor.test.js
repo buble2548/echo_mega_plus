@@ -522,8 +522,57 @@ test('Last Stand effects never damage or burn Escanor teammates', () => {
   assert.equal(enemy.hp, 4);
 
   engine.withEffectSource(p, () => escanor.onRoundStartTick(engine, p));
-  assert.equal(teammate.statuses.hburn || 0, 0);
+  escanor.flushPendingBurn(engine);
+  assert.equal(teammate.statuses.hburn || 0, 0, 'flush ต้องคืน effect source เดิม ไม่งั้นเพื่อนร่วมทีมโดนเผา');
   assert.equal(enemy.statuses.hburn, 2, 'Last Stand มอบลุกไหม้ศัตรูทุกคน +2 ต่อเทิร์น');
+});
+
+// จังหวะดีเลย์ของลุกไหม้: ทุกร่างของเอสคานอร์ระบุว่า "มีผลในเทิร์นถัดไป" — ของ Last Stand ที่แจกตอน
+// ต้นเทิร์นเคยแปะทันทีในลูป startRound() ทำให้ tickBurn ของคนที่ลูปยังวนไม่ถึงกินหน่วยที่เพิ่งได้
+// ทิ้งในเทิร์นเดียวกัน (คนที่วนผ่านไปแล้วรอเทิร์นถัดไปจริง) = ผลไม่เท่ากันตามลำดับที่นั่ง
+test('Last Stand round-start burn is deferred so it always lands on the next turn', () => {
+  const p = mkPlayer({ statuses: { escanorLastStand: 999 } });
+  const early = mkTarget('p2', { hp: 5 });
+  const late = mkTarget('p3', { hp: 5 });
+  const noop = () => {};
+  const engine = mkEngine({ p1: p, p2: early, p3: late }, {
+    CHAR_HOOKS: { escanor },
+    maybeBeatSave: noop, maybeBeatMode: noop, maybeEva3: noop, maybeWakeKotone: noop,
+  });
+
+  // จำลองลูปต้นเทิร์นของ startRound(): early ถูก tickBurn ไปก่อนเอสคานอร์, late ถูก tickBurn ทีหลัง
+  universal.tickBurn(engine, early);
+  escanor.onRoundStartTick(engine, p);
+  assert.equal(early.statuses.hburn || 0, 0, 'ยังไม่แปะจนกว่าลูปต้นเทิร์นจะจบ');
+  assert.equal(late.statuses.hburn || 0, 0, 'ยังไม่แปะจนกว่าลูปต้นเทิร์นจะจบ');
+  universal.tickBurn(engine, late);
+  assert.equal(late.hp, 5, 'ลุกไหม้ของเทิร์นนี้ต้องไม่กินเลือดคนที่ลูปวนถึงทีหลัง');
+
+  escanor.flushPendingBurn(engine);
+  assert.equal(early.statuses.hburn, 2);
+  assert.equal(late.statuses.hburn, 2, 'ทั้งสองที่นั่งต้องได้ลุกไหม้เท่ากันและยังไม่ติกในเทิร์นนี้');
+  assert.equal(p.statuses.hburn, 4, 'ลุกไหม้ที่ Last Stand แปะตัวเองก็ต้องรอเทิร์นถัดไปเหมือนกัน');
+  assert.equal(early.hp, 5);
+  assert.equal(late.hp, 5);
+  assert.deepEqual(Object.values(engine.players).map((x) => x.escanorPendingBurn), [[], [], []], 'คิวต้องถูกล้างหลัง flush');
+
+  // เทิร์นถัดไปค่อยติก
+  universal.tickBurn(engine, early);
+  universal.tickBurn(engine, late);
+  assert.equal(early.hp, 4);
+  assert.equal(late.hp, 4);
+});
+
+test('Last Stand queued burn is dropped when the target dies during start-of-turn effects', () => {
+  const p = mkPlayer({ statuses: { escanorLastStand: 999 } });
+  const doomed = mkTarget('p2', { hp: 1 });
+  const engine = mkEngine({ p1: p, p2: doomed });
+  escanor.onRoundStartTick(engine, p);
+  doomed.alive = false;
+  doomed.hp = 0;
+  escanor.flushPendingBurn(engine);
+  assert.equal(doomed.statuses.hburn || 0, 0);
+  assert.deepEqual(doomed.escanorPendingBurn, []);
 });
 
 test('Night wine is delivered next turn with a usable uid and upgrades to the correct Roman level', () => {
