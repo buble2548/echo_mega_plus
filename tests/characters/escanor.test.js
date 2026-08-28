@@ -334,7 +334,7 @@ test('Escanor hook leaves WineBarrel durations for the shared status countdown',
   assert.equal(p.statuses.escanorCool, 2);
 });
 
-test('Morning or Noon basic skill hits the selected target', () => {
+test('Morning basic burns only the selected target and deals no direct damage', () => {
   const p = mkPlayer({ statuses: { escanorMorning: 999 }, statusAmt: { escanorMorning: 1 } });
   const t1 = mkTarget('p2');
   const t2 = mkTarget('p3');
@@ -343,11 +343,13 @@ test('Morning or Noon basic skill hits the selected target', () => {
   escanor.applySkill(engine, p, 'basic', ['p3']);
 
   assert.equal(t1.hp, 3);
-  assert.equal(t2.hp, 2);
-  assert.equal(t2.statuses.hburn, 1);
+  assert.equal(t1.statuses.hburn || 0, 0);
+  assert.equal(t2.hp, 3, 'บอลเพลิงสุริยะไม่สร้างความเสียหายทันทีแล้ว');
+  assert.equal(t2.statuses.hburn, 2);
+  assert.equal(engine.damageCalls.length, 0);
 });
 
-test('Solar fireball requires a valid explicit target and resolves lethal damage immediately', () => {
+test('Solar fireball requires a valid explicit target', () => {
   const p = mkPlayer({ statuses: { escanorMorning: 999 }, statusAmt: { escanorMorning: 1 } });
   const target = mkTarget('p2', { hp: 1 });
   const engine = mkEngine({ p1: p, p2: target });
@@ -356,19 +358,19 @@ test('Solar fireball requires a valid explicit target and resolves lethal damage
   assert.ok(escanor.prepareSkill(engine, p, 'basic', ['p2']));
 
   escanor.applySkill(engine, p, 'basic', ['p2']);
-  assert.equal(target.alive, false);
-  assert.equal(target.hp, 0);
-  assert.equal(engine.damageCalls[0].isNormalAttack, false);
+  assert.equal(target.alive, true, 'ไม่มีดาเมจตรงแล้ว จึงฆ่าเป้าหมายเลือดหน่วยเดียวทันทีไม่ได้');
+  assert.equal(target.hp, 1);
+  assert.equal(target.statuses.hburn, 2);
 });
 
-test('Noon basic costs one HP and applies two burn', () => {
+test('Noon basic costs one HP and applies three burn without direct damage', () => {
   const p = mkPlayer({ hp: 7, escanorCharge: 6, statuses: { escanorNoon: 999 }, statusAmt: { escanorNoon: 1 } });
   const target = mkTarget('p2');
   const engine = mkEngine({ p1: p, p2: target });
   escanor.applySkill(engine, p, 'basic', ['p2']);
   assert.equal(p.hp, 6);
-  assert.equal(target.hp, 2);
-  assert.equal(target.statuses.hburn, 2);
+  assert.equal(target.hp, 3);
+  assert.equal(target.statuses.hburn, 3);
 });
 
 test('secondary video waits for an attack, plays once per match, and Noon has no damage or skill refund bonus', () => {
@@ -644,4 +646,17 @@ test('the retired escanorSpear status is gone from the hook', () => {
   assert.equal(/escanorSpear(?!Burst)/.test(src), false, 'escanorSpear เป็นโค้ดตาย ไม่มีจุดไหนเซ็ตสถานะนี้');
   const server = fs.readFileSync(path.join(__dirname, '..', '..', 'server.js'), 'utf8');
   assert.equal(/escanorSpear(?!Burst)/.test(server), false);
+});
+
+test('ต้านสถานะผิดปกติ กันลุกไหม้ใหม่ แต่ไม่ล้างลุกไหม้ที่ติดอยู่แล้ว', () => {
+  const p = mkPlayer({ statuses: { escanorMorning: 999 }, statusAmt: { escanorMorning: 1 } });
+  const target = mkTarget('p2');
+  target.statuses.hburn = 3; // ติดลุกไหม้ค้างไว้ก่อนแล้ว
+  const engine = mkEngine({ p1: p, p2: target }, { resistActive: (t) => t.id === 'p2' });
+
+  escanor.applySkill(engine, p, 'basic', ['p2']);
+  assert.equal(target.statuses.hburn, 3, 'ต้านสถานะกันของใหม่ที่เข้ามาเท่านั้น ของเดิมต้องอยู่ครบ');
+
+  escanor.onAttackLanded(engine, p, target);
+  assert.equal(target.statuses.hburn, 3);
 });

@@ -118,9 +118,11 @@ module.exports = {
     p.statuses[kind] = engine.BARD_DIM_TURNS;
     p.transformAt = engine.nextTransformCounter();
     p.bardNotesUsed = 0; // เข้ามิติแล้วรีเซ็ตโน้ตที่เติมไปก่อนหน้าในเทิร์นนี้ — เริ่มนับใหม่ 0/6 ทันที
-    // ทั้งสองมิติ — คีตกวีได้ "ต้านสถานะผิดปกติ" 3 เทิร์น (ล้างดีบัฟพื้นฐานตอนติดด้วย) "หลบหลีก" 1 ครั้ง และ "โชคลาภ" 1 ครั้ง
+    // ทั้งสองมิติ — คีตกวีได้ "ต้านสถานะผิดปกติ" 3 เทิร์น "หลบหลีก" 1 ครั้ง และ "โชคลาภ" 1 ครั้ง
+    //  กฎกลาง: "ต้านสถานะผิดปกติ" กันเฉพาะสถานะใหม่ที่กำลังจะเข้ามา ไม่ล้างดีบัฟที่ติดอยู่แล้ว
+    //  (เดิมที่นี่เรียก cleanseDebuffs ตอนติดด้วย ทั้งที่คำอธิบายท่าไม่ได้ระบุการล้าง — เอาออกแล้ว
+    //   ท่าที่ "ล้าง" จริงคือ Sanctuary Hymn ของคีตกวีเองและ Sleeping time ของโคโตเนะ ซึ่งเขียนไว้ใน desc ชัดเจน)
     p.statuses.resist = Math.max(p.statuses.resist || 0, engine.BARD_DIM_RESIST_TURNS);
-    engine.cleanseDebuffs(p);
     p.statuses.fortune = Math.min(engine.BARD_FORTUNE_MAX, (p.statuses.fortune || 0) + engine.BARD_DIM_FORTUNE);
     for (let i = 0; i < engine.BARD_DIM_EVADE; i++) engine.grantEvadeStack(p);
     p.fortuneIdle = 0;

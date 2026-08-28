@@ -145,10 +145,12 @@ endTurn()              :5363  ลดเทิร์นสถานะทั้�
 
 **สูตรราคาจริง** (`useSkill` `:3316`–`:3360`)
 ```
-cost = skill.cost
-     + (nightTaxTier === tier ? 1 : 0)     // กลางคืน: สุ่มแพงขึ้น 1 tier/คน/เทิร์น (เพดาน 8)
-     - statusAmt(spellflow)                 // กระแสเวท
-     + min(8, statusAmt(spellburden))       // ภาระเวท
+cost = min(SKILL_COST_MAX /* 8 */,
+         max(0, skill.cost - statusAmt(spellflow))   // กระแสเวท (ลดราคา)
+       + (nightTaxTier === tier ? 1 : 0)             // กลางคืน: สุ่มแพงขึ้น 1 tier/คน/เทิร์น
+       + min(SPELLBURDEN_MAX /* 2 */, statusAmt(spellburden)))  // ภาระเวท
+// ตัวปรับ "ขาขึ้น" ทุกตัวรวมกันดันราคาได้ไม่เกิน 8 → สกิลที่ cost 8 อยู่แล้วจะไม่แพงขึ้นอีก
+// publicState() คิดสูตรเดียวกันเป๊ะ (ราคาบนปุ่ม = ราคาที่หักจริง)
 ถ้า cost > 0 และมี freecast (การ์ด Queen) → ฟรี 1 ครั้ง
 ```
 
@@ -178,12 +180,24 @@ cost = skill.cost
 
 **บัฟกลาง** (`_universal_status.js`): `spellflow` (สกิลถูกลง) · `might`/`empower` (เสริมพลัง) · `guard` (คุ้มครอง) · `resist` (ต้านสถานะ) · `fortune` (โชคลาภ) · `evade` (หลบหลีก) · `netramana` (โอกาสสังหาร 20%)
 
-**ดีบัฟกลาง**: `spellburden` · `weak` · `fragile` · `sleep` · `stun` · `nodraw` · `noskill` · `nohealing` · `invert` (ผกผัน) · `hburn` (ลุกไหม้) · `chaa` (จั่ว 1 ครั้งได้ 2 ใบ) · `decay` (ผุพัง เกราะไม่ฟื้น)
+**ดีบัฟกลาง**: `spellburden` (ภาระเวท — ดูกล่องด้านล่าง) · `weak` · `fragile` · `sleep` · `stun` · `nodraw` · `noskill` · `nohealing` · `invert` (ผกผัน) · `hburn` (ลุกไหม้) · `chaa` (จั่ว 1 ครั้งได้ 2 ใบ) · `decay` (ผุพัง เกราะไม่ฟื้น)
 
 **ดีบัฟเฉพาะผู้สังหารเมจ** (อยู่ใน `BASIC_DEBUFF_CLEAR` — ต้านสถานะผิดปกติล้างได้ทั้งคู่)
 - `mageslayerMark` (ตราล่าเวท) — ไม่ลดเทิร์น (`continue` ใน `endTurn`) ถาวรจนย้ายมาร์ก/ถูกล้าง · ฝั่งผู้ร่ายเก็บที่
   `ms.mageslayerMarkedId` + `target.mageslayerMarks[msId]` และ reconcile ให้เองที่ `tickWitchMark()` ท้ายเทิร์น
 - `manaLeech` (ดูดซับเวท) — ลดเทิร์นตามปกติ · ทริกที่ `useSkill()` และที่ `addSkill()` ที่มี `src`
+  · `applyManaBurden()` ตั้งเวลาผ่าน `setTurnsNoRefresh()` (ไม่ต่ออายุเหมือนภาระเวท)
+
+**ภาระเวท (`spellburden`) — กฎกลาง ห้าม bypass**
+ทุกแหล่งต้องเรียก **`engine.applySpellburden(p, turns)`** เท่านั้น (`_universal_status.js` → wrapper ใน `server.js`)
+ห้ามเขียน `p.statuses.spellburden` / `applyDebuff(p, "spellburden", ...)` ตรงๆ
+- จำนวนสะสม **+1 ต่อครั้ง เพดาน `SPELLBURDEN_MAX = 2`** (เพิ่มราคาสกิลของเป้าหมายได้มากสุด 2 แต้ม)
+- **ใช้ซ้ำใส่คนเดิมขณะสถานะยังติดอยู่ = ไม่ต่ออายุ** — `turns` ใช้เฉพาะตอนที่สถานะยังไม่ติด (ผ่าน `setTurnsNoRefresh()`)
+- `turns` เป็นของแต่ละแหล่ง: ผู้สังหารเมจ `MS_BURDEN_TURNS` 5 · ซาโตรุ `SPELLBURDEN_TURNS` 4 · โคโตเนะ `KOTONE_DANCE_NIGHT_BURDEN` 2
+- `resist` กันได้ทั้งก้อน (คืน `false`) · หมดอายุที่ `endTurn()` แล้วล้าง `statusAmt` ให้เอง (จำนวนไม่ค้าง)
+- wrapper ใน `server.js` กันเฉพาะ "เพื่อนร่วมทีม**คนอื่น**" ไม่กันการใส่ตัวเอง — สกิลที่แลกภาระเวทของตัวเองเป็นพลัง
+  (Dance Lession กลางคืน) ต้องทำงานได้ในโหมดทีมด้วย
+- เทสต์: [tests/spellburden.test.js](tests/spellburden.test.js)
 
 - `applyDebuff()` คืน `false` ถ้าโดน `resist` กัน — `BASIC_DEBUFF_CLEAR` คือรายการที่ต้านสถานะล้างได้ทั้งหมด, `SOFT_DEBUFF_STEP` (`dawn`, `deathline`) ล้างได้ทีละ 1 สแตค
 - **`evade` เป็นกรณีพิเศษ**: ตัวจริงอยู่ใน `p.evadeStacks` (array อายุต่อสแตค, สูงสุด 3 สแตค × 2 เทิร์น) — `p.statuses.evade` เป็นแค่ mirror ใช้ `grantEvadeStack`/`consumeEvadeStack`/`tickEvadeStacks` เท่านั้น ห้ามแตะตรงๆ

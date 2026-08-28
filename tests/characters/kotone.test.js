@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const kotone = require('../../characters/kotone.js');
+const universal = require('../../characters/_universal_status.js');
 const kotoneCharacter = require('../../characters.js').CHARACTERS.find((c) => c.id === 'kotone');
 
 function mkPlayer(over = {}) {
@@ -26,7 +27,10 @@ function mkEngine(players, over = {}) {
     players,
     CHAR_BY_ID: { kotone: kotoneCharacter },
     roundNumber: 1,
-    SPELLBURDEN_MAX: 3,
+    SPELLBURDEN_MAX: universal.SPELLBURDEN_MAX,
+    // ภาระเวทต้องผ่าน helper กลางเสมอ — stub จึงต่อกับของจริง ไม่จำลองเอง
+    applySpellburden: universal.applySpellburden,
+    setTurnsNoRefresh: universal.setTurnsNoRefresh,
     ATTACK_TIME: 15,
     GOLD_MAX: 30,
     overloadForceActive: false,
@@ -80,6 +84,35 @@ function mkEngine(players, over = {}) {
 test('เพดานเหรียญของโคโตเนะคือ 45 และกระปุกออมสินเก็บได้ 15', () => {
   assert.equal(kotone.GOLD_CAP, 45);
   assert.equal(kotone.PIGGY_MAX, 15);
+});
+
+test('คอส/ชื่อสกิลตรงตามสเปก และท่าไม้ตาย 1 ทำงานก่อนเปิดการ์ด', () => {
+  const c = kotoneCharacter;
+  assert.equal(c.basic.cost, 1);
+  assert.equal(c.ultimate.cost, 4);
+  assert.equal(c.ultimate.instant, true, 'หนูพร้อมแล้วคะ ทำงานก่อนเปิดการ์ด');
+  assert.equal(c.basicNight.name, 'Part-time Night');
+  assert.equal(c.basicNight.cost, 1);
+  assert.equal(c.secondaryNight.name, 'แอบซ้อม');
+  assert.equal(c.secondaryNight.cost, 2);
+  assert.equal(c.ultimateNight.cost, 4);
+  for (const s of [c.basic3, c.secondary3, c.ultimate3]) {
+    assert.equal(s.cost, 6);
+    assert.equal(s.instant, undefined, 'ท่าไม้ตายในร่างทำงานหลังเปิดการ์ด');
+  }
+  assert.equal(kotone.FORM_ULT_GOLD, 6);
+});
+
+test('เพลงของท่าไม้ตาย 3/4/5 เป็น music (ขึ้นหลังปล่อยท่า) ไม่ใช่ voice ที่ทับวีดีโอ', () => {
+  const TRANSFORMS = require('../../characters/_transforms.js')({});
+  for (const [key, track] of [['kawaii', 'kotone_ult3'], ['kcampus', 'kotone_ult4'], ['kshuki', 'kotone_ult5']]) {
+    assert.equal(TRANSFORMS[key].music, track, `${key} ต้องใช้ music`);
+    assert.equal(TRANSFORMS[key].voice, undefined, `${key} ต้องไม่มี voice (เดิมเล่นทับวีดีโอ)`);
+    assert.ok(TRANSFORMS[key].video, `${key} ต้องมีวีดีโอ`);
+  }
+  assert.equal(TRANSFORMS.kready.music, 'kotone_ult1');
+  assert.equal(TRANSFORMS.kready.video, null, 'ท่าไม้ตาย 1 มีแค่ภาพ+เพลง ไม่มีวีดีโอ');
+  assert.equal(TRANSFORMS.kready.afterReveal, false, 'ทำงานก่อนเปิดการ์ดแล้ว');
 });
 
 test('onGoldGained หยอดเท่าที่ได้รับ (สูงสุด 3) และหักออกจากเหรียญในกระเป๋า', () => {
@@ -163,9 +196,11 @@ test('ท่าไม้ตาย 1 กดได้ต่อเมื่อ [ค
   p.statuses.kotoneReady = 5;
   assert.equal(kotone.canUseSkill(e, p, 'ultimate', kotoneCharacter.ultimate, false), true);
 
-  p.statuses.kready = 999; // applyEffect ของ engine ตั้งให้หลังเปิดไพ่
-  kotone.activateReady(e, p);
+  // ทำงานทันทีก่อนเปิดการ์ด: applyInstantSkill เรียก activateReady แล้ว applyEffect ของ engine ตั้ง kready ตามมา
+  kotone.applyInstantSkill(e, p, 'ultimate', false);
   assert.equal(kotone.readyStacks(p), 1, 'เหลือ 1 จาก 5');
+  assert.equal(p.seen.kready, true, 'ตั้ง seen เองเพราะไม่ผ่านลูป afterReveal');
+  p.statuses.kready = 999; // applyEffect ของ engine
   assert.equal(kotone.formActive(p), true);
 });
 

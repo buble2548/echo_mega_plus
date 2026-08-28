@@ -39,12 +39,12 @@ test('Song\'s Curse: engine.addSkill() is a permanent no-op for mageslayer (any 
   assert.equal(p.skillPoints, 2, 'no regen from the shared addSkill() choke point');
 });
 
-test('damageBonus: +1 vs a target holding more energy than she does, plus the full Fury stack count', () => {
-  const ms = mkPlayer({ skillPoints: 2, statuses: { mageslayerFury: 2 } });
+test('damageBonus: only the +1 Song\'s Curse bonus — Fury no longer adds damage', () => {
+  const ms = mkPlayer({ skillPoints: 2, statuses: { mageslayerFury: 3 } });
   const target = mkPlayer({ characterId: 'tohno', skillPoints: 5 });
-  assert.equal(mageslayer.damageBonus(engine, ms, target), 3, '+1 song bonus + 2 fury stacks');
+  assert.equal(mageslayer.damageBonus(engine, ms, target), 1, '+1 song bonus only, 3 Fury stacks contribute nothing');
   const lowEnergyTarget = mkPlayer({ characterId: 'tohno', skillPoints: 0 });
-  assert.equal(mageslayer.damageBonus(engine, ms, lowEnergyTarget), 2, 'no song bonus, just 2 fury stacks');
+  assert.equal(mageslayer.damageBonus(engine, ms, lowEnergyTarget), 0, 'target holds less energy — no bonus at all');
   assert.equal(mageslayer.damageBonus(engine, mkPlayer({ characterId: 'tohno' }), target), 0, 'zero for non-mageslayer attackers');
 });
 
@@ -327,10 +327,71 @@ test('applyManaBurden: everyone EXCEPT the caster gets +1 ภาระเวท 
   assert.equal(resistant.statuses.manaLeech || 0, 0);
 });
 
+test('applyManaBurden: ใช้ซ้ำใส่คนเดิมไม่รีเซ็ตเวลาคงอยู่ (แต่ยังสะสมจำนวนเพิ่ม)', () => {
+  const caster = mkPlayer();
+  const other = mkPlayer({ characterId: 'tohno' });
+  mageslayer.applyManaBurden(engine, caster);
+  // จำลองเวลาที่เดินไปแล้ว 3 เทิร์น
+  other.statuses.spellburden = 2;
+  other.statuses.manaLeech = 2;
+  mageslayer.applyManaBurden(engine, caster);
+  assert.equal(other.statuses.spellburden, 2, 'ภาระเวท: เวลาที่เหลือเดินต่อ ไม่ถูกต่ออายุ');
+  assert.equal(other.statuses.manaLeech, 2, 'ดูดซับเวท: เวลาที่เหลือเดินต่อ ไม่ถูกต่ออายุ');
+  assert.equal(other.statusAmt.spellburden, 2, 'จำนวนยังสะสมเพิ่มได้');
+});
+
+test('applyManaBurden: สถานะที่หมดอายุไปแล้ว ตั้งเวลาใหม่ได้ตามปกติ', () => {
+  const caster = mkPlayer();
+  const other = mkPlayer({ characterId: 'tohno' });
+  mageslayer.applyManaBurden(engine, caster);
+  delete other.statuses.spellburden;   // หมดอายุ (endTurn ล้าง statusAmt ให้ด้วยของจริง)
+  delete other.statuses.manaLeech;
+  delete other.statusAmt.spellburden;
+  mageslayer.applyManaBurden(engine, caster);
+  assert.equal(other.statuses.spellburden, 5);
+  assert.equal(other.statuses.manaLeech, 5);
+  assert.equal(other.statusAmt.spellburden, 1);
+});
+
 test('applyManaBurden: ภาระเวท stacks up to the shared SPELLBURDEN_MAX cap', () => {
   const caster = mkPlayer();
   const other = mkPlayer({ characterId: 'tohno', statusAmt: { spellburden: engine.SPELLBURDEN_MAX } });
   other.statuses.spellburden = 5;
   mageslayer.applyManaBurden(engine, caster);
   assert.equal(other.statusAmt.spellburden, engine.SPELLBURDEN_MAX, 'capped, never exceeds');
+});
+
+// ---------- Mana Burden: คูลดาวน์ 7 เทิร์น ----------
+
+test('applyManaBurden: arms a 7-turn cooldown, and burdenOnCooldown() gates it until it expires', () => {
+  const caster = mkPlayer();
+  mkPlayer({ characterId: 'tohno' });
+  const base = engine.roundNumber;
+  try {
+    assert.equal(mageslayer.burdenOnCooldown(engine, caster), false, 'ready before the first cast');
+    mageslayer.applyManaBurden(engine, caster);
+    assert.equal(caster.mageslayerBurdenReadyRound, base + mageslayer.MS_BURDEN_COOLDOWN);
+    for (let i = 1; i < mageslayer.MS_BURDEN_COOLDOWN; i++) {
+      engine.setRoundNumber(base + i);
+      assert.equal(mageslayer.burdenOnCooldown(engine, caster), true, `still locked on turn +${i}`);
+    }
+    engine.setRoundNumber(base + mageslayer.MS_BURDEN_COOLDOWN);
+    assert.equal(mageslayer.burdenOnCooldown(engine, caster), false, 'usable again after 7 turns');
+  } finally {
+    engine.setRoundNumber(base);
+  }
+});
+
+test('applyManaBurden: recasting on a target that still has the debuff does NOT refresh its duration', () => {
+  const caster = mkPlayer();
+  const t = mkPlayer({ characterId: 'tohno' });
+  mageslayer.applyManaBurden(engine, caster);
+  assert.equal(t.statuses.spellburden, 5);
+  assert.equal(t.statuses.manaLeech, 5);
+  t.statuses.spellburden = 2; // เดินเวลาไป 3 เทิร์น
+  t.statuses.manaLeech = 2;
+  mageslayer.applyManaBurden(engine, caster);
+  assert.equal(t.statuses.spellburden, 2, 'ภาระเวท: no-refresh — remaining turns keep counting down');
+  assert.equal(t.statuses.manaLeech, 2, 'ดูดซับเวท: no-refresh too');
+  assert.equal(t.statusAmt.spellburden, 2, 'only the stack amount goes up, capped at SPELLBURDEN_MAX');
 });

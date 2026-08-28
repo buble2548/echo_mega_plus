@@ -313,3 +313,51 @@ test('ตัวละครอื่นไม่ได้รับผลดา�
   assert.equal(eiji.doubleChance(a), 0);
   assert.equal(eiji.applySwordDouble(engine, a, 3, {}), 3);
 });
+
+// ---------- โควตาหลบต้องนับเฉพาะตอน "หลบได้จริง" ----------
+test('โรลหลบไม่ติด: โดนเต็ม แต่ต้องไม่กินโควตาของเทิร์นนั้น', () => {
+  const { e } = setup();
+  e.statuses.eijiSwift = 3; // 20%
+  const rnd = Math.random;
+  Math.random = () => 0.99; // บังคับให้พลาด
+  try {
+    const before = vitals(e);
+    engine.dealMixed(e, 1);
+    assert.equal(vitals(e), before - 1, 'หลบไม่ได้ = โดนเต็ม');
+    assert.ok(!e.eijiDodgeUsedRound, 'พลาดแล้วต้องไม่ถูกนับว่าใช้โควตาไปแล้ว');
+  } finally { Math.random = rnd; }
+});
+
+test('พลาดก่อน แล้วค่อยหลบติดในเทิร์นเดียวกัน — ยังหลบได้', () => {
+  const { e } = setup();
+  e.statuses.eijiSwift = 3;
+  const rnd = Math.random;
+  try {
+    Math.random = () => 0.99;            // หมัดแรก: พลาด
+    const before = vitals(e);
+    engine.dealMixed(e, 1);
+    assert.equal(vitals(e), before - 1);
+
+    Math.random = () => 0;               // หมัดที่สอง: ติด
+    const mid = vitals(e);
+    engine.dealMixed(e, 2);
+    assert.equal(vitals(e), mid, 'หลบหมัดที่สองได้ เพราะโควตายังไม่ถูกใช้');
+    assert.equal(e.eijiDodgeUsedRound, true);
+
+    const after = vitals(e);             // หมัดที่สาม: โควตาหมดแล้ว
+    engine.dealMixed(e, 2);
+    assert.equal(vitals(e), after - 2, 'หลบสำเร็จไปแล้ว 1 ครั้ง หมัดถัดไปต้องโดนเต็ม');
+  } finally { Math.random = rnd; }
+});
+
+test('โรลไม่ติดไม่ได้แต้มสกิลคืน (แต้มคืนเฉพาะตอนหลบสำเร็จ)', () => {
+  const { e } = setup();
+  e.statuses.eijiSwift = 3;
+  e.skillPoints = 2;
+  const rnd = Math.random;
+  Math.random = () => 0.99;
+  try {
+    engine.dealMixed(e, 1);
+    assert.equal(e.skillPoints, 2);
+  } finally { Math.random = rnd; }
+});

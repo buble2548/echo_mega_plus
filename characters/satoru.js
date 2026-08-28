@@ -17,7 +17,7 @@ function applyOblada(engine, source, target, label, withSpellburden = false) {
     engine.log(`🛡️ ${target.name} ต้านสถานะผิดปกติ — ${label} ไม่ทำงาน`);
     return false;
   }
-  if (withSpellburden) engine.applyDebuff(target, "spellburden", 1, SPELLBURDEN_TURNS);
+  if (withSpellburden) engine.applySpellburden(target, SPELLBURDEN_TURNS); // helper กลาง: สะสม +1 · ใช้ซ้ำไม่ต่ออายุ
   engine.log(`🎵 ${source.name} ${label} — ส่งสิ่งแปลกปลอมติดตัว ${target.name} (ดาเมจ 1 ทุก 2 เทิร์น นาน ${OBLADA_TURNS} เทิร์น${withSpellburden ? ` + ภาระเวท ${SPELLBURDEN_TURNS} เทิร์น` : ""})`);
   return true;
 }

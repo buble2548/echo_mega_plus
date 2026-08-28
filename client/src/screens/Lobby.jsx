@@ -208,8 +208,9 @@ function TeamSetupView({ state, onBack }) {
     </TeamShell>
   );
 }
-export default function Lobby({ state, onBack, lowQ, onToggleLowQ }) {
+export default function Lobby({ state, onBack, lowQ, onToggleLowQ, skillConfirmOn = true, onToggleSkillConfirm }) {
   const [showInfo, setShowInfo] = useState(false);
+  const [showSkillInfo, setShowSkillInfo] = useState(false);
   const count = state.players.length;
   const me = state.players.find((p) => p.id === state.youId);
   const allReady = count >= 2 && state.players.every((p) => p.ready);
@@ -252,6 +253,34 @@ export default function Lobby({ state, onBack, lowQ, onToggleLowQ }) {
           >
             ข้ามวีดีโอท่าไม้ตาย/ฉากคัตซีน — จะเห็นแค่การแจ้งเตือนว่าใครเปิดท่าไม้ตายแทน
             (แต่ยังต้องรอผู้เล่นคนอื่นดูวีดีโอให้จบอยู่ดี)
+          </div>
+        </div>
+      </div>
+
+      {/* ---------- ยืนยันก่อนใช้สกิล: เปิดไว้เป็นค่าเริ่มต้น ปิดได้ถ้าอยากกดสกิลไว (มีผลเฉพาะเครื่องเรา) ---------- */}
+      <div className="fixed z-30 top-16 left-4 flex items-center gap-2">
+        <button
+          onClick={() => { clickSound(); onToggleSkillConfirm && onToggleSkillConfirm(); }}
+          className="p-float-back flex items-center gap-2 pl-3 pr-3.5 py-2 rounded-full text-xs sm:text-sm font-bold transition"
+          style={!skillConfirmOn ? { borderColor: "var(--color-p-accent-bright)", background: "rgba(155,79,150,.28)" } : undefined}
+        >
+          ⚡ <span>{skillConfirmOn ? "ยืนยันสกิล: เปิด" : "ยืนยันสกิล: ปิด"}</span>
+        </button>
+        <div className="group relative">
+          <button
+            onClick={() => setShowSkillInfo((v) => !v)}
+            className="w-6 h-6 grid place-items-center rounded-full border border-white/30 bg-black/40 text-[11px] font-black cursor-help hover:border-white/60"
+            aria-label="อธิบายการยืนยันก่อนใช้สกิล"
+          >
+            i
+          </button>
+          <div
+            className={`absolute left-0 top-full mt-2 w-60 bg-black/95 border border-white/15 rounded-lg p-3 text-xs leading-snug shadow-2xl transition-opacity z-30 ${
+              showSkillInfo ? "opacity-100" : "opacity-0 pointer-events-none"
+            } sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto`}
+          >
+            ปิดแล้ว = กดช่องสกิลปุ๊บใช้ทันที ไม่มีป๊อปอัปถามยืนยัน (เร็วขึ้นแต่กดพลาดแล้วย้อนไม่ได้)
+            มีผลเฉพาะกับตัวเราเท่านั้น ผู้เล่นคนอื่นไม่เปลี่ยน
           </div>
         </div>
       </div>

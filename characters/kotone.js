@@ -137,7 +137,7 @@ module.exports = {
     if (this.formActive(p)) return ""; // ในร่าง [พร้อมลุย] ทั้ง 3 ปุ่มเป็นท่าไม้ตาย (ทำงานหลังเปิดไพ่)
     if (tier === "basic") return this.applyPartTime(engine, p, night);
     if (tier === "secondary") return this.applyDance(engine, p, night);
-    if (tier === "ultimate" && night) return this.applySleep(engine, p);
+    if (tier === "ultimate") return night ? this.applySleep(engine, p) : this.activateReady(engine, p);
     return "";
   },
 
@@ -164,9 +164,7 @@ module.exports = {
     let extra = "";
     if (night) {
       if (!engine.resistActive(p)) {
-        p.statusAmt = p.statusAmt || {};
-        p.statuses.spellburden = Math.max(p.statuses.spellburden || 0, KOTONE_DANCE_NIGHT_BURDEN);
-        p.statusAmt.spellburden = Math.min(engine.SPELLBURDEN_MAX, (p.statusAmt.spellburden || 0) + 1);
+        engine.applySpellburden(p, KOTONE_DANCE_NIGHT_BURDEN); // helper กลาง: สะสม +1 · ใช้ซ้ำไม่ต่ออายุ
         extra += ` · ติดภาระเวท ${KOTONE_DANCE_NIGHT_BURDEN} เทิร์น`;
       } else {
         extra += " · ต้านสถานะผิดปกติของตัวเอง ไม่ติดภาระเวท";
@@ -191,13 +189,18 @@ module.exports = {
     return " — หลับพักผ่อน";
   },
 
-  // ---------- ท่าไม้ตาย 1: เข้าร่าง [พร้อมลุย] (หลังเปิดไพ่) ----------
-  //  เรียกจาก afterResolve()'s afterReveal-activation loop (TRANSFORMS.kready.afterReveal = true)
+  // ---------- ท่าไม้ตาย 1: เข้าร่าง [พร้อมลุย] — ทำงานทันทีก่อนเปิดการ์ด ----------
+  //  เรียกจาก applyInstantSkill() (useSkill) — สถานะ kready ถูกตั้งโดย applyEffect() ของ engine อีกทีหลังจากนี้
+  //  ตั้ง seen/transformAt เองแบบเดียวกับ rachan (คุวากาตะ) เพราะไม่ผ่านลูป afterReveal ของ afterResolve()
   activateReady(engine, p) {
     const left = Math.max(0, this.readyStacks(p) - KOTONE_READY_NEED);
     if (left > 0) p.statuses.kotoneReady = left;
     else delete p.statuses.kotoneReady;
+    p.seen.kready = true;                          // ปลดล็อกเพลงประจำร่าง (skillMusicFor สแกน seen + statuses)
+    p.transformAt = engine.nextTransformCounter(); // ลำดับเพลงเวลาสวนท่าไม้ตายกัน
+    engine.notifyTransform(p, "kready");           // ไม่มีวีดีโอ — แจ้งเตือนบนกระดานอย่างเดียว ไม่หยุดเกม
     engine.log(`✨ ${p.name} หนูพร้อมแล้วคะ โปรดิวเซอร์! — ใช้ [ความพร้อม] ${KOTONE_READY_NEED} หน่วยเข้าสู่ร่าง [พร้อมลุย] (อยู่จนกว่าจะปล่อยท่าไม้ตายในร่าง)`);
+    return " — เข้าสู่ร่าง [พร้อมลุย]";
   },
 
   // ---------- ท่าไม้ตายในร่าง [พร้อมลุย] (หลังเปิดไพ่) ----------

@@ -348,3 +348,35 @@ test('Ignis: useInventoryItem fires shop ammo through Black Sparklence', () => {
   assert.equal(t.statuses.chaa, engine.GUTS_CHAA_TURNS);
   assert.equal(engine.gameState, 'PLAYING');
 });
+
+// ---------- ตราล่าเวท (ผู้สังหารเมจ) × ปืนหน่วย GUTS Select ----------
+// สเปกระบุว่า "ความเสียหายทุกประเภท (ไอเทม (ปืน) / ความเสียหายสกิล / การโจมตีปกติ)" ต่อเป้าหมายที่ติดตรา
+//  ต้องขโมยพลังงาน — ผลของกระสุนวิ่งผ่านท่อ deal* กลาง จึงต้องมี effectSourceId ถูกต้องตอน applyGutsBullet
+test('ตราล่าเวท: Nursedessei Cannon ของผู้สังหารเมจดูดพลังงานเป้าหมายที่ติดตรา', () => {
+  const ms = mkPlayer({ characterId: 'mageslayer', skillPoints: 0, mageslayerMarkedId: null, mageslayerHasMarked: false, mageslayerMarkTick: 0 });
+  const target = mkPlayer({ hp: 9, armor: 0, skillPoints: 8 });
+  engine.CHAR_HOOKS.mageslayer.applyWitchMark(engine, ms, target);
+  engine.withEffectSource(ms, () => engine.applyGutsBullet(ms, { ammo: 'nurse' }, target));
+  assert.equal(target.hp, 9 - engine.GUTS_NURSE_DMG, 'กระสุนสร้างความเสียหายตามปกติ');
+  assert.equal(ms.skillPoints, engine.GUTS_NURSE_DMG, 'ขโมยพลังงานเท่าดาเมจที่ปืนสร้าง');
+  assert.equal(target.skillPoints, 8 - engine.GUTS_NURSE_DMG);
+});
+
+test('ตราล่าเวท: Shockwave Bullet ทำลายเกราะแล้วยังดูดพลังงานเท่าเกราะที่พังไป', () => {
+  const ms = mkPlayer({ characterId: 'mageslayer', skillPoints: 0, mageslayerMarkedId: null, mageslayerHasMarked: false, mageslayerMarkTick: 0 });
+  const target = mkPlayer({ armor: 3, skillPoints: 8 });
+  engine.CHAR_HOOKS.mageslayer.applyWitchMark(engine, ms, target);
+  engine.withEffectSource(ms, () => engine.applyGutsBullet(ms, { ammo: 'shockwave' }, target));
+  assert.equal(target.armor, 0);
+  assert.equal(ms.skillPoints, 3, 'ขโมยพลังงานเท่าเกราะที่ถูกทำลาย');
+});
+
+test('ตราล่าเวท: ปืนของคนอื่นยิงเป้าหมายเดียวกัน ไม่มีใครได้พลังงาน', () => {
+  const ms = mkPlayer({ characterId: 'mageslayer', skillPoints: 0, mageslayerMarkedId: null, mageslayerHasMarked: false, mageslayerMarkTick: 0 });
+  const shooter = mkPlayer();
+  const target = mkPlayer({ hp: 9, armor: 0, skillPoints: 8 });
+  engine.CHAR_HOOKS.mageslayer.applyWitchMark(engine, ms, target);
+  engine.withEffectSource(shooter, () => engine.applyGutsBullet(shooter, { ammo: 'nurse' }, target));
+  assert.equal(ms.skillPoints, 0, 'ตราล่าเวทให้พลังงานเฉพาะตอนผู้สังหารเมจเป็นคนสร้างความเสียหายเอง');
+  assert.equal(target.skillPoints, 8);
+});

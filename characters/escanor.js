@@ -467,8 +467,8 @@ function applySkill(engine, p, tier, targets) {
       if (!p.alive || !isNoon(p)) return;
     }
     playCutscene(engine, p, "escanorBasic1");
-    dealSkillDamage(engine, t, 1);
-    addBurn(engine, t, form === "noon" ? 2 : 1, "บอลเพลิงสุริยะ");
+    // ไม่สร้างความเสียหายโดยตรงแล้ว — เป็นสกิลมอบลุกไหม้ล้วน (Noon ได้เพิ่มอีก +1 ตามสเปคร่าง)
+    addBurn(engine, t, form === "noon" ? 3 : 2, "บอลเพลิงสุริยะ");
     return;
   }
   if (tier === "secondary") {

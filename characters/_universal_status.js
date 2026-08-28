@@ -7,7 +7,7 @@
 //  บัฟ:   spellflow (กระแสเวท: ใช้สกิลเสียพลังงานลดลง N) / might (เสริมพลัง: ดาเมจที่ทำได้ +N)
 //         guard (คุ้มครอง: ดาเมจที่ได้รับ -N) / resist (ต้านสถานะผิดปกติ: ล้าง+ต้านดีบัฟพื้นฐาน)
 //         fortune (โชคลาภ: จั่วได้ไพ่ที่ดีที่สุด — ซ้อน 3)
-//  ดีบัฟ: spellburden (ภาระเวท: ใช้สกิลเสียพลังงานเพิ่ม N ไม่เกิน 8) / weak (อ่อนแอ: ดาเมจที่ทำได้ -N)
+//  ดีบัฟ: spellburden (ภาระเวท: ใช้สกิลเสียพลังงานเพิ่ม N ไม่เกิน 2 — ซ้อนได้สูงสุด 2) / weak (อ่อนแอ: ดาเมจที่ทำได้ -N)
 //         fragile (เปราะบาง: ดาเมจที่ได้รับ +N) / sleep (หลับใหล) / stun (สตั้น)
 //         nodraw (ห้ามจั่ว) / noskill (ห้ามใช้สกิล) / nohealing (ไร้ทางเยียวยา: ฟื้นเลือดจริงไม่ได้)
 //         invert (ผกผัน: กลับด้านบัฟ/การฟื้นฟูทั้งหมด) / hburn (ลุกไหม้: ดาเมจ 1/เทิร์น สะสมได้ — ดู tickBurn)
@@ -22,7 +22,7 @@
 //  ใช้ grantEvadeStack/consumeEvadeStack/tickEvadeStacks จัดการ ห้ามแก้ p.statuses.evade ตรงๆ
 // ============================================================
 
-const SPELLBURDEN_MAX = 8; // ภาระเวท: เพิ่มค่าใช้พลังงานได้ไม่เกิน 8 หน่วย
+const SPELLBURDEN_MAX = 2; // ภาระเวท: ซ้อนทับได้สูงสุด 2 (เพิ่มค่าใช้พลังงานได้ไม่เกิน 2 หน่วย)
 
 function statusAmtOf(p, key) {
   if (!p || ((p.statuses && p.statuses[key]) || 0) <= 0) return 0;
@@ -47,6 +47,26 @@ function resistActive(p) {
 function applyDebuff(p, key, amount, turns) {
   if (resistActive(p)) return false;
   applyBuff(p, key, amount, turns);
+  return true;
+}
+
+// ตั้งเวลาสถานะแบบ "ไม่ต่ออายุ" (no-refresh): ถ้าสถานะยังติดอยู่ เวลาที่เหลือเดินต่อจากเดิม
+//  ไม่รีเซ็ตกลับไปเต็ม — ตั้งเวลาให้เฉพาะตอนที่สถานะยังไม่ติดเท่านั้น
+//  (low-level: ไม่เช็ค resist ให้ ผู้เรียกต้องเช็คเอง หรือใช้ตัวห่อด้านล่าง)
+function setTurnsNoRefresh(p, key, turns) {
+  if (!((p.statuses[key] || 0) > 0)) p.statuses[key] = turns || 1;
+  return p.statuses[key];
+}
+
+// ภาระเวท (spellburden) — จุดเดียวที่ทุกตัวละครต้องใช้ใส่สถานะนี้ ห้ามเขียน p.statuses.spellburden ตรงๆ
+//  กฎกลาง: จำนวนสะสม +1 ต่อครั้ง เพดาน SPELLBURDEN_MAX · ใช้ซ้ำใส่คนเดิมขณะยังติดอยู่ = "ไม่ต่ออายุ"
+//  turns = จำนวนเทิร์นของแหล่งที่มา (แต่ละสกิลกำหนดเอง) ใช้เฉพาะตอนที่ยังไม่ติดสถานะ
+//  คืน false = โดน "ต้านสถานะผิดปกติ" กันไว้ (ไม่ติดอะไรเลย)
+function applySpellburden(p, turns) {
+  if (resistActive(p)) return false;
+  setTurnsNoRefresh(p, "spellburden", turns);
+  p.statusAmt = p.statusAmt || {};
+  p.statusAmt.spellburden = Math.min(SPELLBURDEN_MAX, (p.statusAmt.spellburden || 0) + 1);
   return true;
 }
 
@@ -204,6 +224,8 @@ module.exports = {
   statusAmtOf,
   applyBuff,
   applyDebuff,
+  setTurnsNoRefresh,
+  applySpellburden,
   resistActive,
   BASIC_DEBUFF_CLEAR,
   SOFT_DEBUFF_STEP,

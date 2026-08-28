@@ -52,6 +52,21 @@ export default function App() {
       return next;
     });
   };
+  // ยืนยันก่อนใช้สกิล: ค่าเริ่มต้น "เปิด" — ปิดได้จากหน้าโต๊ะรวมผู้เล่นเพื่อให้กดสกิลไวขึ้น
+  // เป็นค่าฝั่งเครื่องผู้เล่นคนนั้นล้วนๆ (localStorage) ไม่ส่งไป server จึงไม่กระทบผู้เล่นคนอื่น
+  const [skillConfirmOn, setSkillConfirmOn] = useState(() => {
+    try {
+      const saved = localStorage.getItem('echo_skillconfirm');
+      return saved == null ? true : saved === '1';
+    } catch { return true; }
+  });
+  const toggleSkillConfirm = () => {
+    setSkillConfirmOn((v) => {
+      const next = !v;
+      try { localStorage.setItem("echo_skillconfirm", next ? "1" : "0"); } catch {}
+      return next;
+    });
+  };
 
   useEffect(() => {
     // เกมเพิ่งเริ่ม (ออกจาก LOBBY เป็นครั้งแรกของแมตช์นี้) -> เล่นฉากเปิดตัวผู้เล่นก่อนเข้าสนามจริงเสมอ
@@ -257,6 +272,8 @@ export default function App() {
         state={state}
         lowQ={lowQ}
         onToggleLowQ={toggleLowQ}
+        skillConfirmOn={skillConfirmOn}
+        onToggleSkillConfirm={toggleSkillConfirm}
         onBack={() => navigate("character", () => leaveLobby())}
       />
     );
@@ -266,7 +283,7 @@ export default function App() {
     screen = <GameIntro players={introPlayers} onDone={finishIntro} />;
     screenKey = "gameintro";
   } else {
-    screen = <Game state={state} lowQ={lowQ} />;
+    screen = <Game state={state} lowQ={lowQ} skillConfirmOn={skillConfirmOn} />;
     screenKey = "game";
   }
 

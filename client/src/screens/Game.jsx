@@ -87,12 +87,6 @@ function resolveAttackPick(id, c) {
 function Cutscene({ cs }) {
   const ref = useRef(null);
   const [introDone, setIntroDone] = useState(false);
-  // เพลงประกอบเฉพาะฉาก (cs.voice) — เล่นทับวีดีโอตั้งแต่ต้นฉาก และหยุดทันทีที่ฉากจบ/เปลี่ยนฉาก
-  useEffect(() => {
-    if (!cs.voice) return;
-    const a = playSfx(cs.voice);
-    return () => { if (a) { try { a.pause(); } catch { /* ignore */ } } };
-  }, [cs.id, cs.voice]);
   useEffect(() => {
     const v = ref.current;
     if (!v) return;
@@ -986,7 +980,7 @@ const STATUS_INFO = {
   nohealing: { icon: "☠️", label: "ไร้ทางเยียวยา", cls: "bg-echo-hp", desc: "ไร้ทางเยียวยา: ฟื้นพลังชีวิตไม่ได้ ตามจำนวนเทิร์นที่เหลือ" },
   // ---------- ฟุจิตะ โคโตเนะ (rework 2.3) ----------
   ksleep:      { icon: "😴", label: "หลับพักผ่อน", cls: "bg-echo-cyan text-gray-900", desc: "Sleeping time: ล้างสถานะเสียทั้งหมดตอนใช้ แล้วหลับ 3 เทิร์น (ทำอะไรไม่ได้) — ระหว่างหลับฟื้นพลังชีวิต +2 และแต้มสกิล +1 ทุกเทิร์น (เทิร์นแรกศัตรูเลือกโจมตีไม่ได้)" },
-  kotoneReady: { icon: "🎀", label: "ความพร้อม", cls: "bg-echo-cyan text-gray-900", desc: "ความพร้อม: สะสมจาก Dance Lession (กลางวัน +1 / กลางคืน +2) — ครบ 4 หน่วยจะใช้ท่าไม้ตาย หนูพร้อมแล้วคะ โปรดิวเซอร์ ได้" },
+  kotoneReady: { icon: "🎀", label: "ความพร้อม", cls: "bg-echo-cyan text-gray-900", desc: "ความพร้อม: สะสมจาก Dance Lession (+1) และ แอบซ้อม กลางคืน (+2) — ครบ 4 หน่วยจะใช้ท่าไม้ตาย หนูพร้อมแล้วคะ โปรดิวเซอร์ ได้" },
   kready:      { icon: "✨", label: "พร้อมลุย", cls: "bg-echo-magenta", desc: "ร่าง [พร้อมลุย]: ปุ่มสกิลทั้ง 3 ช่องเปลี่ยนเป็นท่าไม้ตาย Sekai ichi kawaii watashi / Campus Mode! / Self-affirmation Explosion! Love Love (คอส 6 แต้มสกิล + 6 เหรียญ) — อยู่ในร่างนี้จนกว่าจะปล่อยท่าใดท่าหนึ่ง" },
   kotoneLove:  { icon: "💗", label: "รัก รักที่สุดเลย", cls: "bg-echo-magenta", desc: "รัก รักที่สุดเลย: การโจมตีครั้งถัดไปทำดาเมจเพิ่มตามเงินในกระปุกออมสิน (5/10/15 เหรียญ = +1/+2/+3) — ทำดาเมจแล้วกระปุกถูกล้างทั้งหมด" },
   kawaii:      { icon: "💖", label: "Kawaii", cls: "bg-echo-magenta", desc: "Sekai ichi kawaii watashi: ทำงานหลังเปิดไพ่ — ตีหมู่เจาะเกราะ 1 หน่วย สตั้น 2 เทิร์น และบังคับทุกคนไพ่แตก" },
@@ -1004,7 +998,7 @@ const STATUS_INFO = {
   fragile:   { icon: "💔", label: "เปราะบาง", cls: "bg-echo-hp", desc: "เปราะบาง: ดาเมจที่ได้รับเพิ่มขึ้นตามจำนวนที่ระบุ ตามจำนวนเทิร์นที่เหลือ" },
   might:     { icon: "💪", label: "เสริมพลัง", cls: "bg-echo-gold text-gray-900", desc: "เสริมพลัง: ดาเมจที่ทำได้เพิ่มขึ้นตามจำนวนที่ระบุ ตามจำนวนเทิร์นที่เหลือ" },
   spellflow: { icon: "🌀", label: "กระแสเวท", cls: "bg-echo-cyan text-gray-900", desc: "กระแสเวท: การใช้สกิลทุกชนิดใช้พลังงานลดลงตามจำนวนที่ระบุ ตามจำนวนเทิร์นที่เหลือ" },
-  spellburden: { icon: "⛓️", label: "ภาระเวท", cls: "bg-echo-hp", desc: "ภาระเวท: การใช้สกิลทุกชนิดใช้พลังงานเพิ่มขึ้นตามจำนวนที่ระบุ (ไม่เกิน 8) ตามจำนวนเทิร์นที่เหลือ" },
+  spellburden: { icon: "⛓️", label: "ภาระเวท", cls: "bg-echo-hp", desc: "ภาระเวท: การใช้สกิลทุกชนิดใช้พลังงานเพิ่มขึ้นตามจำนวนที่ระบุ (ซ้อนได้สูงสุด 2 หน่วย) ตามจำนวนเทิร์นที่เหลือ — ดันราคาสกิลได้ไม่เกิน 8 แต้ม สกิลที่ 8 อยู่แล้วจะไม่แพงขึ้น" },
   manaSeal:  { icon: "⛔", label: "ผนึกพลังงาน", cls: "bg-echo-hp", desc: "ผนึกพลังงาน: ฟื้นฟูแต้มสกิลจากช่องทางใดๆ ไม่ได้เลย (เช้า/พรจั่วการ์ด/ไอเทม) ตามจำนวนเทิร์นที่เหลือ" },
   // ---------- ไค ชิซากิ ----------
   kaiCreation: { icon: "🎨", label: "รังสรรค์", cls: "bg-echo-gold text-gray-900", desc: "รังสรรค์: มาร์กถาวรจากไค ชิซากิ — ครบ 2 มาร์กบนกระดานจะปลดล็อก Overhaul" },
@@ -1021,16 +1015,16 @@ const STATUS_INFO = {
   triggerDarkForm: { icon: "🌑", label: "Trigger Dark", cls: "bg-echo-magenta", desc: "ร่าง Trigger Dark คงอยู่ 5 เทิร์น หากตายในร่างนี้จะตายจริง และเมื่อคืนร่างต้องซื้อ Trigger Dark Key ใหม่" },
   triggerDarkWail: { icon: "🌘", label: "อวดครวญ", cls: "bg-echo-gold text-gray-900", desc: "สะสมได้สูงสุด 5 หน่วยและยังคงอยู่แม้ Trigger Dark คืนร่าง — Impact สร้างความเสียหายตามจำนวนนี้ แล้วล้างทั้งสนาม" },
   triggerForm: { icon: "🔴", label: "Ultraman Trigger", cls: "bg-echo-magenta", desc: "ร่าง Ultraman Trigger คงอยู่ 10 เทิร์น หากตายในร่างนี้จะตายจริง เมื่อครบเวลาจะคืนร่างเดิมด้วย HP 1 เกราะเต็ม และคีย์ติดคูลดาวน์ 5 เทิร์น" },
-  escanorMorning: { icon: "☀️", label: "Morning", cls: "bg-echo-gold text-gray-900", desc: "เอสคานอร์ร่างเช้า: ชาร์จประกายแสงสุริยัน +1/เทิร์น โจมตี +1 เกราะ +1 และโจมตีติดลุกไหม้ +1" },
+  escanorMorning: { icon: "☀️", label: "Morning", cls: "bg-echo-gold text-gray-900", desc: "เอสคานอร์ร่างเช้า: ชาร์จประกายแสงสุริยัน +1/เทิร์น โจมตี +1 เกราะ +1 และการโจมตีมอบลุกไหม้ให้ผู้ถูกโจมตี +1 หน่วย (มีผลเทิร์นถัดไป)" },
   escanorNight: { icon: "🌙", label: "Night", cls: "bg-echo-cyan text-gray-900", desc: "เอสคานอร์ร่างกลางคืน: หลบหลีก 50%, ได้แต้มสกิล +1 ทุกเทิร์น และพลังโจมตีพื้นฐานเป็น 0" },
-  escanorNoon: { icon: "☀️", label: "Noon", cls: "bg-echo-hp", desc: "เอสคานอร์ร่าง Noon: ชาร์จลดลงทุกเทิร์นหรือเมื่อรับความเสียหายจากสกิล, โจมตี +1 เกราะ +1, ตี/ถูกตีทำให้เกิดลุกไหม้ และเมื่อตายจะเข้าสู่ Last Stand" },
-  escanorLastStand: { icon: "🔥", label: "Last Stand", cls: "bg-echo-hp", desc: "Last Stand: MaxHP 7 เกราะ 0, HP ลด 1/เทิร์น, มอบลุกไหม้ให้ศัตรูทุกคน +2/เทิร์น, ไม่รับดาเมจจากดีบัฟลุกไหม้, ไม่รับความเสียหายจากการที่ไพ่แตก, ดาเมจจากโจมตี/สกิลที่ได้รับเหลือ 1 และโจมตีสำเร็จจะล้างลุกไหม้ตัวเองพร้อมฮีล 1" },
+  escanorNoon: { icon: "☀️", label: "Noon", cls: "bg-echo-hp", desc: "เอสคานอร์ร่าง Noon: ชาร์จลดลงทุกเทิร์นหรือเมื่อรับความเสียหายจากสกิล, โจมตี +1 เกราะ +1, ตีมอบลุกไหม้ +1 และถูกตีมอบลุกไหม้ผู้โจมตี +1 (มีผลเทิร์นถัดไป) และเมื่อตายจะเข้าสู่ Last Stand" },
+  escanorLastStand: { icon: "🔥", label: "Last Stand", cls: "bg-echo-hp", desc: "Last Stand: MaxHP 7 เกราะ 0, HP ลด 1/เทิร์น, มอบลุกไหม้ให้ศัตรูทุกคน +2/เทิร์น, ไม่รับดาเมจจากดีบัฟลุกไหม้, ไม่รับความเสียหายจากการที่ไพ่แตก, ดาเมจจากโจมตี/สกิลที่ได้รับเหลือ 1, ตีมอบลุกไหม้ +2 และถูกตีมอบลุกไหม้ผู้โจมตี +1 (มีผลเทิร์นถัดไป) และโจมตีสำเร็จจะล้างลุกไหม้ตัวเองพร้อมฮีล 1" },
   escanorSolar: { icon: "☀️", label: "Solar", cls: "bg-echo-gold text-gray-900", desc: "Solar: สะสมได้สูงสุด 4 หน่วย ได้เมื่อเปิดไพ่แพ้หรือไม่ได้โจมตี หากไม่ได้รับเพิ่มครบ 3 เทิร์นจะลดลงครั้งละ 1 หน่วย ระหว่างสุริยาไม่สิ้นแสงจะใช้ 1 หน่วยต่อเทิร์นเพื่อคงร่าง Morning" },
   escanorCool: { icon: "💪", label: "เย็นชื่นใจ", cls: "bg-echo-cyan text-gray-900", desc: "เย็นชื่นใจ: ลดความเสียหายจากสกิลตามจำนวนสแตค และหมดเมื่อครบ 2 เทิร์น" },
   drunk: { icon: "🍷", label: "มึนเมา", cls: "bg-echo-magenta", desc: "มึนเมา: ลดลงทีละ 1 ทุกเทิร์น และเมื่อกดสกิลหรือจั่วไพ่มีโอกาสสุ่มติดห้ามจั่ว ห้ามสกิล หรือสตัน" },
-  escanorFlare: { icon: "🔥", label: "เพลิงปะทุ", cls: "bg-echo-hp", desc: "การโจมตีครั้งถัดไปจะมอบลุกไหม้เพิ่ม +1" },
+  escanorFlare: { icon: "🔥", label: "เพลิงปะทุ", cls: "bg-echo-hp", desc: "การโจมตีครั้งถัดไปจะมอบลุกไหม้ให้ผู้ถูกโจมตีเพิ่ม +1 (มีผลเทิร์นถัดไป)" },
   escanorFlareNoon: { icon: "🔥", label: "เพลิงปะทุ Noon", cls: "bg-echo-hp", desc: "การโจมตีครั้งถัดไปจะมอบลุกไหม้เพิ่ม +2 และมอบไร้ทางเยียวยา 2 เทิร์น" },
-  escanorPunch: { icon: "👊", label: "หมัดสุริยัน", cls: "bg-echo-hp", desc: "การโจมตีครั้งถัดไปพลังโจมตี +1 และมอบลุกไหม้เพิ่ม +2" },
+  escanorPunch: { icon: "👊", label: "หมัดสุริยัน", cls: "bg-echo-hp", desc: "การโจมตีครั้งถัดไปพลังโจมตี +1 และมอบลุกไหม้ให้ผู้ถูกโจมตีเพิ่ม +2 (มีผลเทิร์นถัดไป)" },
   escanorRhitta: { icon: "🪓", label: "Rhitta", cls: "bg-echo-gold text-gray-900", desc: "การโจมตีครั้งถัดไปมอบลุกไหม้เพิ่ม +2" },
   escanorRhittaNoon: { icon: "🪓", label: "Rhitta Noon", cls: "bg-echo-gold text-gray-900", desc: "เมื่อโจมตีโดน จะบังคับลุกไหม้ 2 หน่วยของเป้าหมายทำงานทันทีในเทิร์นนั้น" },
   escanorSun: { icon: "☀️", label: "ดวงอาทิตย์จำลอง", cls: "bg-echo-hp", desc: "การโจมตีครั้งถัดไปเป็นโจมตีหมู่ และพลังโจมตีพื้นฐานถูกตั้งเป็น 0" },
@@ -1093,7 +1087,7 @@ const STATUS_INFO = {
   lance:      { icon: "🔱", label: "หอกผู้พิชิต", cls: "bg-echo-gold text-gray-900", desc: "ทั้งสองสิ่งรวมเป็นหนึ่ง: ดาบเอเมอโรดและแซฟไฟร์หลอมรวมเป็นหอกเดียว — การโจมตีปกติครั้งถัดไปดาเมจคงที่ 5 หน่วย และฟื้นพลังชีวิต +3 ใช้แล้วหอกจะถูกล้างออก ต้องรวมดาบทั้งคู่ใหม่อีกครั้ง" },
   takutoThirdAtk: { icon: "✨", label: "พิชิตแสงดาว", cls: "bg-echo-hp", desc: "อย่างนายน่ะ จะไปเข้าใจอะไร: การโจมตีคอมโบครั้งนี้มีโอกาส 50% ได้โจมตีเพิ่มเป็นครั้งที่ 3" },
   // ---------- เอจิ (patch 2.4 new) ----------
-  eijiSwift: { icon: "💨", label: "ความเร็วสูง", cls: "bg-echo-cyan text-gray-900", desc: "ว่องไว: อัตราหลบหลีก +20% (ใช้ได้ 1 ครั้งต่อเทิร์น ซ้อนทับกับท่าไม้ตาย +20% และ Ordinal Scale +20%/ครั้ง ได้) · ฟื้นพลังชีวิต +1 ต่อเทิร์นระหว่างมีผล · หมดอายุแล้วคืนแต้มสกิล +2" },
+  eijiSwift: { icon: "💨", label: "ความเร็วสูง", cls: "bg-echo-cyan text-gray-900", desc: "ว่องไว: อัตราหลบหลีก +20% (หลบสำเร็จได้ 1 ครั้งต่อเทิร์น · ซ้อนทับกับท่าไม้ตาย +20% และ Ordinal Scale +20%/ครั้ง ได้) · ฟื้นพลังชีวิต +1 ต่อเทิร์นระหว่างมีผล · หมดอายุแล้วคืนแต้มสกิล +2" },
   eijiSword: { icon: "⚔️", label: "ดาบแห่งความทรงจำ", cls: "bg-echo-hp", desc: "ความแค้น: ยกระดับโอกาสดาเมจ 2 เท่าจากฐานติดตัว 20% เป็นค่าที่คิดจากเกราะ + พลังชีวิตของเอจิรวมกัน (1 หน่วย = 10% · ใช้ค่าที่สูงกว่า) — ติดเมื่อไหร่ฟื้นพลังชีวิต +1" },
   eijiUlt: { icon: "🔥", label: "ไม่ว่ายังก็ตาม", cls: "bg-echo-gold text-gray-900", desc: "ไม่ว่ายังก็ตาม: บังคับเปิดสนาม Break Beat Bark! — ทุกคนได้พลังโจมตีปกติ +1 · เวลาเฟสจั่วการ์ดเหลือ 40 วินาที · เอจิหลบหลีก +20% และได้แต้มสกิล +1 ต่อเทิร์น" },
   // ---------- ซาโตรุ อาเคฟุ (patch 2.0.8.2) ----------
@@ -1853,7 +1847,7 @@ function EijiDodgeBadge({ me, ch }) {
   return (
     <span
       className={`text-xs font-bold rounded-full px-2 py-0.5 whitespace-nowrap ${used ? "bg-black/55 opacity-60" : pct >= 50 ? "bg-echo-cyan text-gray-900" : pct > 0 ? "bg-black/55 text-echo-cyan" : "bg-black/55"}`}
-      title="อัตราหลบหลีกรวมของเทิร์นนี้ (ว่องไว +20% · ไม่ว่ายังก็ตาม +20% · กลโกง Ordinal Scale +20% ต่อครั้ง) — ใช้ได้ 1 ครั้งต่อเทิร์น กันได้ทั้งการโจมตีปกติและความเสียหายจากสกิล"
+      title="อัตราหลบหลีกรวมของเทิร์นนี้ (ว่องไว +20% · ไม่ว่ายังก็ตาม +20% · กลโกง Ordinal Scale +20% ต่อครั้ง) — หลบสำเร็จได้ 1 ครั้งต่อเทิร์น กันได้ทั้งการโจมตีปกติและความเสียหายจากสกิล (โรลไม่ติดไม่เสียสิทธิ์)"
     >
       💨 หลบหลีก {pct}%{used ? " (ใช้แล้ว)" : ""}
     </span>
@@ -2231,7 +2225,7 @@ function ContractRenewModal({ ask, points, onAnswer }) {
 // ช่องสกิลเป็นรูป (คลิกใช้ระหว่างเฟสไพ่) — cost = แต้มที่ใช้จริง (เวลาทองแกมเบลอร์ลดครึ่ง)
 //  เฟรมตัดมุมเฉียง + แถบสีบอกระดับสกิล (พื้นฐาน/รอง/ท่าไม้ตาย) แทนกรอบมนธรรมดา
 const SKILL_TIER_ACCENT = { basic: "var(--color-echo-cyan)", secondary: "var(--color-p-accent-bright)", ultimate: "var(--color-echo-gold)" };
-function SkillSlot({ label, tier, skill, points, disabled, onUse, ammo, cost, size }) {
+function SkillSlot({ label, tier, skill, points, disabled, onUse, ammo, cost, size, cooldown }) {
   const [broken, setBroken] = useState(false);
   const hasAmmo = skill && skill.ammo != null;
   const ammoLeft = hasAmmo ? (ammo ?? skill.ammo) : null;
@@ -2264,6 +2258,14 @@ function SkillSlot({ label, tier, skill, points, disabled, onUse, ammo, cost, si
         {skill && (
           <span className={`absolute top-1 right-1 text-xs font-bold rounded px-1.5 ${useCost < skill.cost ? "bg-echo-gold text-gray-900" : "bg-black/60 text-white"}`}>
             {useCost}
+          </span>
+        )}
+        {/* คูลดาวน์: ตัวเลขนับถอยหลังกลางการ์ด (การ์ดถูก disable อยู่แล้วจึงแสดงเป็นขาวดำ) */}
+        {(cooldown || 0) > 0 && (
+          <span className="absolute inset-0 z-20 grid place-items-center bg-black/60">
+            <span className="text-3xl sm:text-4xl font-black text-white leading-none drop-shadow-[0_2px_4px_rgba(0,0,0,.9)]" style={{ fontFamily: P_DISPLAY }}>
+              {cooldown}
+            </span>
           </span>
         )}
         {hasAmmo && (
@@ -2505,7 +2507,7 @@ function FlyingCardsLayer({ flights, onDone }) {
   );
 }
 
-export default function Game({ state, lowQ }) {
+export default function Game({ state, lowQ, skillConfirmOn = true }) {
   const [skillOpen, setSkillOpen] = useState(false);
   const [showChar, setShowChar] = useState(false);
   const [flash, setFlash] = useState(null); // สกิลช่วงจั่วการ์ด เด้งทันทีบนกระดาน
@@ -2696,7 +2698,11 @@ export default function Game({ state, lowQ }) {
   const triggerCircleLocked = isTrigger && !(me?.statuses?.triggerCircle > 0);
   const triggerMultiLocked = isTrigger && (me?.statuses?.triggerMulti > 0);
   const triggerZeperionLocked = isTrigger && (me?.statuses?.triggerZeperion > 0);
-  const witchMarkCooldown = ch?.id === "mageslayer" && (me?.mageslayerWitchMarkCooldown || 0) > 0;
+  const witchMarkCd = ch?.id === "mageslayer" ? (me?.mageslayerWitchMarkCooldown || 0) : 0;
+  const witchMarkCooldown = witchMarkCd > 0;
+  // Mana Burden (ผู้สังหารเมจ): คูลดาวน์ 7 เทิร์น
+  const burdenCd = ch?.id === "mageslayer" ? (me?.mageslayerBurdenCooldown || 0) : 0;
+  const burdenCooldown = burdenCd > 0;
   const takumiBudgetLocked = isTakumi && (me?.takumiSkillUsesRound || 0) >= 5; // งบสกิลรวม 5 ครั้ง/เทิร์น (พื้นฐาน/รอง/ท่าไม้ตาย ผสมกันได้อิสระ)
   // ---------- ชเรด เอลัน ----------
   const isShrade = ch?.id === "shrade_elan";
@@ -2837,7 +2843,11 @@ export default function Game({ state, lowQ }) {
   // ป๊อปอัปยืนยันก่อนใช้สกิล (patch UX): กดช่องสกิล -> ถามยืนยันก่อนเสมอ ค่อยเรียก skill(tier) จริงตอนกด "ใช้งาน"
   //  เก็บข้อมูลสกิล/ลำดับ/แต้มที่ใช้จริง (หลังหักส่วนลด) ไว้โชว์ในป๊อปอัป — ยกเลิกแล้วไม่มีอะไรเกิดขึ้น
   const [skillConfirm, setSkillConfirm] = useState(null); // { tier, skillData, label, useCost }
-  const requestSkillUse = (tier, skillData, label, useCost) => setSkillConfirm({ tier, skillData, label, useCost });
+  //  ถ้าผู้เล่นปิด "ยืนยันสกิล" จากหน้าโต๊ะรวมผู้เล่น -> ข้ามป๊อปอัป ใช้สกิลทันทีที่กดช่อง
+  const requestSkillUse = (tier, skillData, label, useCost) => {
+    if (!skillConfirmOn) { skill(tier); return; }
+    setSkillConfirm({ tier, skillData, label, useCost });
+  };
   const cancelSkillConfirm = () => { clickSound(); setSkillConfirm(null); };
   const confirmSkillUse = () => {
     if (!skillConfirm) return;
@@ -3360,10 +3370,10 @@ export default function Game({ state, lowQ }) {
               {/* ช่องสกิล 3 อัน — ทรงพัด: ช่องกลาง (สกิลรอง) ยกสูงกว่าอีก 2 ช่อง */}
               <div className="grid grid-cols-3 gap-2 mt-3 items-end">
                 <div className="translate-y-1.5">
-                  <SkillSlot label="สกิลพื้นฐาน" tier="basic" skill={ch?.basic} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoHealPending || hakunoSecondaryPending || beatBasicLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || witchMarkCooldown || (me.skillUsed && !gambleRepeat && !isApple && !isBard && !isTohno && !isHakuno && !isDoomguy && !isKai && !isTakumi) || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || cassiusLocked || veilLocked || ktBasicLocked || (isHakuno && me.hakunoGenderSwitched) || doomBasicLocked || takutoBasicPending || tepeuCookLocked || tepeuPonderLocked || batStealthLocked || psBladeLocked} onUse={requestSkillUse} ammo={isGambler ? me.gamblerUses : undefined} cost={isGambler && goldenOn ? halfCost(ch?.basic) : undefined} />
+                  <SkillSlot label="สกิลพื้นฐาน" tier="basic" skill={ch?.basic} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoHealPending || hakunoSecondaryPending || beatBasicLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || witchMarkCooldown || (me.skillUsed && !gambleRepeat && !isApple && !isBard && !isTohno && !isHakuno && !isDoomguy && !isKai && !isTakumi) || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || cassiusLocked || veilLocked || ktBasicLocked || (isHakuno && me.hakunoGenderSwitched) || doomBasicLocked || takutoBasicPending || tepeuCookLocked || tepeuPonderLocked || batStealthLocked || psBladeLocked} onUse={requestSkillUse} cooldown={witchMarkCd} ammo={isGambler ? me.gamblerUses : undefined} cost={isGambler && goldenOn ? halfCost(ch?.basic) : undefined} />
                 </div>
                 <div className="-translate-y-2">
-                  <SkillSlot label="สกิลรอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || (me.skillUsed && !isBard && !isDoomguy && !isKai && !isTakumi) || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked || batKarmaLocked || psSealLocked} onUse={requestSkillUse} ammo={isApple ? me.appleGiveUses : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : undefined} />
+                  <SkillSlot label="สกิลรอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || (me.skillUsed && !isBard && !isDoomguy && !isKai && !isTakumi) || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked || batKarmaLocked || psSealLocked || burdenCooldown} onUse={requestSkillUse} cooldown={burdenCd} ammo={isApple ? me.appleGiveUses : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : undefined} />
                 </div>
                 <div className="translate-y-1.5">
                   {isBard ? <BardComposeSlot me={me} /> : isKai ? <KaiOverhaulSlot me={me} /> : <SkillSlot label="ท่าไม้ตาย" tier="ultimate" skill={ch?.ultimate} points={me.skillPoints} disabled={(done || phase !== "PLAYING" || noSkill || moonCellOn || beatMe || me.skillUsed || ultimateActive || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || takumiBudgetLocked || fourthLocked || doomUltLocked || takutoUltLockedNow || tepeuCookLocked || tepeuPonderLocked || offerLocked || ktUltLocked || shUltLocked || shCharging || rgCharging || phenexTaunting || hikaruUltLocked)} onUse={requestSkillUse} cost={undefined} />}
@@ -3898,10 +3908,10 @@ export default function Game({ state, lowQ }) {
               <div className="flex flex-col items-center gap-1.5">
                 <div className="flex items-end gap-2 sm:gap-3">
                   <div className="w-40 sm:w-48">
-                    <SkillSlot size="lg" label="พื้นฐาน" tier="basic" skill={ch?.basic} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoHealPending || hakunoSecondaryPending || beatBasicLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || witchMarkCooldown || (me.skillUsed && !gambleRepeat && !isApple && !isBard && !isTohno && !isHakuno && !isDoomguy && !isKai && !isTakumi) || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || cassiusLocked || veilLocked || ktBasicLocked || (isHakuno && me.hakunoGenderSwitched) || doomBasicLocked || takutoBasicPending || tepeuCookLocked || tepeuPonderLocked || batStealthLocked || psBladeLocked} onUse={requestSkillUse} ammo={isGambler ? me.gamblerUses : undefined} cost={isGambler && goldenOn ? halfCost(ch?.basic) : undefined} />
+                    <SkillSlot size="lg" label="พื้นฐาน" tier="basic" skill={ch?.basic} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoHealPending || hakunoSecondaryPending || beatBasicLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || witchMarkCooldown || (me.skillUsed && !gambleRepeat && !isApple && !isBard && !isTohno && !isHakuno && !isDoomguy && !isKai && !isTakumi) || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || cassiusLocked || veilLocked || ktBasicLocked || (isHakuno && me.hakunoGenderSwitched) || doomBasicLocked || takutoBasicPending || tepeuCookLocked || tepeuPonderLocked || batStealthLocked || psBladeLocked} onUse={requestSkillUse} cooldown={witchMarkCd} ammo={isGambler ? me.gamblerUses : undefined} cost={isGambler && goldenOn ? halfCost(ch?.basic) : undefined} />
                   </div>
                   <div className="w-40 sm:w-48">
-                    <SkillSlot size="lg" label="รอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || (me.skillUsed && !isBard && !isDoomguy && !isKai && !isTakumi) || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked || batKarmaLocked || psSealLocked} onUse={requestSkillUse} ammo={isApple ? me.appleGiveUses : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : undefined} />
+                    <SkillSlot size="lg" label="รอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || (me.skillUsed && !isBard && !isDoomguy && !isKai && !isTakumi) || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked || batKarmaLocked || psSealLocked || burdenCooldown} onUse={requestSkillUse} cooldown={burdenCd} ammo={isApple ? me.appleGiveUses : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : undefined} />
                   </div>
                   <div className="w-40 sm:w-48">
                     {isBard ? <BardComposeSlot me={me} /> : isKai ? <KaiOverhaulSlot me={me} /> : <SkillSlot size="lg" label="ท่าไม้ตาย" tier="ultimate" skill={ch?.ultimate} points={me.skillPoints} disabled={(done || phase !== "PLAYING" || noSkill || moonCellOn || beatMe || me.skillUsed || ultimateActive || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || takumiBudgetLocked || monsterMe || fourthLocked || doomUltLocked || takutoUltLockedNow || tepeuCookLocked || tepeuPonderLocked || offerLocked || ktUltLocked || shUltLocked || shCharging || rgCharging || phenexTaunting)} onUse={requestSkillUse} cost={undefined} />}

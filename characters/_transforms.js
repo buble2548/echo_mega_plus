@@ -96,12 +96,13 @@ module.exports = function buildTransforms(img) {
     kotoneSena: { img: "/characters/kotone/kotone.jpg", video: "/characters/kotone/kotone_passive.mp4", title: "ท่านประธานเซนะจัง!?", label: "สกิลติดตัวทำงาน", seconds: 6, music: null, afterReveal: false },
     // kready: ท่าไม้ตาย 1 หนูพร้อมแล้วคะ โปรดิวเซอร์ (หลังเปิดไพ่) — ไม่มีวีดีโอ มีแต่ภาพ + เพลง ULT1 ที่ค้างตลอดร่าง [พร้อมลุย]
     //  (music ของ key นี้ถูกสแกนใน skillMusicFor() — ดังนั้นต้องมีสถานะ kready ค้างอยู่ถึงจะเล่น)
-    kready: { img: "/characters/kotone/rework/สกิลอัลติเมติ1/Kotone.png", video: null, title: "หนูพร้อมแล้วคะ โปรดิวเซอร์", label: "เข้าสู่ร่าง [พร้อมลุย]", seconds: 5, music: "kotone_ult1", afterReveal: true },
+    kready: { img: "/characters/kotone/rework/สกิลอัลติเมติ1/Kotone.png", video: null, title: "หนูพร้อมแล้วคะ โปรดิวเซอร์", label: "เข้าสู่ร่าง [พร้อมลุย]", seconds: 5, music: "kotone_ult1", afterReveal: false },
     // ท่าไม้ตายในร่าง [พร้อมลุย] — ทำงานหลังเปิดไพ่ (resolveFormUlts() เรียก triggerCutscene เอง
-    //  ไม่ผ่านลูป afterReveal อัตโนมัติ เพราะต้องบังคับแตกก่อนตัดสินผู้ชนะ) — voice = เพลงประกอบที่เล่นทับวีดีโอ
-    kawaii:  { img: "/characters/kotone/rework/สกิลอัลติเมต3/Kotone Sekaii.png", video: "/characters/kotone/rework/สกิลอัลติเมต3/ULT3.mp4", title: "SEKAI ICHI KAWAII WATASHI", label: "ปล่อยท่าไม้ตาย", seconds: 15, music: null, voice: "kotone_ult3", afterReveal: false },
-    kcampus: { img: "/characters/kotone/rework/สกิลอัลติเมต4/Kotone Campus.png", video: "/characters/kotone/rework/สกิลอัลติเมต4/ULT4.mp4", title: "CAMPUS MODE!", label: "ปล่อยท่าไม้ตาย", seconds: 12, music: null, voice: "kotone_ult4", afterReveal: false },
-    kshuki:  { img: "/characters/kotone/rework/สกิลอัลติเมต5/Kotone Shuki.png", video: "/characters/kotone/rework/สกิลอัลติเมต5/ULT5.mp4", title: "SELF-AFFIRMATION EXPLOSION! LOVE LOVE", label: "ปล่อยท่าไม้ตาย", seconds: 17, music: null, voice: "kotone_ult5", afterReveal: false },
+    //  ไม่ผ่านลูป afterReveal อัตโนมัติ เพราะต้องบังคับแตกก่อนตัดสินผู้ชนะ)
+    //  music = เพลงที่ขึ้น "หลัง" ปล่อยท่า (เริ่มตอนออกจากเฟส CUTSCENE ค้างจนสถานะหมดอายุท้ายเทิร์น)
+    kawaii:  { img: "/characters/kotone/rework/สกิลอัลติเมต3/Kotone Sekaii.png", video: "/characters/kotone/rework/สกิลอัลติเมต3/ULT3.mp4", title: "SEKAI ICHI KAWAII WATASHI", label: "ปล่อยท่าไม้ตาย", seconds: 15, music: "kotone_ult3", afterReveal: false },
+    kcampus: { img: "/characters/kotone/rework/สกิลอัลติเมต4/Kotone Campus.png", video: "/characters/kotone/rework/สกิลอัลติเมต4/ULT4.mp4", title: "CAMPUS MODE!", label: "ปล่อยท่าไม้ตาย", seconds: 12, music: "kotone_ult4", afterReveal: false },
+    kshuki:  { img: "/characters/kotone/rework/สกิลอัลติเมต5/Kotone Shuki.png", video: "/characters/kotone/rework/สกิลอัลติเมต5/ULT5.mp4", title: "SELF-AFFIRMATION EXPLOSION! LOVE LOVE", label: "ปล่อยท่าไม้ตาย", seconds: 17, music: "kotone_ult5", afterReveal: false },
     // ---------- ชเรด เอลัน (patch พิเศษ) ----------
     // shradeMoon: สกิลรอง แสงจันทร์ส่องวิญญาณ (ก่อนเปิดไพ่ — เล่นทันทีตอนกดสกิล) วีดีโอ 4.1 วิ
     shradeMoon: { img: "/characters/shrade_elan/skill2/shrade_skill2.jpg", video: "/characters/shrade_elan/skill2/shrade_skill2.mp4", title: "แสงจันทร์ส่องวิญญาณ", label: "ใช้สกิล", seconds: 5, music: null, afterReveal: false },

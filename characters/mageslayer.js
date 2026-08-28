@@ -25,21 +25,21 @@ const MS_MARK_COOLDOWN = 2;        // ตราล่าเวท: คูลด�
 const MS_OVERSTEAL_WEAK_TURNS = 2; // ตราล่าเวท: ขโมยเกินพลังงานที่เหลือ → เป้าหมายติด [อ่อนแอ] -1 เป็นเวลา 2 เทิร์น
 const MS_RUPTURE_TURNS = 2;        // ระเบิดมานา: ติดสถานะ 2 เทิร์น แล้วจึงระเบิด
 const MS_BURDEN_TURNS = 5;         // ภาระเวท / ดูดซับเวท จาก Mana Burden: 5 เทิร์น
+const MS_BURDEN_COOLDOWN = 7;      // Mana Burden: คูลดาวน์ 7 เทิร์นหลังใช้ (nerf)
 
 module.exports = {
   id: "mageslayer",
 
   MS_FURY_MAX,
   MS_MARK_TICK_TURNS,
+  MS_BURDEN_COOLDOWN,
 
   // ดาเมจ contribution — เรียกจาก computeAttackBase()
-  //  Song's Curse: +1 ใส่เป้าหมายที่ "มีพลังงานมากกว่าเธอ"
-  //  Fury: สูบพลังชีวิต +N (ดาเมจ +N และฟื้นเลือด +N ตอนโจมตีโดน — ดู onAttackPostDamage)
+  //  Song's Curse: +1 ใส่เป้าหมายที่ "มีพลังงานมากกว่าเธอ" — เท่านี้เท่านั้น
+  //  Fury ไม่บวกดาเมจแล้ว (nerf): เหลือแค่ "สูบพลังชีวิต" = ฟื้นเลือด + มอบดูดซับเวท ที่ onAttackPostDamage
   damageBonus(engine, attacker, target) {
     if (attacker.characterId !== "mageslayer") return 0;
-    const songBonus = (target.skillPoints || 0) > (attacker.skillPoints || 0) ? 1 : 0;
-    const furyStacks = Math.min(MS_FURY_MAX, attacker.statuses.mageslayerFury || 0);
-    return songBonus + furyStacks;
+    return (target.skillPoints || 0) > (attacker.skillPoints || 0) ? 1 : 0;
   },
 
   // ---------- ตราล่าเวท (Witch Mark) ----------
@@ -165,7 +165,7 @@ module.exports = {
 
   // ---------- Fury ----------
   // เรียกจาก doAttack() หลังคำนวณดาเมจ — Fury ใช้หมดพร้อมกันในการโจมตีปกติครั้งเดียว
-  //  สูบพลังชีวิต +N (ดาเมจ +N มาจาก damageBonus แล้ว ตรงนี้คือฟื้นเลือด +N) และมอบ [ดูดซับเวท] ตามขั้น
+  //  สูบพลังชีวิต +N = ฟื้นเลือด +N และมอบ [ดูดซับเวท] ตามขั้น — **ไม่บวกดาเมจแล้ว** (nerf)
   onAttackPostDamage(engine, attacker, target, dmg) {
     if (attacker.characterId !== "mageslayer") return;
     const fury = Math.min(MS_FURY_MAX, attacker.statuses.mageslayerFury || 0);
@@ -173,7 +173,7 @@ module.exports = {
     const heal = engine.healHp(attacker, fury);
     delete attacker.statuses.mageslayerFury;
     if (attacker.statusAmt) delete attacker.statusAmt.mageslayerFury;
-    engine.log(`😤 ${attacker.name} Fury ขั้น ${fury} — สูบพลังชีวิต +${fury} (ดาเมจ +${fury} ฟื้นเลือด +${heal}) แล้วเคลียร์สต็อก`);
+    engine.log(`😤 ${attacker.name} Fury ขั้น ${fury} — สูบพลังชีวิต +${fury} (ฟื้นเลือด +${heal}) แล้วเคลียร์สต็อก`);
     const turns = MS_FURY_LEECH_TURNS[fury] || 0;
     if (turns > 0 && target && target.alive) {
       if (engine.applyDebuff(target, "manaLeech", null, turns)) {
@@ -281,8 +281,13 @@ module.exports = {
     }
   },
 
-  // ---------- Mana Burden (สกิลรอง) ----------
-  // ผู้เล่นทุกคนในสนาม "ไม่รวมตนเอง" ติด [ดูดซับเวท] 5 เทิร์น + [ภาระเวท] +1 5 เทิร์น
+  // ---------- Mana Burden (สกิลรอง — คูลดาวน์ 7 เทิร์น) ----------
+  // เรียกจาก useSkill()'s gate — ยังติดคูลดาวน์อยู่ไหม
+  burdenOnCooldown(engine, p) {
+    return engine.roundNumber < (p.mageslayerBurdenReadyRound || 0);
+  },
+  // ผู้เล่นทุกคนในสนาม "ไม่รวมตนเอง" ติด [ดูดซับเวท] 5 เทิร์น + [ภาระเวท] +1 5 เทิร์น (สะสมไม่เกิน SPELLBURDEN_MAX)
+  //  ใช้ซ้ำใส่คนเดิมขณะสถานะยังอยู่ = ไม่ต่ออายุ (เวลาที่เหลือเดินต่อจากของเดิม)
   applyManaBurden(engine, p) {
     for (const t of engine.alivePlayers()) {
       if (t.id === p.id) continue; // ไม่รวมตนเอง
@@ -291,11 +296,13 @@ module.exports = {
         engine.log(`🛡️ ${t.name} ต้านสถานะผิดปกติ — ไม่ติดภาระเวท/ดูดซับเวทจาก Mana Burden`);
         continue;
       }
-      t.statuses.spellburden = Math.max(t.statuses.spellburden || 0, MS_BURDEN_TURNS);
-      t.statusAmt = t.statusAmt || {};
-      t.statusAmt.spellburden = Math.min(engine.SPELLBURDEN_MAX, (t.statusAmt.spellburden || 0) + 1);
-      t.statuses.manaLeech = Math.max(t.statuses.manaLeech || 0, MS_BURDEN_TURNS);
-      engine.log(`⛓️🩸 ${p.name} Mana Burden — ${t.name} ติดภาระเวท +1 (สะสม ${t.statusAmt.spellburden}) และดูดซับเวท ${MS_BURDEN_TURNS} เทิร์น`);
+      // ภาระเวท: ผ่าน helper กลาง (สะสม +1 ถึงเพดาน SPELLBURDEN_MAX · ใช้ซ้ำใส่คนเดิมไม่ต่ออายุ)
+      engine.applySpellburden(t, MS_BURDEN_TURNS);
+      // ดูดซับเวท: กฎ "ไม่ต่ออายุ" เดียวกัน (resist ถูกเช็คไปแล้วด้านบน)
+      engine.setTurnsNoRefresh(t, "manaLeech", MS_BURDEN_TURNS);
+      engine.log(`⛓️🩸 ${p.name} Mana Burden — ${t.name} ติดภาระเวท +1 (สะสม ${t.statusAmt.spellburden}/${engine.SPELLBURDEN_MAX}) และดูดซับเวท (เหลือ ${t.statuses.manaLeech} เทิร์น)`);
     }
+    p.mageslayerBurdenReadyRound = engine.roundNumber + MS_BURDEN_COOLDOWN;
+    engine.log(`⏳ ${p.name} Mana Burden — ติดคูลดาวน์ ${MS_BURDEN_COOLDOWN} เทิร์น`);
   },
 };

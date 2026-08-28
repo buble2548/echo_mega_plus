@@ -29,6 +29,8 @@ const {
   statusAmtOf,
   applyBuff: rawApplyBuff,
   applyDebuff: rawApplyDebuff,
+  setTurnsNoRefresh,
+  applySpellburden: rawApplySpellburden,
   resistActive,
   BASIC_DEBUFF_CLEAR,
   SOFT_DEBUFF_STEP,
@@ -43,6 +45,9 @@ const {
   consumeEvadeStack,
   tickEvadeStacks,
 } = require("./characters/_universal_status");
+// เพดานค่าใช้พลังงานของสกิล: ตัวปรับราคา "ขาขึ้น" ทุกชนิด (กลางคืน / ภาระเวท) ดันราคาได้ไม่เกินนี้
+//  สกิลที่ราคาแตะเพดานอยู่แล้ว (เช่นท่าไม้ตาย 8) จะไม่ถูกดันให้แพงขึ้นไปอีก — ส่วนกระแสเวทยังลดราคาได้ตามปกติ
+const SKILL_COST_MAX = 8;
 // "เนตรมณะ" (สถานะ Universal patch 2.2.7): โจมตีปกติมีโอกาสสังหารทันที — ตรรกะ predicate อยู่ไฟล์เดียวกัน
 //  แต่จุดโรลจริงอยู่ใน doAttack() ของไฟล์นี้ (ต้องใช้ cutscene/lastAttack/เฟสโจมตี)
 const { NETRAMANA_KILL_CHANCE, netramanaActive } = require("./characters/_universal_status");
@@ -939,6 +944,18 @@ function applyDebuff(p, key, amount, turns) {
   hisakawaSyncOut(p);
   return ok;
 }
+// ภาระเวท (spellburden) — จุดเดียวที่ทุกตัวละคร/ทุกเอฟเฟกต์ต้องใช้ใส่สถานะนี้
+//  กฎกลางอยู่ที่ _universal_status.js: สะสม +1 ถึง SPELLBURDEN_MAX · ใช้ซ้ำใส่คนเดิมไม่ต่ออายุ
+//  ต่างจาก applyDebuff() ตรงที่กันเฉพาะ "เพื่อนร่วมทีมคนอื่น" ไม่กันการใส่ตัวเอง — เพราะมีสกิลที่
+//  จงใจแลกภาระเวทของตัวเองเป็นพลัง (Dance Lession กลางคืนของโคโตเนะ) ต้องทำงานได้ในโหมดทีมด้วย
+function applySpellburden(p, turns) {
+  const source = effectSourceId && players[effectSourceId];
+  if (source && p && source.id !== p.id && sameTeam(source, p)) return false;
+  hisakawaSyncIn(p);
+  const ok = rawApplySpellburden(p, turns);
+  hisakawaSyncOut(p);
+  return ok;
+}
 function pregameStateActive() {
   return gameState === "LOBBY" || gameState === "TEAM_MODE" || gameState === "TEAM_SETUP";
 }
@@ -1738,7 +1755,9 @@ function activeSkillMusic() {
   }
   if (bestWou) return bestWou;
   let best = null;
-  for (const key of ["ginga", "gingastrium", "paradise", "rachan", "golden", "fourth", "graybeast", "doomCrucible", "apprivoise", "kready"]) {
+  for (const key of ["ginga", "gingastrium", "paradise", "rachan", "golden", "fourth", "graybeast", "doomCrucible", "apprivoise",
+    // ฟุจิตะ โคโตเนะ: เพลงประจำร่าง [พร้อมลุย] + เพลงที่ขึ้นหลังปล่อยท่าไม้ตาย 3/4/5 (ค้างจนจบเทิร์น)
+    "kready", "kawaii", "kcampus", "kshuki"]) {
     const t = TRANSFORMS[key];
     if (!t.music) continue;
     for (const p of alivePlayers()) {
@@ -2120,6 +2139,7 @@ function resetCombat(p) {
   p.moonMarksBy = {};
   p.mageslayerHasMarked = false;    // เคยใช้ Witch Mark หรือยัง (ถาวร — ขับเคลื่อนภาพโปรไฟล์ MS01→MS02)
   p.mageslayerWitchMarkReadyRound = 0; // Witch Mark: รอบที่กลับมาใช้ได้หลังคูลดาวน์ 2 เทิร์น
+  p.mageslayerBurdenReadyRound = 0; // Mana Burden: รอบที่กลับมาใช้ได้หลังคูลดาวน์ 7 เทิร์น
   p.mageslayerMarkTick = 0;         // ตราล่าเวท: ตัวนับ "ทุก 2 เทิร์นขโมย 1 หน่วย"
   // ---------- ทาคุมิ ฟุจิวาระ (takumi) ----------
   p.takumiGear = 1;             // เกียร์ธรรมดา: 1-6 เริ่มเกม 1
@@ -2451,12 +2471,15 @@ function buildStateFor(viewerId) {
       // กระแสเวท/ภาระเวท (สถานะ Universal): ราคาที่โชว์บนปุ่มสกิลต้องตรงกับที่ useSkill() คิดจริง — ไม่งั้นจะโชว์ราคาเก่าทับกับผลกลางคืนไม่ถูกต้อง
       const spellflowAmt = statusAmtOf(p, "spellflow");
       const spellburdenAmt = Math.min(SPELLBURDEN_MAX, statusAmtOf(p, "spellburden"));
-      if (basicPub) basicPub.cost = Math.max(0, basicPub.cost - spellflowAmt) + spellburdenAmt;
-      if (secondaryPub) secondaryPub.cost = Math.max(0, secondaryPub.cost - spellflowAmt) + spellburdenAmt;
-      // กลางคืน (patch 2.1.7): สุ่มแล้วให้สกิลพื้นฐานหรือสกิลรอง (อย่างใดอย่างหนึ่ง) ใช้แต้มมากขึ้น +1 — ไม่เกิน 8 แต้ม ไม่มีผลกับท่าไม้ตาย
-      //  ต้องซ้อนทับกับกระแสเวท/ภาระเวทข้างบนได้ (คิดต่อจากราคาที่ปรับแล้ว ไม่ใช่ราคาเดิม)
-      if (p.nightTaxTier === "basic" && basicPub && basicPub.cost < 8) basicPub.cost += 1;
-      if (p.nightTaxTier === "secondary" && secondaryPub && secondaryPub.cost < 8) secondaryPub.cost += 1;
+      // กลางคืน (patch 2.1.7): สุ่มแล้วให้สกิลพื้นฐานหรือสกิลรอง (อย่างใดอย่างหนึ่ง) ใช้แต้มมากขึ้น +1 — ไม่มีผลกับท่าไม้ตาย
+      //  ซ้อนกับกระแสเวท/ภาระเวทได้ แต่ตัวปรับขาขึ้นรวมกันแล้วต้องไม่ดันราคาเกิน SKILL_COST_MAX
+      //  (สกิลที่ค่าใช้พลังงานถึงเพดานอยู่แล้วจะไม่แพงขึ้นไปอีก — ต้องตรงกับ useSkill() เป๊ะ)
+      const showCost = (pub, tierName) => Math.min(
+        SKILL_COST_MAX,
+        Math.max(0, pub.cost - spellflowAmt) + spellburdenAmt + (p.nightTaxTier === tierName ? 1 : 0),
+      );
+      if (basicPub) basicPub.cost = showCost(basicPub, "basic");
+      if (secondaryPub) secondaryPub.cost = showCost(secondaryPub, "secondary");
       return {
         id: p.id,
         isBoss: isYuuki(p),
@@ -2530,6 +2553,7 @@ function buildStateFor(viewerId) {
         kaiOverhaulSlots: p.characterId === "kai" ? kaiOverhaulSlots.filter((s) => s.ownerId === p.id).map((s) => ({ playerId: s.playerId, name: (players[s.playerId] && players[s.playerId].name) || "", status: s.status, img: players[s.playerId] ? displayImg(players[s.playerId]) : null })) : undefined,
         mageslayerHasMarked: p.characterId === "mageslayer" ? !!p.mageslayerHasMarked : undefined, // ผู้สังหารเมจ: เคยใช้ Witch Mark หรือยัง
         mageslayerWitchMarkCooldown: p.characterId === "mageslayer" ? Math.max(0, (p.mageslayerWitchMarkReadyRound || 0) - roundNumber) : undefined,
+        mageslayerBurdenCooldown: p.characterId === "mageslayer" ? Math.max(0, (p.mageslayerBurdenReadyRound || 0) - roundNumber) : undefined, // Mana Burden: คูลดาวน์ 7 เทิร์น
         escanorCharge: p.characterId === "escanor" ? (p.escanorCharge || 0) : undefined,
         escanorChargeMax: p.characterId === "escanor" ? CHAR_HOOKS.escanor.ESCANOR_CHARGE_MAX : undefined,
         escanorForm: p.characterId === "escanor" ? CHAR_HOOKS.escanor.formOf(p) : undefined,
@@ -2897,7 +2921,9 @@ function useInventoryItem(id, uid, opts = {}) {
   if (cutsceneKey) {
     // เล่นวีดีโอก่อน แล้วค่อยให้ผลของกระสุนเกิดขึ้นตอนวีดีโอจบ (ผู้เล่นจะเห็นความเสียหายโผล่หลังจบวีดีโอ)
     queueCutscene(p, cutsceneKey);
-    pausePlayingForCutscene(() => applyGutsBullet(p, pendingShot.item, pendingShot.target));
+    // ห่อ withEffectSource ซ้ำ: คอลแบ็กนี้ทำงาน "หลังวีดีโอจบ" ซึ่งหลุดออกจากขอบเขต effectSourceId ของ
+    //  onPlayerEvent ไปแล้ว — ไม่ห่อ = ตราล่าเวท (ผู้สังหารเมจ) และ friendly-fire check ไม่รู้ว่าใครยิง
+    pausePlayingForCutscene(() => withEffectSource(p, () => applyGutsBullet(p, pendingShot.item, pendingShot.target)));
   } else {
     if (pendingShot) applyGutsBullet(p, pendingShot.item, pendingShot.target); // ไม่มีวีดีโอ = ให้ผลทันที
     broadcastState();
@@ -2930,6 +2956,7 @@ function applyGutsBullet(p, item, target) {
   if (item.ammo === "shockwave") {
     const before = target.armor;
     for (let i = 0; i < before; i++) { if (target.armor > 0) loseArmor(target); }
+    mageslayerMarkSteal(target, before); // ตราล่าเวท: กระสุนนี้ทำลายเกราะด้วย loseArmor ตรงๆ ไม่ผ่านท่อ deal* จึงต้องเรียกเอง
     lastLog.push(before > 0
       ? `💥 Shockwave Bullet — เกราะของ ${target.name} ถูกทำลายทั้งหมด (-${before}) แต่พลังชีวิตจริงไม่ได้รับความเสียหาย`
       : `💨 Shockwave Bullet — ${target.name} ไม่มีเกราะให้ทำลาย กระสุนสูญเปล่า`);
@@ -3341,7 +3368,7 @@ function useSkill(id, tier, targets, item) {
     const dimOn = (p.statuses.soulDim || 0) > 0 || (p.statuses.bloodDim || 0) > 0;
     if ((p.bardNotesUsed || 0) >= (dimOn ? BARD_DIM_NOTES_PER_TURN : BARD_NOTES_PER_TURN)) return;
     // กระแสเวท / ภาระเวท (patch 2.0.8) มีผลกับค่าโน้ตด้วย
-    const noteCost = Math.max(0, BARD_NOTE_COST - statusAmtOf(p, "spellflow")) + Math.min(SPELLBURDEN_MAX, statusAmtOf(p, "spellburden"));
+    const noteCost = Math.min(SKILL_COST_MAX, Math.max(0, BARD_NOTE_COST - statusAmtOf(p, "spellflow")) + Math.min(SPELLBURDEN_MAX, statusAmtOf(p, "spellburden")));
     const noteBless = noteCost > 0 && (p.statuses.freecast || 0) > 0; // การ์ดราชินี: ใช้สกิลไม่เสียแต้ม 1 ครั้ง
     if (!noteBless && p.skillPoints < noteCost) return;
     const lucky = Math.random() < BARD_NOTE_FREE_CHANCE; // 15% ไม่เสียพลังงาน (พรสวรรค์)
@@ -3456,8 +3483,9 @@ function useSkill(id, tier, targets, item) {
   const goldenOn = (p.statuses.golden || 0) > 0;
   let cost = skill.cost;
   if (isGambler && goldenOn && (tier === "basic" || tier === "secondary")) cost = Math.ceil(cost / 2);
-  // กลางคืน (patch 2.1.7): สกิลที่สุ่มโดนคืนนี้ (พื้นฐาน/รอง อย่างใดอย่างหนึ่ง) ใช้แต้มมากขึ้น +1 — ไม่เกิน 8 ไม่มีผลกับท่าไม้ตาย
-  if (p.nightTaxTier === tier && cost < 8) cost += 1;
+  // กลางคืน (patch 2.1.7): สกิลที่สุ่มโดนคืนนี้ (พื้นฐาน/รอง อย่างใดอย่างหนึ่ง) ใช้แต้มมากขึ้น +1 — ไม่มีผลกับท่าไม้ตาย
+  //  (เพดาน SKILL_COST_MAX คิดรวมทีเดียวกับภาระเวทด้านล่าง)
+  const nightTax = p.nightTaxTier === tier ? 1 : 0;
   // ---------- โอกูริ แคป (Rework): เงื่อนไข Energy / Stamina ชาร์จ ----------
   const isOguri = p.characterId === "oguri";
   const isBreakfast = isOguri && tier === "basic";
@@ -3497,7 +3525,9 @@ function useSkill(id, tier, targets, item) {
   }
   // กระแสเวท / ภาระเวท (สถานะพื้นฐาน patch 2.0.8): ใช้พลังงานลดลง/เพิ่มขึ้นตามจำนวนที่ระบุ
   cost = Math.max(0, cost - statusAmtOf(p, "spellflow"));
-  cost += Math.min(SPELLBURDEN_MAX, statusAmtOf(p, "spellburden"));
+  //  ตัวปรับราคาขาขึ้นทั้งหมด (กลางคืน + ภาระเวท) รวมกันแล้วดันราคาได้ไม่เกิน SKILL_COST_MAX
+  //  → สกิลที่ค่าใช้พลังงานถึงเพดานอยู่แล้ว (เช่นท่าไม้ตาย 8) จะไม่แพงขึ้นไปอีก
+  cost = Math.min(SKILL_COST_MAX, cost + nightTax + Math.min(SPELLBURDEN_MAX, statusAmtOf(p, "spellburden")));
   // การ์ดราชินี: ใช้สกิลไม่เสียแต้ม 1 ครั้ง — ใช้กับสกิลที่มีค่าใช้จ่ายเท่านั้น
   const blessFree = cost > 0 && (p.statuses.freecast || 0) > 0;
   if (blessFree) cost = 0;
@@ -3726,6 +3756,7 @@ function useSkill(id, tier, targets, item) {
     if (!msRuptureTarget) return;
   }
   const isMsBurden = p.characterId === "mageslayer" && tier === "secondary";
+  if (isMsBurden && CHAR_HOOKS.mageslayer.burdenOnCooldown(engine, p)) return; // Mana Burden: คูลดาวน์ 7 เทิร์น
 
   if (st === "beam" && (p.beamAmmo || 0) <= 0) return; // Beam Magnum กระสุนหมด ใช้ไม่ได้
   if (st === "beamplus" && (p.beamAmmo || 0) <= 0) return; // Beam Magnum Plus (ริดดี้) กระสุนหมด ใช้ไม่ได้
@@ -4726,9 +4757,6 @@ function afterResolve() {
         p.seen[key] = true;
         p.transformAt = ++transformCounter;
         // สวมเกราะราชัน: เพิ่มแค่เพดานเกราะ +3 (ไม่ฟื้นเกราะให้ — เกราะที่มีคงเดิม รอฟื้นฟูเองต้นรอบ)
-        // หนูพร้อมแล้วคะ โปรดิวเซอร์ (โคโตเนะ rework 2.3): หัก [ความพร้อม] 4 หน่วยเข้าสู่ร่าง [พร้อมลุย]
-        //  (ท่าไม้ตาย 3/4/5 ในร่างนี้ไม่ผ่านลูปนี้ — ต้องบังคับแตกก่อนตัดสินผู้ชนะ ดู resolveFormUlts ใน resolveRound)
-        if (key === "kready") CHAR_HOOKS.kotone.activateReady(engine, p);
         // Lai Rhyme Goodfellow (โอเบรอน, characters/oberon.js) — Lie Like Vortigern ย้ายไปทำงานทันทีก่อนเปิดการ์ดแล้ว (ดู useSkill()'s st === "vortigern")
         if (key === "lai") CHAR_HOOKS.oberon.applyLaiEffect(engine, p);
         {
@@ -5770,6 +5798,8 @@ function endTurn() {
     if (p.characterId === "hakuno" && p.hakunoGender === "female") gain += 1;
     // Ultraman Trigger: สกิลติดตัวฟื้นแต้มสกิลเพิ่มอีก 1 หน่วยทุกเทิร์น
     if (p.characterId === "ultraman_trigger") gain += 1;
+    // ฟุจิตะ โคโตเนะ (rework 2.3): สกิลติดตัวฟื้นแต้มสกิล +1 ทุกเทิร์น
+    if (p.characterId === "kotone" && !passiveSealed(p)) gain += 1;
     if (p.characterId === "hisakawa_sister") gain += CHAR_HOOKS.hisakawa_sister.extraSkillRegen(p);
     if (p.characterId === "ignis") gain += CHAR_HOOKS.ignis.extraSkillRegen(engine, p);
     // ค่าปรับปฏิเสธข้อเสนอ (เจ้าแห่งเน็ตบ้าน): แต้มสกิลหลังจบเทิร์นลด 1
@@ -6171,7 +6201,7 @@ io.on('connection', (socket) => {
       bardNotes: [], bardNotesUsed: 0, bardPending: null,
       bloodSection: 0, soulSection: 0, bardLinks: {},
       kaiLinkWith: null, kaiRivalId: null, kaiMarksBy: {},
-      mageslayerMarkedId: null, mageslayerMarks: {}, mageslayerHasMarked: false, mageslayerWitchMarkReadyRound: 0, mageslayerMarkTick: 0,
+      mageslayerMarkedId: null, mageslayerMarks: {}, mageslayerHasMarked: false, mageslayerWitchMarkReadyRound: 0, mageslayerBurdenReadyRound: 0, mageslayerMarkTick: 0,
       shikiUlt: shikiUlt === "wither" ? "wither" : "deatheye", witherAddedBy: {},
       oguriEnergy: OGURI_ENERGY_START, stamina: 0, oguriChargeCapBonus: 0, oguriZoneTurns: 0, staggerNext: 0,
       maxHpPenalty: 0, wouGuardCd: 0, calamityDraw: 0, locaOffer: null,
@@ -6496,6 +6526,8 @@ const engine = {
   applyOverloadOverdrawPenalty,
   applyBuff: rawApplyBuff,
   applyDebuff,
+  setTurnsNoRefresh,
+  applySpellburden,
   cleanseDebuffs,
   coolReduction,
   BASIC_DEBUFF_CLEAR,
