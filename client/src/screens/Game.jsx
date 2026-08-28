@@ -2081,7 +2081,7 @@ function BylethKnowledgeBadge({ me, ch }) {
           className={`text-xs font-bold rounded-full px-2 py-0.5 whitespace-nowrap ${next === "study" ? "bg-echo-cyan text-gray-900" : "bg-echo-magenta"}`}
           title={next === "study" ? "ศึกษาเพิ่ม: ไพ่ใบถัดไปจะบวกแต้มตามปกติ และฟื้นพลังชีวิต 1 หน่วย" : "พักผ่อน: ไพ่ใบถัดไปจะถูกนำไปลบออกจากแต้มปัจจุบันแทน (แต้มต่ำสุด 0)"}
         >
-          {next === "study" ? "\u{1F4D6} ศึกษาเพิ่ม (บวก)" : "\u{1F4A4} พักผ่อน (ลบ)"}
+          {next === "study" ? "\u{1F4D6} +แต้ม" : "\u{1F4A4} \u2212แต้ม"}
         </span>
       )}
       {course && (
@@ -3525,8 +3525,10 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
                 <div className="h-full transition-all" style={{ width: `${Math.min(100, ((me.score || 0) / 21) * 100)}%`, background: me.busted ? "#c0392b" : "#fff" }} />
               </div>
 
-              {/* พลังชีวิต + เกราะ (บรรทัดเดียวเสมอ) + สถานะ + หลอดสกิล */}
-              <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mt-2">
+              {/* พลังชีวิต + เกราะ (บรรทัดเดียวเสมอ) + สถานะ + หลอดสกิล
+                  min-w-0: ป้ายสถานะเป็น whitespace-nowrap ทั้งแถว — ถ้าไม่ปลดล็อก min-width:auto
+                  ป้ายที่โผล่ตอนกดสกิล (ไบเลธ) จะดันหลอดสกิลที่ ml-auto ล้นออกนอกกล่อง */}
+              <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mt-2 min-w-0">
                 {me.hisakawa ? <TwinVitals p={me} compact /> : <LifeBar p={me} />}
                 <StatusChips p={me} left />
                 <DoomChargeBadge me={me} ch={ch} />
@@ -3968,8 +3970,12 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
               ทำให้จอ 1024-1480px (ความละเอียดโน้ตบุ๊คที่พบบ่อยมาก เช่น 1366x768) กลุ่มขวา (กระเป๋า/ร้านค้า) ถูกดันล้นออกนอกจอขวาไปเลย มองไม่เห็น
               เอา lg:flex-nowrap ออก — ปล่อยให้ wrap ตามธรรมชาติ (ตัด/ล้นเฉพาะตอนพื้นที่ไม่พอจริงๆ ไม่ใช่บังคับตายตัวตามความกว้างจอ) */}
           <div className="w-full max-w-[1580px] mx-auto flex items-end justify-between gap-2 sm:gap-3 flex-wrap">
-            {/* ซ้าย: ตัวละคร + เลือด/เกราะ + สถานะ — ไม่มีกล่องพื้นหลังทึบ ใช้ text-hard คุมความคมชัด */}
-            <div className="flex items-start gap-2 shrink-0">
+            {/* ซ้าย: ตัวละคร + เลือด/เกราะ + สถานะ — ไม่มีกล่องพื้นหลังทึบ ใช้ text-hard คุมความคมชัด
+                บั๊กเดิม (ไบเลธ): กลุ่มนี้เป็น shrink-0 + คอลัมน์ข้างในไม่มี min-w-0 ป้ายสถานะเป็น
+                whitespace-nowrap ทั้งหมด -> พอกดสกิลแล้วมีป้ายโผล่เพิ่ม (bylethNextDraw/หลักสูตร)
+                กลุ่มนี้กว้างขึ้นแต่ย่อไม่ได้ ดันกลุ่มขวาทะลุออกนอกกรอบ DESIGN_W ที่ overflow-hidden
+                = แถวล่างหักพัง ต้องปล่อยให้ย่อได้ (ไม่มี shrink-0) + min-w-0 ให้ flex-wrap ทำงานจริง */}
+            <div className="flex items-start gap-2 min-w-0">
               <button
                 onClick={() => { clickSound(); setShowChar(true); }}
                 className="shrink-0"
@@ -3978,8 +3984,8 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
               >
                 {me.hisakawa ? <TwinPortraitCards p={me} size="md" /> : <Portrait p={me} className="w-24 h-24 sm:w-28 sm:h-28 rounded-full p-player-frame" rounded="rounded-full" />}
               </button>
-              <div>
-                <div className="flex items-center gap-1.5 flex-wrap">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap min-w-0 max-w-[26rem]">
                   <div className="font-black text-lg sm:text-xl text-hard truncate max-w-[9rem] sm:max-w-[12rem]" style={{ fontFamily: P_DISPLAY }}>{me.character.name}</div>
                   <TeamBadge teamId={me.teamId} />
                   <DoomChargeBadge me={me} ch={ch} />
