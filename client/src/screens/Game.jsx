@@ -442,6 +442,41 @@ function TransformNotice({ n }) {
   );
 }
 
+// ป้ายหลักสูตรของไบเลธ — วางตำแหน่งเดียวกับป้าย Overload Force (เลื่อนลงถ้าโชว์พร้อมกัน)
+//  ทุกคนกดอ่านได้ว่าหลักสูตรที่เปิดอยู่ตอนนี้มีผลอะไรบ้าง (ไม่ใช่ปุ่มของเจ้าของท่าคนเดียว)
+function BylethCourseBadge({ course, shifted, onOpen }) {
+  const c = BYLETH_COURSE_BY_KEY[course];
+  if (!c) return null;
+  return (
+    <div className={`fixed ${shifted ? "top-[calc(58%+8rem)]" : "top-[calc(58%+5.5rem)]"} left-1/2 -translate-x-1/2 z-40`}>
+      <button
+        onClick={() => { clickSound(); onOpen(); }}
+        className="pop-in whitespace-nowrap text-sm font-black bg-black/75 px-4 py-1 rounded-full border text-hard hover:scale-105 transition"
+        style={{ color: c.color, borderColor: `${c.color}99` }}
+        title="แตะเพื่อดูว่าหลักสูตรนี้มีผลอะไรบ้าง"
+      >
+        {c.icon} {c.name} <span className="opacity-70">(แตะดูรายละเอียด)</span>
+      </button>
+    </div>
+  );
+}
+
+// หน้าต่างอธิบายผลของหลักสูตรที่เปิดอยู่ — เปิดได้จากป้ายกลางจอ ทุกคนอ่านได้
+function BylethCourseInfoModal({ course, onClose }) {
+  const c = BYLETH_COURSE_BY_KEY[course];
+  if (!c) return null;
+  return (
+    <div className="fixed inset-0 z-40 bg-black/60 grid place-items-center p-4" onClick={onClose}>
+      <div className="bg-echo-navy rounded-2xl p-5 max-w-md w-full shadow-2xl border-2" style={{ borderColor: c.color }} onClick={(e) => e.stopPropagation()}>
+        <div className="text-lg font-black" style={{ color: c.color }}>{c.icon} {c.name}</div>
+        <div className="text-xs opacity-70 mb-2">หลักสูตรการสอนของอาจารย์ ไบเลธ — มีผลกับทั้งสนามจนกว่าแต้มความรู้จะหมดหรือไบเลธกดปิดเอง</div>
+        <div className="rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm leading-relaxed">{c.desc}</div>
+        <Button className="mt-3 w-full" onClick={() => { clickSound(); onClose(); }}>ปิด</Button>
+      </div>
+    </div>
+  );
+}
+
 function OverloadForceBadge() {
   return (
     <div className="fixed top-[calc(58%+5.5rem)] left-1/2 -translate-x-1/2 z-40 pointer-events-none">
@@ -658,7 +693,7 @@ function SummaryTiers({ winners, losers, compact }) {
 }
 
 // overlay ที่ใช้ร่วมกันทั้ง layout มือถือและจอใหญ่ (อนิเมชันตีกัน/ประกาศเปลี่ยนร่าง/แจ้งเตือนคัตซีน/สกิลแฟลช/แบนเนอร์กลางวันคืน)
-function OverlayLayer({ phase, attack, csAnnounce, csSkipped, timeLeft, flash, notice, cycleFx, overloadForce }) {
+function OverlayLayer({ phase, attack, csAnnounce, csSkipped, timeLeft, flash, notice, cycleFx, overloadForce, bylethCourse, onOpenBylethCourse }) {
   return (
     <>
       {phase === "ATTACKING" && attack && <AttackFx key={attack.id} a={attack} />}
@@ -667,6 +702,7 @@ function OverlayLayer({ phase, attack, csAnnounce, csSkipped, timeLeft, flash, n
       {flash && <SkillFlash key={flash.id} f={flash} />}
       {notice && <TransformNotice key={notice.id} n={notice} />}
       {overloadForce && <OverloadForceBadge />}
+      {bylethCourse && <BylethCourseBadge course={bylethCourse} shifted={!!overloadForce} onOpen={onOpenBylethCourse} />}
       {cycleFx && <CycleBanner key={cycleFx.id} c={cycleFx} />}
     </>
   );
@@ -985,7 +1021,7 @@ const STATUS_INFO = {
   nohealing: { icon: "☠️", label: "ไร้ทางเยียวยา", cls: "bg-echo-hp", desc: "ไร้ทางเยียวยา: ฟื้นพลังชีวิตไม่ได้ ตามจำนวนเทิร์นที่เหลือ" },
   // ---------- ฟุจิตะ โคโตเนะ (rework 2.3) ----------
   ksleep:      { icon: "😴", label: "หลับพักผ่อน", cls: "bg-echo-cyan text-gray-900", desc: "Sleeping time: ล้างสถานะเสียทั้งหมดตอนใช้ แล้วหลับ 3 เทิร์น (ทำอะไรไม่ได้) — ระหว่างหลับฟื้นพลังชีวิต +2 และแต้มสกิล +1 ทุกเทิร์น (เทิร์นแรกศัตรูเลือกโจมตีไม่ได้)" },
-  kotoneReady: { icon: "🎀", label: "ความพร้อม", cls: "bg-echo-cyan text-gray-900", desc: "ความพร้อม: สะสมจาก Dance Lession (+1) และ แอบซ้อม กลางคืน (+2) — ครบ 4 หน่วยจะใช้ท่าไม้ตาย หนูพร้อมแล้วคะ โปรดิวเซอร์ ได้" },
+  kotoneReady: { icon: "🎀", label: "ความพร้อม", cls: "bg-echo-cyan text-gray-900", desc: "ความพร้อม: สะสมจาก Dance Lession (+1) และ แอบซ้อม กลางคืน (+2) — สะสมได้สูงสุด 4 หน่วย ครบ 4 แล้วใช้ท่าไม้ตาย หนูพร้อมแล้วคะ โปรดิวเซอร์ ได้" },
   kready:      { icon: "✨", label: "พร้อมลุย", cls: "bg-echo-magenta", desc: "ร่าง [พร้อมลุย]: ปุ่มสกิลทั้ง 3 ช่องเปลี่ยนเป็นท่าไม้ตาย Sekai ichi kawaii watashi / Campus Mode! / Self-affirmation Explosion! Love Love (คอส 6 แต้มสกิล + 6 เหรียญ) — อยู่ในร่างนี้จนกว่าจะปล่อยท่าใดท่าหนึ่ง" },
   kotoneLove:  { icon: "💗", label: "รัก รักที่สุดเลย", cls: "bg-echo-magenta", desc: "รัก รักที่สุดเลย: การโจมตีครั้งถัดไปทำดาเมจเพิ่มตามเงินในกระปุกออมสิน (5/10/15 เหรียญ = +1/+2/+3) — ทำดาเมจแล้วกระปุกถูกล้างทั้งหมด" },
   kawaii:      { icon: "💖", label: "Kawaii", cls: "bg-echo-magenta", desc: "Sekai ichi kawaii watashi: ทำงานหลังเปิดไพ่ — ตีหมู่เจาะเกราะ 1 หน่วย สตั้น 2 เทิร์น และบังคับทุกคนไพ่แตก" },
@@ -1127,10 +1163,10 @@ const STATUS_INFO = {
   bylethSword:   { icon: "\u{1F5E1}\uFE0F", label: "ดาบต้องสาป", cls: "bg-echo-hp", desc: "ดาบต้องสาป: พลังโจมตีปกติ +2 หน่วย ใช้ได้ 1 ครั้งภายใน 3 เทิร์น (มีเสียงโจมตีเฉพาะของดาบ) — สลายไปทันทีหลังโจมตี" },
   bylethNoBasic: { icon: "\u{1F4D5}", label: "ห้ามสกิลพื้นฐาน", cls: "bg-echo-hp", desc: "หลักสูตร พิเศษ (ไบเลธ): กดสกิลพื้นฐานเมื่อเทิร์นก่อน — เทิร์นนี้กดสกิลพื้นฐานไม่ได้" },
   hisakawaLimit: { icon: "🛡️", label: "เท่าที่ไหว", cls: "bg-echo-armor", desc: "ดาเมจที่ได้รับลดลง 1 และเมื่อนากิโจมตีโดนจะมอบผกผัน 3 เทิร์น" },
-  hisakawaTempo: { icon: "💨", label: "จังหวะนี้แหละ", cls: "bg-echo-cyan text-gray-900", desc: "ฮายาเตะจะได้โจมตีหลังผู้ชนะ หากแต้มตัวเองต่ำที่สุดแบบไม่เสมอและไม่ไพ่แตก คงอยู่จนกว่าจะใช้" },
+  hisakawaTempo: { icon: "💨", label: "จังหวะนี้แหละ", cls: "bg-echo-cyan text-gray-900", desc: "แฝดที่กำลังคุมอยู่จะได้โจมตีหลังผู้ชนะ หากแต้มตัวเองต่ำที่สุดแบบไม่เสมอและไม่ไพ่แตก (มีผลกับทั้งสองคน คงอยู่จนกว่าจะใช้)" },
   hisakawaStage: { icon: "🎤", label: "เวทีของพวกเรา", cls: "bg-echo-magenta", desc: "แต้มสกิลฟื้นเพิ่ม +1 ทุกเทิร์น" },
   hisakawaTalent: { icon: "✨", label: "พรสวรรค์ของพวกเรา", cls: "bg-echo-gold text-gray-900", desc: "พลังโจมตี +2" },
-  hisakawaDream: { icon: "🎁", label: "ฝันของเหล่าฝาแฝด", cls: "bg-echo-gold text-gray-900", desc: "แต้มสกิล +1, โจมตี +2, โชคลาภ +1 ทุกเทิร์น และมีโอกาสให้แฝดอีกคนโจมตีเสริม" },
+  hisakawaDream: { icon: "🎁", label: "ฝันของเหล่าฝาแฝด", cls: "bg-echo-gold text-gray-900", desc: "แต้มสกิล +1, โจมตี +2, โชคลาภ +1 ทุกเทิร์น และทุกครั้งที่ได้โจมตีมีโอกาส 70% ให้แฝดอีกคนออกมาโจมตีเป็นครั้งที่ 2 ดาเมจ 2 (ต้องมีแฝดครบทั้งคู่)" },
 };
 // รวมสถานะทั้งหมดของผู้เล่นเป็นรายการเดียว — full = รวมของที่โชว์แยกที่อื่นด้วย (โล่/เลือดชั่วคราว)
 function statusEntries(p, full) {
@@ -1160,10 +1196,11 @@ function statusEntries(p, full) {
     out.push({ key: "stamina", v: 1, icon: "🏇", label: `Stamina ชาร์จ ${p.stamina || 0}/${p.oguriChargeCap || 52}`, cls: "bg-echo-cyan text-gray-900", desc: "Stamina ชาร์จ: ทรัพยากรของท่าไม้ตาย — ได้รับอัตโนมัติทุกเทิร์น 8-16 หน่วย (สุ่ม) ความจุพื้นฐาน 52 (Training เพิ่มความจุได้สูงสุด +48 รวม 100) — The Beat of Victory หัก 35 / Ashen Trail หัก 75" });
   }
   // คิชินามิ ฮาคุโนะ (patch 2.2.1): แต้มคำสาปแห่งดวงจันทร์ — สะสมครบ 3 เพื่อเปิด MOON*CELL
-  // อาจารย์ ไบเลธ: แต้มความรู้ + หลักสูตรที่เปิดอยู่ (ทุกคนเห็นได้ เพราะหลักสูตรเปลี่ยนกติกาทั้งสนาม)
+  // อาจารย์ ไบเลธ: แต้มความรู้ + ผลทบทวนบทเรียนที่รอไพ่ใบถัดไป (ชื่อหลักสูตรไปอยู่ที่ป้ายกลางจอแทน ไม่ซ้ำที่นี่)
   if (p.character?.id === "byleth") {
     out.push({ key: "bylethKnowledge", v: 1, icon: "\u{1F4DA}", label: `ความรู้ ${p.bylethKnowledge || 0}/${p.bylethKnowledgeMax || 20}`, cls: "bg-echo-gold text-gray-900", desc: "แต้มความรู้: ได้จากสกิลพื้นฐาน (ทบทวนบทเรียน) ครั้งละ 1 หน่วย สูงสุด 20 — จ่ายให้สกิลรอง (ดาบต้องสาป) ครั้งละ 4 หน่วย และหล่อเลี้ยงท่าไม้ตาย (หลักสูตรการสอน) เทิร์นละ 1 หน่วย" });
-    if (p.bylethCourse) out.push({ key: "bylethCourse", v: 1, icon: "\u{1F393}", label: p.bylethCourse === "normal" ? "หลักสูตร มาตราฐาน" : p.bylethCourse === "ex" ? "หลักสูตร พิเศษ" : "หลักสูตร จบการศึกษา", cls: "bg-echo-magenta", desc: "หลักสูตรการสอนที่เปิดอยู่ — เปลี่ยนกติกาทั้งสนามจนกว่าความรู้จะหมดหรือไบเลธกดปิดเอง" });
+    if (p.bylethNextDraw === "study") out.push({ key: "bylethStudy", v: 1, icon: "\u{1F4D6}", label: "ศึกษาเพิ่ม", cls: "bg-echo-cyan text-gray-900", desc: "ทบทวนบทเรียน (ศึกษาเพิ่ม): การ์ดใบถัดไปที่จั่วได้จะนำแต้มมาบวกกับแต้มปัจจุบันตามปกติ และฟื้นพลังชีวิต 1 หน่วย — คงอยู่จนกว่าจะจั่วการ์ดใบถัดไป" });
+    if (p.bylethNextDraw === "rest") out.push({ key: "bylethRest", v: 1, icon: "\u{1F4A4}", label: "พักผ่อน", cls: "bg-echo-magenta", desc: "ทบทวนบทเรียน (พักผ่อน): การ์ดใบถัดไปที่จั่วได้จะถูกนำแต้มมาลบออกจากแต้มปัจจุบันแทนที่จะบวก (แต้มต่ำสุดที่ 0) — คงอยู่จนกว่าจะจั่วการ์ดใบถัดไป" });
   }
   if (p.character?.id === "hakuno") out.push({ key: "hakunoMoon", v: 1, icon: "🌙", label: `คำสาปแห่งดวงจันทร์ ${p.hakunoMoonPoints || 0}/3`, cls: "bg-echo-magenta", desc: "แต้มคำสาปแห่งดวงจันทร์: สะสมจากข้าขอบัญชา (ทั้งสองร่าง) ครั้งละ +1 — ครบ 3 หน่วยเปิดใช้ท่าไม้ตาย MOON*CELL ได้ (ใช้หมดตอนกด)" });
   if ((p.phenexPain || 0) > 0) out.push({ key: "phenexPain", v: p.phenexPain, icon: "💔", label: "ความเจ็บปวด", cls: "bg-echo-hp", desc: "ความเจ็บปวดสะสม (ไม่อยากให้ใครต้องเจ็บปวด) — ปลดปล่อยเป็นความเสียหายใส่เป้าหมายที่เลือกตอนตกรอบจริง (ไม่สนการหลบหลีก)" });
@@ -2069,30 +2106,13 @@ function BylethKnowledgeBadge({ me, ch }) {
   if (!ch || ch.id !== "byleth" || me.bylethKnowledge == null) return null;
   const max = me.bylethKnowledgeMax || 20;
   const know = me.bylethKnowledge || 0;
-  const course = me.bylethCourse ? BYLETH_COURSE_BY_KEY[me.bylethCourse] : null;
-  const next = me.bylethNextDraw; // "study" | "rest" | null
   return (
-    <>
-      <span
-        className={`text-xs font-bold rounded-full px-2 py-0.5 whitespace-nowrap ${know > 0 ? "bg-echo-gold text-gray-900" : "bg-black/55"}`}
-        title="แต้มความรู้ — ได้จากทบทวนบทเรียนครั้งละ 1 (สูงสุด 20) · ดาบต้องสาปใช้ 4 หน่วย · หลักสูตรการสอนต้องมี 4 หน่วยขึ้นไป แล้วกินเทิร์นละ 1"
-      >
-        {"\u{1F4DA}"} ความรู้ {know}/{max} · สกิล {me.bylethSkillUses || 0}/{me.bylethSkillMax || 5}
-      </span>
-      {next && (
-        <span
-          className={`text-xs font-bold rounded-full px-2 py-0.5 whitespace-nowrap ${next === "study" ? "bg-echo-cyan text-gray-900" : "bg-echo-magenta"}`}
-          title={next === "study" ? "ศึกษาเพิ่ม: ไพ่ใบถัดไปจะบวกแต้มตามปกติ และฟื้นพลังชีวิต 1 หน่วย" : "พักผ่อน: ไพ่ใบถัดไปจะถูกนำไปลบออกจากแต้มปัจจุบันแทน (แต้มต่ำสุด 0)"}
-        >
-          {next === "study" ? "\u{1F4D6} +แต้ม" : "\u{1F4A4} \u2212แต้ม"}
-        </span>
-      )}
-      {course && (
-        <span className="text-xs font-bold rounded-full px-2 py-0.5 whitespace-nowrap" style={{ background: course.color }} title={course.desc}>
-          {course.icon} {course.name}
-        </span>
-      )}
-    </>
+    <span
+      className={`text-xs font-bold rounded-full px-2 py-0.5 whitespace-nowrap ${know > 0 ? "bg-echo-gold text-gray-900" : "bg-black/55"}`}
+      title={`แต้มความรู้ — ได้จากทบทวนบทเรียนครั้งละ 1 (สูงสุด ${max}) · ดาบต้องสาปใช้ 4 หน่วย · หลักสูตรการสอนต้องมี 4 หน่วยขึ้นไปแล้วกินเทิร์นละ 1 (เทิร์นนี้กดสกิลไปแล้ว ${me.bylethSkillUses || 0}/${me.bylethSkillMax || 5} ครั้ง)`}
+    >
+      {"\u{1F4DA}"} ความรู้ {know}/{max}
+    </span>
   );
 }
 
@@ -2664,6 +2684,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
   const [tpSel, setTpSel] = useState(false);          // เทเปา: โหมดเลือกเป้าหมาย นายเป็นคนทำตัวเองนะ (เลือกตัวเองไม่ได้)
   const [kaiCreateSel, setKaiCreateSel] = useState(false);   // ไค: โหมดเลือกเป้าหมายมือซ้ายแห่งการรังสรรค์ (เลือกตัวเองได้)
   const [kaiPunishSel, setKaiPunishSel] = useState(false);   // ไค: โหมดเลือกเป้าหมายมือขวาแห่งการลงทัณฑ์ (เลือกตัวเองได้)
+  const [bylethInfoOpen, setBylethInfoOpen] = useState(false);     // ไบเลธ: หน้าต่างอ่านผลของหลักสูตรที่เปิดอยู่ (ทุกคนเปิดได้)
   const [bylethSwordOpen, setBylethSwordOpen] = useState(false);   // ไบเลธ: หน้าต่างเลือกแบบของ "ดาบต้องสาป"
   const [bylethCourseOpen, setBylethCourseOpen] = useState(false);  // ไบเลธ: หน้าต่างเลือกหลักสูตรของท่าไม้ตาย
   const [bylethStrikeSel, setBylethStrikeSel] = useState(false);    // ไบเลธ: โหมดเลือกเป้าหมายฟาดดาบ (เลือกตัวเองไม่ได้)
@@ -3228,6 +3249,10 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
     if (phase === "PLAYING" && !done) return;
     setBylethSwordOpen(false); setBylethCourseOpen(false); setBylethStrikeSel(false);
   }, [phase, done]);
+  // หลักสูตรถูกปิด/หมดอายุระหว่างเปิดหน้าต่างอ่านอยู่ -> ปิดหน้าต่างให้เอง
+  useEffect(() => {
+    if (!state.bylethFieldFx) setBylethInfoOpen(false);
+  }, [state.bylethFieldFx]);
   // ไอคอนไอเทม: ดึงมาแคชไว้ตั้งแต่เข้าเกม กันโหลดช้าตอนเปิดร้าน/กระเป๋าครั้งแรก
   useEffect(() => { for (const src of ITEM_PRELOAD_IMGS) { const im = new Image(); im.src = src; } }, []);
   // ปืน GUTS Select: หลุดโหมดเลือกเป้าหมายเมื่อออกจากช่วงจั่วไพ่/เปิดไพ่แล้ว หรือกระสุนนัดนั้นถูกใช้ไปแล้ว
@@ -3703,12 +3728,13 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
         )}
 
         {/* ---------- overlay ที่ใช้ร่วมกับจอคอม ---------- */}
-        <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} timeLeft={state.timeLeft} flash={flash} notice={notice} cycleFx={cycleFx} overloadForce={state.overloadForce} />
+        <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} timeLeft={state.timeLeft} flash={flash} notice={notice} cycleFx={cycleFx} overloadForce={state.overloadForce} bylethCourse={state.bylethFieldFx} onOpenBylethCourse={() => setBylethInfoOpen(true)} />
         <FlyingCardsLayer flights={cardFlights} onDone={removeCardFlight} />
         {state.yunaFieldFx === "beatbark" && <div className="field-fx-beatbark" />}
         {state.bylethFieldFx && <div className={`field-fx-byleth-${state.bylethFieldFx}`} />}
         {bylethSwordOpen && me && <BylethSwordModal me={me} onPick={pickBylethSword} onClose={() => setBylethSwordOpen(false)} />}
         {bylethCourseOpen && me && <BylethCourseModal me={me} onPick={pickBylethCourse} onClose={() => setBylethCourseOpen(false)} />}
+        {bylethInfoOpen && <BylethCourseInfoModal course={state.bylethFieldFx} onClose={() => setBylethInfoOpen(false)} />}
 
         {/* ---------- แบนเนอร์รอบถัดไป ---------- */}
         {phase === "TRANSITION" && (
@@ -4191,12 +4217,13 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
       )}
 
       {/* ---------- overlay ที่ใช้ร่วมกับมือถือ ---------- */}
-      <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} timeLeft={state.timeLeft} flash={flash} notice={notice} cycleFx={cycleFx} overloadForce={state.overloadForce} />
+      <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} timeLeft={state.timeLeft} flash={flash} notice={notice} cycleFx={cycleFx} overloadForce={state.overloadForce} bylethCourse={state.bylethFieldFx} onOpenBylethCourse={() => setBylethInfoOpen(true)} />
       <FlyingCardsLayer flights={cardFlights} onDone={removeCardFlight} />
       {state.yunaFieldFx === "beatbark" && <div className="field-fx-beatbark" />}
       {state.bylethFieldFx && <div className={`field-fx-byleth-${state.bylethFieldFx}`} />}
       {bylethSwordOpen && me && <BylethSwordModal me={me} onPick={pickBylethSword} onClose={() => setBylethSwordOpen(false)} />}
       {bylethCourseOpen && me && <BylethCourseModal me={me} onPick={pickBylethCourse} onClose={() => setBylethCourseOpen(false)} />}
+      {bylethInfoOpen && <BylethCourseInfoModal course={state.bylethFieldFx} onClose={() => setBylethInfoOpen(false)} />}
 
       {/* ---------- แบนเนอร์รอบถัดไป ---------- */}
       {phase === "TRANSITION" && (
