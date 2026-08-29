@@ -30,6 +30,7 @@ function mkEngine(players, over = {}) {
     SPELLBURDEN_MAX: universal.SPELLBURDEN_MAX,
     // ภาระเวทต้องผ่าน helper กลางเสมอ — stub จึงต่อกับของจริง ไม่จำลองเอง
     applySpellburden: universal.applySpellburden,
+    passiveSealed: () => false,
     setTurnsNoRefresh: universal.setTurnsNoRefresh,
     ATTACK_TIME: 15,
     GOLD_MAX: 30,
@@ -185,6 +186,37 @@ test('Dance Lession สะสม [ความพร้อม] · กลาง�
   assert.equal(night.statuses.spellburden, 2);
   assert.equal(night.statusAmt.spellburden, 1);
   assert.equal(night.hp, 5, 'เสียเลือด 2');
+});
+
+test('[ความพร้อม] สะสมได้สูงสุด 4 หน่วย — ซ้อมเกินไม่เก็บ', () => {
+  assert.equal(kotone.READY_MAX, 4);
+
+  const p = mkPlayer({ statuses: { kotoneReady: 4 } });
+  kotone.applyDance(mkEngine({ p1: p }), p, false);
+  assert.equal(kotone.readyStacks(p), 4, 'เต็มแล้วกดอีกก็ไม่เกิน 4');
+
+  // กลางคืน +2 จาก 3 -> ตัดที่ 4 (ผลข้างเคียงกลางคืนยังทำงานตามปกติ)
+  const q = mkPlayer({ statuses: { kotoneReady: 3 } });
+  kotone.applyDance(mkEngine({ p1: q }), q, true);
+  assert.equal(kotone.readyStacks(q), 4);
+  assert.equal(q.statuses.spellburden, 2, 'ยังติดภาระเวทแม้ได้ความพร้อมไม่เต็มจำนวน');
+  assert.equal(q.hp, 5, 'ยังเสียเลือด 2');
+});
+
+test('สกิลติดตัว: โอกาส 30% ฟื้นแต้มสกิล +1 ต่อเทิร์น (ปิดได้ด้วย passiveSealed)', () => {
+  const rnd = Math.random;
+  try {
+    const p = mkPlayer();
+    Math.random = () => 0.1; // 0.1 < 0.3 = ติด
+    assert.equal(kotone.extraSkillRegen(mkEngine({ p1: p }), p), 1);
+
+    Math.random = () => 0.5; // 0.5 >= 0.3 = ไม่ติด
+    assert.equal(kotone.extraSkillRegen(mkEngine({ p1: p }), p), 0);
+
+    Math.random = () => 0.1;
+    const sealed = mkEngine({ p1: p }, { passiveSealed: () => true });
+    assert.equal(kotone.extraSkillRegen(sealed, p), 0, 'สกิลติดตัวถูกปิด = ไม่ฟื้น');
+  } finally { Math.random = rnd; }
 });
 
 // ---------- ท่าไม้ตาย 1 + ร่าง [พร้อมลุย] ----------

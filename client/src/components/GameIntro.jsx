@@ -5,14 +5,16 @@ const P_DISPLAY = "var(--font-p-display)";
 // ---------- ภาพผู้เล่น (มี fallback ตัวย่อชื่อ ถ้าไม่มีรูปตัวละคร) ----------
 function IntroPortrait({ p, className }) {
   const [broken, setBroken] = useState(false);
+  // ใช้ภาพประจำตัวละครเสมอ (ไม่ใช่ร่าง/แฝดที่กำลังคุมอยู่) — คู่แฝดฮิซากาว่าต้องขึ้นภาพคู่ ไม่ใช่คนใดคนหนึ่ง
+  const introImg = p.character?.img || p.img;
   return (
     <div
       className={`relative overflow-hidden ${className}`}
       style={{ background: `linear-gradient(150deg, ${p.color}, var(--color-p-black))` }}
     >
-      {p.img && !broken ? (
+      {introImg && !broken ? (
         <img
-          src={p.img}
+          src={introImg}
           alt=""
           className="absolute inset-0 w-full h-full object-cover"
           onError={() => setBroken(true)}

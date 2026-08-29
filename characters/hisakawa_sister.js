@@ -14,6 +14,9 @@ const LIMIT_TURNS = 3;
 const REVIVE_COST = 6;
 const SWITCH_COST = 1;
 const TWIN_KEYS = ["nagi", "hayate"];
+const DREAM_FOLLOWUP_CHANCE = 0.7;   // โอกาสที่แฝดอีกคนจะออกมาโจมตีรอบ 2
+const DREAM_FOLLOWUP_DMG = 2;        // ดาเมจคงที่ของหมัดที่ 2
+const BONUS_ACTION_STATUS = ["hisakawaLimit", "hisakawaTempo", "hisakawaDream"];
 const COUPLE_BUFF_KEYS = ["hisakawaStage", "hisakawaTalent", "hisakawaDream"];
 
 const PATHS = {
@@ -203,7 +206,7 @@ function clearCoupleBuffs(p) {
   }
 }
 
-function publicTwin(t, active) {
+function publicTwin(p, t, active) {
   return {
     key: t.key,
     name: t.name,
@@ -214,15 +217,17 @@ function publicTwin(t, active) {
     maxArmor: TWIN_MAX_ARMOR,
     alive: !!t.alive,
     active: !!active,
-    statuses: clone(t.statuses),
-    statusAmt: clone(t.statusAmt),
+    statuses: clone(active ? p.statuses : t.statuses),
+    statusAmt: clone(active ? p.statusAmt : t.statusAmt),
   };
 }
 
 function skillVoice(p, tier, skill) {
   const h = ensure(p);
   if (!h) return null;
-  const voiceTwin = tier === "basic" ? otherKey(h.active) : h.active;
+  // เรียกหลัง applySkill() เสมอ -> ตอนสลับตัว h.active คือแฝดที่ "เพิ่งออกมา" แล้ว
+  //  ต้องได้ยินเสียงของคนที่ออกมา (ตรงกับภาพบนปกสกิล) ไม่ใช่คนที่เพิ่งหลบเข้าไปพัก
+  const voiceTwin = h.active;
   if (tier === "ultimate" && skillStatus(skill) === "hisakawaDream") return null;
   const n = tier === "ultimate" ? 3 : tier === "secondary" ? 2 : 1;
   return `hisakawa_${voiceTwin}_${n}`;
@@ -235,11 +240,16 @@ module.exports = {
   TWIN_MAX_ARMOR,
   REVIVE_COST,
   SWITCH_COST,
+  DREAM_FOLLOWUP_CHANCE,
+  DREAM_FOLLOWUP_DMG,
 
   init(p) {
     p.hisakawa = null;
     p.hisakawaSwitchedRound = 0;
     p.hisakawaHayateAssist = false;
+    p.hisakawaDreamPending = false;
+    p.hisakawaDreamAtk = false;
+    p.hisakawaBonusRound = 0;
     ensure(p);
     syncIn(p);
   },
@@ -288,6 +298,20 @@ module.exports = {
     return cleared;
   },
 
+  // เกราะฟื้น 1 หน่วยให้แฝดที่พักอยู่ (จังหวะเดียวกับคนที่คุมอยู่ — server.js คุมเงื่อนไขรอบ/armorLocked/MOON*CELL ให้แล้ว)
+  regenRestingArmor(engine, p) {
+    const h = ensure(p);
+    if (!h) return;
+    for (const key of TWIN_KEYS) {
+      const t = h.twins[key];
+      if (key === h.active || !t.alive) continue;
+      if ((t.statuses.decay || 0) > 0) continue;  // ผุพัง: เกราะไม่ฟื้น
+      if (t.armor >= TWIN_MAX_ARMOR) continue;
+      t.armor++;
+      engine.log(`👭 ${t.name} ที่พักอยู่ซ่อมเกราะให้ตัวเอง — เกราะ +1 (${t.armor}/${TWIN_MAX_ARMOR})`);
+    }
+  },
+
   applyBuffToTwin(p, twinKey, key, amount, turns) {
     const h = ensure(p);
     const t = h && h.twins[twinKey];
@@ -299,24 +323,33 @@ module.exports = {
   maxHp() { return TWIN_MAX_HP; },
   maxArmor() { return TWIN_MAX_ARMOR; },
   displayImg(p) {
-    const t = activeTwin(p);
+    const h = ensure(p);
+    if (!h) return PATHS.select;
+    // หมัดที่ 2 ของ "ฝันของเหล่าฝาแฝด": คนที่ออกมาตีคือแฝดอีกคน ไม่ใช่ตัวที่คุมอยู่
+    const t = p.hisakawaDreamAtk ? h.twins[otherKey(h.active)] : h.twins[h.active];
     return t ? t.img : PATHS.select;
   },
 
-  publicState(p) {
+  publicState(p, round) {
     const h = ensure(p);
     if (!h) return null;
     return {
       active: h.active,
       controlTurns: h.controlTurns || 0,
-      twins: TWIN_KEYS.map((key) => publicTwin(h.twins[key], key === h.active)),
+      // สลับตัวไปแล้วในเทิร์นนี้ -> ปุ่มสกิลพื้นฐานต้องขึ้น disable (เปลี่ยนกลับไม่ได้จนจบเทิร์น)
+      switchedThisRound: round != null && (p.hisakawaSwitchedRound || 0) === round,
+      twins: TWIN_KEYS.map((key) => publicTwin(p, h.twins[key], key === h.active)),
     };
   },
 
   dynamicSkillFor(p, ch, tier) {
     const h = ensure(p);
     if (!h) return ch[tier];
-    if (tier === "basic") return anyTwinDead(p) ? ch.basic2 : ch.basic;
+    if (tier === "basic") {
+      if (anyTwinDead(p)) return ch.basic2;
+      // ปกสกิลสลับตัวโชว์ภาพ "แฝดอีกคน" ที่กำลังจะออกมาแทน — เดิมค้างที่ภาพฮายาเตะเสมอ
+      return { ...ch.basic, img: h.active === "nagi" ? PATHS.switchToHayate : PATHS.switchToNagi };
+    }
     if (tier === "secondary") return h.active === "nagi" ? ch.secondary : ch.secondary2;
     if (tier === "ultimate") {
       const t = activeTwin(p);
@@ -334,7 +367,8 @@ module.exports = {
     if (tier === "basic" && skillStatus(skill) === "hisakawaSwitch") return (p.hisakawaSwitchedRound || 0) !== engine.roundNumber && bothAlive(p);
     if (tier === "basic" && skillStatus(skill) === "hisakawaRevive") return anyTwinDead(p);
     if (tier === "secondary" && skillStatus(skill) === "hisakawaLimit") return h.active === "nagi" && !statusOn(t, "hisakawaLimit");
-    if (tier === "secondary" && skillStatus(skill) === "hisakawaTempo") return h.active === "hayate" && !statusOn(t, "hisakawaTempo");
+    // จังหวะนี้แหละ: เป็นบัฟคู่ (ลงทั้งสองคน) — กดซ้ำไม่ได้ถ้ายังมีจังหวะค้างอยู่ที่ใครก็ตาม
+    if (tier === "secondary" && skillStatus(skill) === "hisakawaTempo") return !TWIN_KEYS.some((key) => statusOn(h.twins[key], "hisakawaTempo"));
     if (tier === "ultimate" && skillStatus(skill) === "hisakawaDream") return statusOn(t, "hisakawaStage") && statusOn(t, "hisakawaTalent");
     return true;
   },
@@ -357,6 +391,9 @@ module.exports = {
         suffix = " — ฮายาเตะได้รับโชคลาภ +1";
       }
       syncIn(p);
+      // สลับตัว = รีเซ็ตจำนวนครั้งใช้สกิล แฝดที่เพิ่งออกมามีสิทธิ์ใช้สกิลของตัวเองอีก 1 ครั้งในเทิร์นนี้
+      p.skillUsedRound = false;
+      p.hisakawaBonusRound = 0;
       engine.log(`🔁 ${p.name} สลับตัวเป็น ${other.name} — ${outgoing.name} ฟื้นพลังชีวิต 2 หน่วย${suffix}`);
     } else if (skillStatus(skill) === "hisakawaRevive") {
       const dead = TWIN_KEYS.map((key) => h.twins[key]).find((t) => !t.alive);
@@ -376,8 +413,8 @@ module.exports = {
       applyStatus(p, active, "hisakawaLimit", LIMIT_TURNS);
       engine.log(`🧡 ${active.name} อย่าทำอะไรเกินตัวสิ — ดาเมจที่ได้รับเบาลง 1 และโจมตีติดผกผัน`);
     } else if (skillStatus(skill) === "hisakawaTempo") {
-      applyStatus(p, active, "hisakawaTempo", 999);
-      engine.log(`💨 ${active.name} จังหวะนี้แหละ — หากแต้มต่ำสุดแบบไม่เสมอ จะได้โจมตีหลังผู้ชนะ`);
+      applyCoupleStatus(p, "hisakawaTempo", 999);
+      engine.log(`💨 ${p.name} จังหวะนี้แหละ — ทั้งนากิและฮายาเตะ ใครคุมอยู่ตอนแต้มต่ำสุดแบบไม่เสมอ ก็ได้โจมตีหลังผู้ชนะ`);
     } else if (skillStatus(skill) === "hisakawaStage") {
       applyCoupleStatus(p, "hisakawaStage", STAGE_TURNS);
       engine.log(`🎤 ${p.name} Miracle Live — เปิดเวทีของพวกเรา ${STAGE_TURNS} เทิร์น`);
@@ -393,6 +430,13 @@ module.exports = {
       p.transformAt = engine.nextTransformCounter();
       engine.queueCutscene(p, "hisakawaSunday");
       engine.log(`🎁 ${p.name} O-KU-RI-MO-NO-Sunday — รวมเวทีและพรสวรรค์เป็นฝันของเหล่าฝาแฝด`);
+    }
+    // สกิลรองทั้งสอง + O-KU-RI-MO-NO-Sunday: กดแล้วยังใช้สกิลอื่นได้อีก 1 ครั้งในเทิร์นเดียวกัน
+    //  (ให้โบนัสครั้งเดียวต่อเทิร์น — Miracle Live / Miracle Dance กินโควตาตามปกติ)
+    if (BONUS_ACTION_STATUS.includes(skillStatus(skill)) && p.hisakawaBonusRound !== engine.roundNumber) {
+      p.hisakawaBonusRound = engine.roundNumber;
+      p.skillUsedRound = false;
+      engine.log(`👭 ${p.name} ยังไม่หมดแรง — ใช้สกิลได้อีก 1 ครั้งในเทิร์นนี้`);
     }
     return suffix;
   },
@@ -417,6 +461,7 @@ module.exports = {
   onAttackLanded(engine, attacker, target) {
     const t = activeTwin(attacker);
     if (!t) return [];
+    if (attacker.hisakawaDreamAtk) return []; // หมัดที่ 2 เป็นของแฝดอีกคน — ผลของตัวที่คุมอยู่ไม่ทำงาน
     const skills = [];
     if (t.key === "nagi" && statusOn(t, "hisakawaLimit") && target.alive) {
       if (engine.applyDebuff(target, "invert", null, 3)) engine.log(`🔄 ${t.name} มอบสถานะผกผันให้ ${target.name} 3 เทิร์น`);
@@ -426,28 +471,65 @@ module.exports = {
     return skills;
   },
 
+  // ท่าไม้ตาย 3: โจมตีโดนแล้วทอย 70% เพื่อ "จอง" การโจมตีรอบ 2 ของแฝดอีกคน
+  //  ไม่ลงดาเมจตรงนี้ — เปิดเป็นเฟสโจมตีจริงอีกรอบใน startDreamFollowupAttack() ให้เลือกเป้าหมายเองได้
   maybeDreamFollowup(engine, attacker, target) {
     const h = ensure(attacker);
-    if (!h || !bothAlive(attacker) || !target || !target.alive) return null;
+    if (!h || !bothAlive(attacker) || !target) return null;
+    if (attacker.hisakawaDreamAtk) return null; // หมัดที่ 2 เองไม่ทอยต่ออีก (กันลูปไม่รู้จบ)
     const active = h.twins[h.active];
     const other = h.twins[otherKey(h.active)];
     if (!statusOn(active, "hisakawaDream")) return null;
-    if (Math.random() >= 0.7) {
-      engine.log(`🎁 ฝันของเหล่าฝาแฝด — ${other.name} ไม่ได้ออกมาโจมตีต่อ (30%)`);
+    if (Math.random() >= DREAM_FOLLOWUP_CHANCE) {
+      engine.log(`🎁 ฝันของเหล่าฝาแฝด — ${other.name} ไม่ได้ออกมาโจมตีต่อ (${Math.round((1 - DREAM_FOLLOWUP_CHANCE) * 100)}%)`);
       return null;
     }
-    engine.dealMixed(target, 2, true);
-    target.wasAttacked = true;
-    engine.log(`🎁 ฝันของเหล่าฝาแฝด — ${other.name} ออกมาโจมตีช่วย ${target.name} -2`);
-    return { name: `ฝันของเหล่าฝาแฝด — ${other.name}`, img: other.img, by: attacker.name, side: "atk" };
+    attacker.hisakawaDreamPending = true;
+    engine.log(`🎁 ฝันของเหล่าฝาแฝด — ${other.name} เตรียมออกมาโจมตีต่อ`);
+    return null;
+  },
+
+  // เปิดเฟสโจมตีรอบ 2 ของแฝดอีกคน (เรียกจาก postAttackFollowup() ของ server.js)
+  //  เลือกเป้าหมายใหม่ได้เอง และเป็นการโจมตีจริงที่มีอนิเมชัน ไม่ใช่ดาเมจแฝงเหมือนเดิม
+  startDreamFollowupAttack(engine, attacker) {
+    if (!attacker || attacker.characterId !== "hisakawa_sister") return false;
+    attacker.hisakawaDreamAtk = false; // หมัดที่ 2 (ถ้าเพิ่งตีไป) จบแล้ว
+    if (!attacker.hisakawaDreamPending) return false;
+    attacker.hisakawaDreamPending = false;
+    const h = ensure(attacker);
+    if (!h || !attacker.alive || !bothAlive(attacker)) return false;
+    if (!engine.attackableTargets(attacker.id).length) return false;
+    const other = h.twins[otherKey(h.active)];
+    attacker.hisakawaDreamAtk = true;
+    engine.setAttackerId(attacker.id);
+    engine.setGameState("ATTACK");
+    engine.log(`🎁 ฝันของเหล่าฝาแฝด — ${other.name} ออกมาโจมตีต่ออีก 1 ครั้ง (${DREAM_FOLLOWUP_DMG} หน่วย)`);
+    engine.startPhaseTimer(engine.ATTACK_TIME, () => {
+      const t = engine.attackableTargets(engine.attackerId);
+      if (t.length) engine.doAttack(engine.attackerId, t[Math.floor(Math.random() * t.length)].id);
+      else engine.endTurn();
+    });
+    engine.broadcastState();
+    return true;
+  },
+
+  // หมัดที่ 2 กำลังทำงานอยู่ไหม (server.js ใช้ทับดาเมจให้คงที่ + เลือกภาพผู้โจมตี)
+  isDreamAttack(p) {
+    return !!(p && p.characterId === "hisakawa_sister" && p.hisakawaDreamAtk);
+  },
+
+  // ชื่อแฝดที่ออกมาตีหมัดที่ 2 (ใช้โชว์บนอนิเมชัน)
+  dreamFollowupName(p) {
+    const h = ensure(p);
+    return h ? h.twins[otherKey(h.active)].name : "";
   },
 
   onAfterRoundScores(engine, combatants, winnerId, valFn) {
     for (const p of combatants) {
       const h = ensure(p);
-      if (!h || h.active !== "hayate") continue;
-      const t = h.twins.hayate;
-      if (!statusOn(t, "hisakawaTempo") || !t.alive || !bothAlive(p)) continue;
+      if (!h) continue;
+      const t = h.twins[h.active];
+      if (!statusOn(t, "hisakawaTempo") || !t.alive) continue;
       const score = valFn(p);
       if (score < 0) continue;
       const sameLow = combatants.filter((o) => valFn(o) === score);
@@ -465,15 +547,15 @@ module.exports = {
     const p = engine.alivePlayers().find((o) => o.characterId === "hisakawa_sister" && o.hisakawaHayateAssist);
     if (!p) return false;
     p.hisakawaHayateAssist = false;
-    // ระหว่างรอคิว ผู้ชนะอาจตีจนฮายาเตะล้มและนากิออกมาคุมแทน — จังหวะนี้ถือว่าพลาดไป
+    // บัฟคู่: ระหว่างรอคิว ผู้ชนะอาจตีจนคนที่จองไว้ล้ม — แฝดอีกคนที่ออกมาคุมแทนได้ออกโจมตีต่อแทนได้เลย
     const h = ensure(p);
-    const hayate = h && h.twins.hayate;
-    if (!h || h.active !== "hayate" || !hayate.alive) return false;
+    const runner = h && h.twins[h.active];
+    if (!h || !runner || !runner.alive) return false;
     const targets = engine.attackableTargets(p.id);
     if (!targets.length) return false;
-    delTwinStatus(p, hayate, "hisakawaTempo");
+    for (const key of TWIN_KEYS) delTwinStatus(p, h.twins[key], "hisakawaTempo"); // บัฟคู่: ใช้แล้วหมดไปทั้งสองคน
     engine.setAttackerId(p.id);
-    engine.log(`💨 ${hayate.name} ได้โจมตีต่อจาก ${attacker ? attacker.name : "ผู้ชนะ"}`);
+    engine.log(`💨 ${runner.name} ได้โจมตีต่อจาก ${attacker ? attacker.name : "ผู้ชนะ"}`);
     return true;
   },
 
@@ -515,6 +597,8 @@ module.exports = {
     if (!h) return;
     // จังหวะที่จองไว้แต่ไม่ได้ใช้ (ผู้ชนะโจมตีไม่ได้ / ไม่มีเป้าให้ตี) ต้องไม่ค้างข้ามไปเทิร์นหน้า
     p.hisakawaHayateAssist = false;
+    p.hisakawaDreamPending = false;
+    p.hisakawaDreamAtk = false;
     for (const key of TWIN_KEYS) {
       const t = h.twins[key];
       if (key === h.active) continue;

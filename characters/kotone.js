@@ -22,6 +22,8 @@ const KOTONE_PIGGY_MAX_SAVE = 3;   // หยอดได้ครั้งละ
                                    //  (ได้ 1 หยอด 1 · ได้ 2 หยอด 2 · ได้ตั้งแต่ 3 ขึ้นไป หยอด 3)
 const KOTONE_SENA_CHANCE = 0.2;    // โอกาสโดนท่านประธานเซนะจังเจอตัว (เฉพาะสกิลพื้นฐาน/พื้นฐาน 2/สกิลรอง)
 const KOTONE_SENA_STUN_TURNS = 1;  // โดนเจอตัว -> สตั้นตัวเอง 1 เทิร์น (เริ่มมีผลเทิร์นถัดไป)
+const KOTONE_REGEN_CHANCE = 0.3;   // โอกาสฟื้นแต้มสกิลเพิ่ม 1 หน่วยตอนจบเทิร์น
+const KOTONE_REGEN_AMOUNT = 1;
 
 // ---------- Part-time ----------
 const KOTONE_PART_DAY_MIN = 1, KOTONE_PART_DAY_MAX = 6;     // กลางวัน: เหรียญสุ่ม 1-6
@@ -36,6 +38,7 @@ const KOTONE_DANCE_NIGHT_HP = 2;      // กลางคืน: เสียพ�
 
 // ---------- ท่าไม้ตาย 1: หนูพร้อมแล้วคะ โปรดิวเซอร์ ----------
 const KOTONE_READY_NEED = 4;          // ต้องมี [ความพร้อม] ครบ 4 หน่วย (หักทั้งหมดตอนใช้)
+const KOTONE_READY_MAX = 4;           // [ความพร้อม] สะสมได้สูงสุด 4 หน่วย (ซ้อมเกินไม่เก็บ)
 
 // ---------- ท่าไม้ตายในร่าง [พร้อมลุย] (ทั้ง 3 ท่าใช้ 6 แต้มสกิล + 6 เหรียญ) ----------
 const KOTONE_FORM_ULT_GOLD = 6;
@@ -68,6 +71,7 @@ module.exports = {
   GOLD_CAP: KOTONE_GOLD_CAP,
   PIGGY_MAX: KOTONE_PIGGY_MAX,
   READY_NEED: KOTONE_READY_NEED,
+  READY_MAX: KOTONE_READY_MAX,
   FORM_ULT_GOLD: KOTONE_FORM_ULT_GOLD,
   FORM_ULT_KEYS: KOTONE_FORM_ULT_KEYS,
 
@@ -159,9 +163,10 @@ module.exports = {
 
   // Dance Lession — [ความพร้อม] +1 (กลางคืน +2 พร้อมภาระเวท 2 เทิร์น + เสียเลือด 2)
   applyDance(engine, p, night) {
-    const add = night ? KOTONE_DANCE_NIGHT_READY : KOTONE_DANCE_DAY_READY;
-    p.statuses.kotoneReady = this.readyStacks(p) + add;
-    let extra = "";
+    const want = night ? KOTONE_DANCE_NIGHT_READY : KOTONE_DANCE_DAY_READY;
+    const add = Math.min(want, KOTONE_READY_MAX - this.readyStacks(p)); // ซ้อมเกินเพดานไม่เก็บสะสม
+    if (add > 0) p.statuses.kotoneReady = this.readyStacks(p) + add;
+    let extra = add < want ? ` (เต็มเพดาน ${KOTONE_READY_MAX} — ได้แค่ +${add})` : "";
     if (night) {
       if (!engine.resistActive(p)) {
         engine.applySpellburden(p, KOTONE_DANCE_NIGHT_BURDEN); // helper กลาง: สะสม +1 · ใช้ซ้ำไม่ต่ออายุ
@@ -173,8 +178,8 @@ module.exports = {
       extra += ` · เสียพลังชีวิต -${KOTONE_DANCE_NIGHT_HP}`;
       engine.maybeBeatSave(p); engine.maybeBeatMode(p); engine.maybeEva3(p);
     }
-    engine.log(`💃 ${p.name} Dance Lession${night ? " (รอบดึก)" : ""} — [ความพร้อม] +${add} (มี ${this.readyStacks(p)}/${KOTONE_READY_NEED})${extra}`);
-    return ` — ความพร้อม ${this.readyStacks(p)}/${KOTONE_READY_NEED}`;
+    engine.log(`💃 ${p.name} ${night ? "แอบซ้อม" : "Dance Lession"} — [ความพร้อม] +${add} (มี ${this.readyStacks(p)}/${KOTONE_READY_MAX})${extra}`);
+    return ` — ความพร้อม ${this.readyStacks(p)}/${KOTONE_READY_MAX}`;
   },
 
   // Sleeping time — ล้าง "สถานะเสีย" ทั้งหมด + กันถูกเลือกโจมตี 1 เทิร์น + หลับ 3 เทิร์น
@@ -303,6 +308,15 @@ module.exports = {
     p.gold = Math.max(0, (p.gold || 0) - saved);
     engine.log(`🐷 ${p.name} แบ่งเงินหยอดกระปุกออมสินน้องหมูน้อย ${saved} เหรียญ (กระปุก ${p.piggy}/${KOTONE_PIGGY_MAX} · เหลือในกระเป๋า ${p.gold})`);
     return saved;
+  },
+
+  // เรียกจาก endTurn()'s skill-regen loop — สกิลติดตัว: โอกาส 30% ฟื้นแต้มสกิลเพิ่ม 1 หน่วยต่อเทิร์น
+  //  คืนจำนวนที่ฟื้นเพิ่ม (0 หรือ 1) ให้ผู้เรียกบวกเข้า gain เอง
+  extraSkillRegen(engine, p) {
+    if (engine.passiveSealed(p)) return 0; // สกิลติดตัวถูกปิดอยู่ (MOON*CELL / อันนี้ของนายรึเปล่า ฯลฯ)
+    if (Math.random() >= KOTONE_REGEN_CHANCE) return 0;
+    engine.log(`🎀 ${p.name} กระปุกออมสินน้องหมูน้อย — ซ้อมเก็บแรงได้ แต้มสกิล +${KOTONE_REGEN_AMOUNT} (โอกาส ${Math.round(KOTONE_REGEN_CHANCE * 100)}%)`);
+    return KOTONE_REGEN_AMOUNT;
   },
 
   // เรียกจาก useSkill() หลังใช้สกิลพื้นฐาน/พื้นฐาน 2/สกิลรอง — 20% โดนท่านประธานเซนะจังเจอตัว
