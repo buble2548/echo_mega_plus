@@ -34,7 +34,7 @@ const STRESS_DECAY_TURN = 1;        // ลดลง 1 หน่วยต่อ�
 const STRESS_DECAY_BUST = 1;        // ไพ่แตกในเทิร์นนั้นลดเพิ่มอีก 1
 
 // ---------- สกิลพื้นฐาน วิเคราะห์สถานการณ์ ----------
-const ANALYZE_HEAL = 2;             // ฟื้นพลังชีวิตทันทีตอนกด (แลกกับการสละเทิร์นโจมตีของเทิร์นนี้)
+const ANALYZE_HEAL = 2;             // ฟื้นพลังชีวิต — ได้ต่อเมื่อ "ชนะการจั่ว" เท่านั้น (แทนเทิร์นโจมตีที่เสียไป)
 
 // ---------- สกิลรอง ข่มขวัญ/จับกุม ----------
 const INTIMIDATE_STRESS = 1;        // ความเครียดที่เพิ่มให้เป้าหมาย
@@ -42,7 +42,7 @@ const INTIMIDATE_SKILL_DRAIN = 1;   // แต้มสกิลที่ดู�
 const INTIMIDATE_SELF_REFUND = 1;   // ระดับผู้กระทำความผิดขึ้นไป: ฟื้นแต้มสกิลให้ตัวเอง
 
 // ---------- ท่าไม้ตาย จัดการปิดคดี ----------
-const CLOSE_CASE_DMG = 6;
+const CLOSE_CASE_DMG = 5;
 
 // ---------- สกิลติดตัว 2 จับกุมขั้นเด็ดขาด ----------
 const CHASE_ROUNDS = 3;             // นับแต้มดวลกัน 3 ครั้ง
@@ -151,7 +151,13 @@ module.exports = {
   // ---- ทริกเกอร์ที่ทำให้ความเครียดเพิ่ม (เรียกจาก server.js จุดละ 1 บรรทัด) ----
   onSkillUsed(engine, p) { this.addStress(engine, p, STRESS_PER_ACTION, "ใช้สกิล"); },
   onItemUsed(engine, p) { this.addStress(engine, p, STRESS_PER_ACTION, "ใช้ไอเทม"); },
-  onRoundWin(engine, p) { this.addStress(engine, p, STRESS_PER_ACTION, "ชนะการจั่ว"); },
+  onRoundWin(engine, p) {
+    this.addStress(engine, p, STRESS_PER_ACTION, "ชนะการจั่ว");
+    // วิเคราะห์สถานการณ์: ผลบวกมาทีหลัง — ต้องชนะการจั่วก่อนถึงจะได้ฟื้นเลือดแทนเทิร์นโจมตีที่เสียไป
+    if (!this.analyzeActive(p)) return;
+    const heal = engine.healHp(p, ANALYZE_HEAL);
+    if (heal > 0) engine.log(`🧠 ${p.name} วิเคราะห์สถานการณ์ — ชนะการจั่วแต่ไม่โจมตี จึงฟื้นพลังชีวิต +${heal}`);
+  },
   // การจั่วไพ่นับแค่ +1 ต่อเทิร์น ไม่ว่าจะจั่วกี่ใบ (ธงรีเซ็ตต้นเทิร์นที่ onRoundStartTick)
   onCardDraw(engine, p) {
     if (!p || p.connorStressDrewRound) return;
@@ -214,9 +220,8 @@ module.exports = {
   //  แลกกับการสละเทิร์นโจมตีของเทิร์นนี้ (แม้ชนะการจั่ว) แต่ฟื้นเลือดทันที 2 หน่วย
   applyAnalyze(engine, p) {
     p.connorAnalyze = true;
-    const heal = engine.healHp(p, ANALYZE_HEAL);
-    engine.log(`🧠 ${p.name} วิเคราะห์สถานการณ์ — มองเห็นแต้มการ์ดของทุกคน พร้อมประเมินความเสียหายที่จะถูกโจมตี${heal > 0 ? ` · ฟื้นพลังชีวิต +${heal}` : ""}`);
-    engine.log(`🧠 ${p.name} ทุ่มกำลังประมวลผลทั้งหมด — เทิร์นนี้ต่อให้ชนะการจั่วก็จะไม่ได้โจมตี`);
+    engine.log(`🧠 ${p.name} วิเคราะห์สถานการณ์ — มองเห็นแต้มการ์ดของทุกคน พร้อมประเมินความเสียหายที่จะถูกโจมตี`);
+    engine.log(`🧠 ${p.name} ทุ่มกำลังประมวลผลทั้งหมด — เทิร์นนี้ชนะการจั่วก็จะไม่ได้โจมตี แต่จะฟื้นพลังชีวิต +${ANALYZE_HEAL} แทน`);
     return " — สแกนสนาม";
   },
   // เรียกจาก afterSummary(): ผู้ชนะที่วิเคราะห์สถานการณ์ในเทิร์นนี้ โจมตีไม่ได้
@@ -246,7 +251,7 @@ module.exports = {
       engine.log(`⚠️ ${target.name} อยู่ในระดับ "${LEVELS.offender.name}" ขึ้นไป — ${p.name} คุมสถานการณ์ได้${got > 0 ? ` · ฟื้นแต้มสกิล +${got}` : ""}`);
     }
     if (lv === "criminal") {
-      // กันเปิดฉากจับกุมซ้อนระหว่างการไล่ล่าที่ยังไม่จบ — ไม่งั้น p.connorChase ถูกทับ สกอร์ดวลที่นับมารีเซ็ตทิ้ง
+      // ตาข่ายสำรองกันเปิดฉากจับกุมซ้อน (ปกติกดสกิลรองระหว่างไล่ล่าไม่ได้อยู่แล้วผ่าน skillBlocked)
       if (this.chaseActive(engine)) {
         engine.log(`🚨 ${p.name} ยังไล่ล่าคนอื่นอยู่ — เปิดฉากจับกุม ${target.name} ซ้อนไม่ได้ (ได้แค่ผลข่มขวัญพื้นฐาน)`);
         return ` — ${target.name} ${LEVELS[lv].name}`;
@@ -344,11 +349,17 @@ module.exports = {
     ) || null;
   },
   chaseActive(engine) { return !!this.chaseOwner(engine); },
-  // คนนอกวงไล่ล่า: จั่ว/กดสกิล/ใช้ไอเทมไม่ได้เลย (คอนเนอร์กับเป้าหมายยังเล่นได้ตามปกติ)
+  // คนนอกวงไล่ล่า: จั่วไพ่ไม่ได้ (คอนเนอร์กับเป้าหมายยังจั่วได้ตามปกติ — ต้องเอาไว้ดวลแต้มกัน)
   actionBlocked(engine, p) {
     const owner = this.chaseOwner(engine);
     if (!owner || !p) return false;
     return p.id !== owner.id && p.id !== owner.connorChase.targetId;
+  },
+  // ระหว่างการไล่ล่า **ห้ามทุกคนใช้สกิล/ไอเทม** รวมทั้งคอนเนอร์และเป้าหมายเอง — เหลือแค่การจั่วไพ่ล้วนๆ
+  //  ตั้งใจให้เหนือกว่า "ทางหนี" ของคู่แฝดฮิซากาว่าด้วย (สกิลพื้นฐานของเธอที่ปกติอะไรก็ปิดกั้นไม่ได้)
+  //  เพราะการไล่ล่าเป็นการดวลแต้มล้วน ไม่ควรมีใครแทรกอะไรเข้ามาได้เลย
+  skillBlocked(engine, p) {
+    return !!p && this.chaseActive(engine);
   },
   // บังคับไพ่แตก + ล็อกไพ่ให้คนนอกทั้งหมด (ไม่สนว่าเปิดไพ่ไปแล้วหรือยัง) — ไม่มีดาเมจตามมา
   freezeOutsiders(engine, owner) {

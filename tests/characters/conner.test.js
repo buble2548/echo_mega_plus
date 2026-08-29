@@ -140,15 +140,25 @@ test('ความเครียด: การเติมโน้ตของ
 
 // ---------- สกิลพื้นฐาน วิเคราะห์สถานการณ์ ----------
 
-test('วิเคราะห์สถานการณ์: ฟื้นเลือด 2 ทันที และตัดเทิร์นโจมตีของคอนเนอร์เอง', () => {
+test('วิเคราะห์สถานการณ์: ตัดเทิร์นโจมตี และยังไม่ฟื้นเลือดตอนกด', () => {
   const { c } = setup();
   c.hp = 3;
   conner.applyInstantSkill(engine, c, 'basic');
-  assert.equal(c.hp, 5);
+  assert.equal(c.hp, 3);                     // ฟื้นตอนชนะการจั่วเท่านั้น ไม่ใช่ตอนกด
   assert.equal(conner.analyzeActive(c), true);
   assert.equal(conner.blocksAttack(engine, c), true);
   conner.onRoundStartTick(engine, c); // เทิร์นใหม่ = กลับมาโจมตีได้
   assert.equal(conner.blocksAttack(engine, c), false);
+});
+
+test('วิเคราะห์สถานการณ์: ได้ฟื้นเลือด 2 ต่อเมื่อชนะการจั่ว (ไม่ชนะ = ไม่ได้อะไร)', () => {
+  const { c } = setup();
+  c.hp = 3;
+  conner.onRoundWin(engine, c);              // ยังไม่ได้กดสกิล -> ไม่ฟื้น
+  assert.equal(c.hp, 3);
+  conner.applyInstantSkill(engine, c, 'basic');
+  conner.onRoundWin(engine, c);
+  assert.equal(c.hp, 5);
 });
 
 test('วิเคราะห์สถานการณ์: กดไม่ได้ระหว่างอยู่ในโหมดจับกุมขั้นเด็ดขาด', () => {
@@ -215,10 +225,16 @@ test('ขัดขืน: เริ่มไล่ล่า เล่นวี�
   assert.equal(b.connorFrozen, true);
   assert.equal(b.locked, true);
   assert.equal(engine.bustedOf(b), true);
-  // คอนเนอร์กับเป้าหมายยังเล่นได้ตามปกติ คนนอกทำอะไรไม่ได้
+  // จั่วไพ่: คอนเนอร์กับเป้าหมายยังจั่วได้ คนนอกจั่วไม่ได้
   assert.equal(conner.actionBlocked(engine, c), false);
   assert.equal(conner.actionBlocked(engine, a), false);
   assert.equal(conner.actionBlocked(engine, b), true);
+  // สกิล/ไอเทม: ห้ามทุกคนระหว่างไล่ล่า รวมคอนเนอร์และเป้าหมายเอง
+  assert.equal(conner.skillBlocked(engine, c), true);
+  assert.equal(conner.skillBlocked(engine, a), true);
+  assert.equal(conner.skillBlocked(engine, b), true);
+  conner.endChase(engine, c);
+  assert.equal(conner.skillBlocked(engine, c), false);
 });
 
 test('ไล่ล่า: นับแต้ม 3 ครั้ง — เทิร์นเสมอไม่มีใครได้แต้ม และวีดีโอเล่นครบทุกครั้ง', () => {
@@ -385,6 +401,7 @@ test('จัดการปิดคดี: เล็งได้เฉพาะ
   a.armor = 0;
   const hpBefore = a.hp;
   conner.applyCloseCase(engine, c, a);
+  assert.equal(conner.CLOSE_CASE_DMG, 5);
   assert.equal(a.hp, hpBefore - conner.CLOSE_CASE_DMG);
 });
 

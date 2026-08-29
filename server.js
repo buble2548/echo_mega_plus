@@ -2654,6 +2654,7 @@ function buildStateFor(viewerId) {
         connorAnalyze: p.characterId === "conner" ? !!p.connorAnalyze : undefined,              // เทิร์นนี้กดวิเคราะห์แล้ว (= ไม่โจมตี)
         // ประเมินความเสียหายที่ผู้เล่นคนนี้จะฟาดใส่คอนเนอร์ได้ — เห็นเฉพาะคอนเนอร์ที่กำลังวิเคราะห์สถานการณ์
         connorEstDmg: (connorScan && !mine && p.alive) ? estimateAttackOn(p, viewer) : undefined,
+        connorScanned: (connorScan && !mine) ? true : undefined, // แต้มของคนนี้ถูกเปิดให้เราเห็นจาก "วิเคราะห์สถานการณ์"
         harukaBasicUses: p.characterId === "haruka" ? (p.harukaBasicUses || 0) : undefined,
         harukaBasicMax: p.characterId === "haruka" ? CHAR_HOOKS.haruka.BASIC_USES_PER_TURN : undefined,
         shradeForm: !!p.shradeForm,        // ชเรด เอลัน: รวมร่างทำนองเพลงแล้ว (อควาเรียน สปาด้า — ถาวร)
@@ -2969,7 +2970,7 @@ function cardLabel(c) {
 function useInventoryItem(id, uid, opts = {}) {
   const p = players[id];
   if (!p || !p.alive) return;
-  if (CHAR_HOOKS.conner.actionBlocked(engine, p)) return; // คอนเนอร์: อยู่นอกวงไล่ล่า -> ถูกแช่ ใช้ไอเทมไม่ได้
+  if (CHAR_HOOKS.conner.skillBlocked(engine, p)) return; // คอนเนอร์: ระหว่างการไล่ล่า ทุกคนใช้ไอเทมไม่ได้ (รวมคอนเนอร์กับเป้าหมาย)
   const idx = (p.inventory || []).findIndex((it) => it.uid === uid);
   if (idx < 0) return;
   const item = p.inventory[idx];
@@ -3530,7 +3531,7 @@ function useSkill(id, tier, targets, item) {
   if (p.locked && !isHisakawaEscape) return;
   // MOON*CELL (คิชินามิ ฮาคุโนะ): สกิลทั้งหมดของทุกคนใช้ไม่ได้เลย (รวมของฮาคุโนะเจ้าของท่าเองด้วย — เหลือแค่สกิลติดตัว)
   if (moonCellActive() && !isHisakawaEscape) return;
-  if (CHAR_HOOKS.conner.actionBlocked(engine, p)) return; // คอนเนอร์: อยู่นอกวงไล่ล่า -> ถูกแช่ กดสกิลไม่ได้
+  if (CHAR_HOOKS.conner.skillBlocked(engine, p)) return; // คอนเนอร์: ระหว่างการไล่ล่า ทุกคนกดสกิลไม่ได้ (รวมคอนเนอร์กับเป้าหมาย)
   if (CHAR_HOOKS.shrade_elan.charging(p)) return; // แด่เพื่อนรักของฉัน: ระหว่างชาร์จใช้สกิลอื่นไม่ได้
   if ((p.statuses.riddheguard || 0) > 0) return; // ฉันจะไม่ยอมสูญเสียใครไปอีก (ริดดี้): ระหว่างทำงานกดสกิลไม่ได้
   if ((p.statuses.phenexTaunt || 0) > 0) return; // ไม่อยากให้ใครต้องเจ็บปวด (ริต้า เบอร์นัล): ระหว่างล่อเป้ากดสกิลไม่ได้เลย

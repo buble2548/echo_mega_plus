@@ -1791,9 +1791,10 @@ function OtherPlayer({ p, phase, slot, targetable, onAttack, picked, onInspect, 
         {p.hisakawa && <Stats p={p} center hideLife />}
       </div>
       {/* ใบโปรโมทสินค้า (Apple guy): แต้มการ์ดถูกเปิดเผยให้ทุกคนเห็นแม้ยังไม่เปิดไพ่ */}
-      {(summary || (p.statuses?.promo || 0) > 0) && p.score !== null && (
-        <div className={`score-pop text-2xl font-black ${p.isWinner ? "text-echo-gold" : p.busted ? "text-echo-hp" : "text-white"}`}>
-          {p.busted ? "แตก!" : `${p.score} แต้ม`}
+      {/* connorScanned: คอนเนอร์กด "วิเคราะห์สถานการณ์" -> เห็นแต้มของคนนี้ตั้งแต่ยังไม่เปิดไพ่ (เห็นคนเดียว) */}
+      {(summary || (p.statuses?.promo || 0) > 0 || p.connorScanned) && p.score !== null && (
+        <div className={`score-pop text-2xl font-black ${p.isWinner ? "text-echo-gold" : p.busted ? "text-echo-hp" : p.connorScanned && !summary ? "text-echo-cyan" : "text-white"}`}>
+          {p.busted ? "แตก!" : `${p.score} แต้ม`}{p.connorScanned && !summary ? " 🧠" : ""}
         </div>
       )}
       {!p.hisakawa && <StatusChips p={p} compact max={6} />}
@@ -1860,9 +1861,9 @@ function MobileOpponent({ p, phase, targetable, onAttack, picked, onInspect, hos
         </span>
       )}
       {/* ใบโปรโมทสินค้า (Apple guy): แต้มการ์ดถูกเปิดเผยให้ทุกคนเห็นแม้ยังไม่เปิดไพ่ */}
-      {(summary || (p.statuses?.promo || 0) > 0) && p.score !== null && (
-        <div className={`score-pop shrink-0 text-xl font-black ${p.isWinner ? "text-echo-gold" : p.busted ? "text-echo-hp" : "text-white"}`}>
-          {p.busted ? "แตก!" : p.score}
+      {(summary || (p.statuses?.promo || 0) > 0 || p.connorScanned) && p.score !== null && (
+        <div className={`score-pop shrink-0 text-xl font-black ${p.isWinner ? "text-echo-gold" : p.busted ? "text-echo-hp" : p.connorScanned && !summary ? "text-echo-cyan" : "text-white"}`}>
+          {p.busted ? "แตก!" : p.score}{p.connorScanned && !summary ? " 🧠" : ""}
         </div>
       )}
       {picked && <span className="absolute -top-2 -left-2 text-xl z-10">🎤</span>}
@@ -2235,7 +2236,7 @@ function ConnorArrestModal({ ask, onAnswer }) {
         </div>
         <div className="flex flex-col gap-2 text-sm">
           <div className="rounded-xl bg-white/5 border border-white/10 px-3 py-2">🙇 <b>ยอมจำนน</b> — ความเครียดรีเซ็ตเป็น 0 แต่ติดสตั้น 3 เทิร์น และสถานะ "ผู้ต้องหา" 5 เทิร์น</div>
-          <div className="rounded-xl bg-white/5 border border-white/10 px-3 py-2">🏃 <b>ขัดขืน</b> — เริ่มการไล่ล่า 3 เทิร์น (ไม่มีเฟสโจมตี ผู้เล่นคนอื่นถูกแช่) วัดกันว่าใครแต้มสูงกว่า — ชนะ (แต้มรวมมากกว่าคอนเนอร์ หรือเสมอ) = หนีรอด ความเครียดเป็น 0 และคอนเนอร์ติดสตั้น 3 เทิร์น · แพ้ = ความเครียดเป็น 0 สตั้น 3 เทิร์น เสียเลือด 3 หน่วย และติด "ผู้ต้องหา" 5 เทิร์น</div>
+          <div className="rounded-xl bg-white/5 border border-white/10 px-3 py-2">🏃 <b>ขัดขืน</b> — เริ่มการไล่ล่า 3 เทิร์น (ไม่มีเฟสโจมตี ผู้เล่นคนอื่นถูกแช่ และทุกคนรวมทั้งคุณกับคอนเนอร์ใช้สกิล/ไอเทมไม่ได้เลย) วัดกันว่าใครแต้มสูงกว่า — ชนะ (แต้มรวมมากกว่าคอนเนอร์ หรือเสมอ) = หนีรอด ความเครียดเป็น 0 และคอนเนอร์ติดสตั้น 3 เทิร์น · แพ้ = ความเครียดเป็น 0 สตั้น 3 เทิร์น เสียเลือด 3 หน่วย และติด "ผู้ต้องหา" 5 เทิร์น</div>
           <div className="text-xs opacity-70">ไม่ตอบก่อนเปิดไพ่ = ถือว่าขัดขืน</div>
         </div>
         <div className="grid grid-cols-2 gap-2 mt-3">

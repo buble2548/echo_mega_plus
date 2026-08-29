@@ -208,7 +208,9 @@ yuuki · nanaya · miyako (คอมโบ) · takuto (คอมโบ + คร�
   — เป็นเครื่องหมายล้วน ผลอยู่ที่ `CHAR_HOOKS.conner.damageBonus()` (คอนเนอร์ตีแรงขึ้น +2)
 - **โหมด "การไล่ล่า" (สกิลติดตัว 2)** = สวิตช์กติกาสนาม 3 เทิร์น เก็บที่ `p.connorChase` ของคอนเนอร์
   (`{ targetId, round, mine, theirs }` — เป็น plain object จึงย้อนคืนได้ครบผ่านสแนปช็อต Overload Force)
-  - คนนอกวง: `p.connorFrozen` -> **`bustedOf()` คืน true ทันที** + `locked` + `actionBlocked()` ปิด `hit`/`useSkill`/`useInventoryItem`
+  - คนนอกวง: `p.connorFrozen` -> **`bustedOf()` คืน true ทันที** + `locked` + `actionBlocked()` ปิด `hit`
+  - **`skillBlocked()` ปิด `useSkill`/`useInventoryItem` ของ *ทุกคน*** รวมคอนเนอร์กับเป้าหมายเอง — เหนือกว่า
+    "ทางหนี" ของคู่แฝดฮิซากาว่าด้วย (การไล่ล่าเป็นการดวลแต้มล้วน ห้ามใครแทรก)
   - `resolveRound()` เรียก `CHAR_HOOKS.conner.chaseResolveRound()` **ก่อนหาผู้ชนะ** — คืน true = ระงับกติกาปกติทั้งก้อน
     แล้ว **ข้าม `afterResolve()` ไปที่ `runCutsceneQueue(goSummary)` ตรงๆ** เพราะเอฟเฟกต์หลังเปิดไพ่ที่กวาด
     "คนที่ไพ่แตก" (Ashen Trail ของโอกูริ ฯลฯ) จะไปลงคนที่ถูกแช่ ทั้งที่กติกาบอกว่าพวกเขาไม่รับความเสียหาย
