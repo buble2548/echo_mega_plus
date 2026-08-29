@@ -16,7 +16,9 @@ module.exports = function buildTransforms(img) {
     //  วีดีโอชุด "ไล่ล่า" และ "การป้องกันตัว" เรียกผ่าน queueCutscene ตรงๆ จึงเล่นทุกครั้งที่ทำงาน
     //  ส่วนเปิดตัว/สอบปากคำ/ปิดคดี เรียกผ่าน triggerCutscene = เล่นเต็มครั้งแรกครั้งเดียวต่อเกม
     //  เพลงไล่ล่า (conner_theme) ไม่ผูกกับคัตซีน — มาจาก CHAR_HOOKS.conner.activeMusic() ตลอดช่วงไล่ล่า
-    connorIntro:       { img: connorImg.base,   video: "/characters/connor/conner_openning.mp4",        title: "CONNOR RK800", label: "เริ่มปฏิบัติการ",   seconds: 8,  music: null, afterReveal: false },
+    //  connorIntro เผื่อเวลามากกว่าคลิปอื่น (6.94 -> 10) เพราะเป็นวีดีโอเดียวที่เล่นทันทีตอนแมตช์เริ่ม
+    //  ผู้เล่นทุกคนจึงโหลดมันแบบเย็นสนิท (7.9MB จาก R2) — ฝั่ง client ดึงมาแคชไว้ตั้งแต่ห้องรอแล้วด้วย (ดู VideoPreloader)
+    connorIntro:       { img: connorImg.base,   video: "/characters/connor/conner_openning.mp4",        title: "CONNOR RK800", label: "เริ่มปฏิบัติการ",   seconds: 10, music: null, afterReveal: false },
     connorInterrogate: { img: connorImg.skill2, video: "/characters/connor/skill2/connor_skill2.mp4",   title: "ข่มขวัญ/จับกุม", label: "ใช้สกิลรอง",       seconds: 12, music: null, afterReveal: false },
     connorCloseCase:   { img: connorImg.skill3, video: "/characters/connor/skill3/connor_skill3.mp4",   title: "จัดการปิดคดี",   label: "ปล่อยท่าไม้ตาย",   seconds: 17, music: null, afterReveal: false },
     connorArrest1:     { img: connorImg.skill2, video: "/characters/connor/arrest/connor_arrest_1.mp4", title: "เริ่มการไล่ล่า", label: "จับกุมขั้นเด็ดขาด", seconds: 8,  music: null, afterReveal: false },

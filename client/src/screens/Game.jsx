@@ -753,7 +753,7 @@ function ModalMounts({
       {shopOpen && <ShopModal shop={shop} me={me} onClose={onCloseShop} />}
       {bagOpen && <InventoryModal me={me} players={players} gameState={gameState} roundNumber={roundNumber} onPickGunAmmo={onPickGunAmmo} onClose={onCloseBag} />}
       {skillConfirm && <SkillConfirmModal confirm={skillConfirm} onConfirm={onConfirmSkill} onCancel={onCancelSkill} />}
-      <GutsVideoPreloader me={me} />
+      <GutsVideoPreloader me={me} players={players} />
     </>
   );
 }
@@ -1519,16 +1519,21 @@ const GUTS_AMMO_INFO = {
 const ITEM_PRELOAD_IMGS = ["/item/guts_select_gun/guts_gun.webp", "/characters/ignis/Black Sparklence.webp", ...Object.values(GUTS_AMMO_INFO).map((a) => a.img)];
 // วีดีโอกระสุนที่ผู้เล่นถืออยู่: โหลดล่วงหน้าไว้ในเบื้องหลัง (ไฟล์ 5-16MB) — ไม่งั้นตอนยิงจริงวีดีโอจะขึ้นช้า
 //  แล้วโดนเวลาคัตซีนฝั่ง server ตัดจบก่อนวีดีโอเล่นจบ
-function GutsVideoPreloader({ me }) {
+function GutsVideoPreloader({ me, players }) {
   const ammoTypes = [...new Set((me?.inventory || []).filter((it) => it.type === "gutsAmmo").map((it) => it.ammo))];
   const preloadImpact = me?.characterId === "ignis";
-  if (!ammoTypes.length && !preloadImpact) return null;
+  // คอนเนอร์ RK800: วีดีโอเปิดตัวถูกคิวทันทีที่ startMatch() — ทุกคนต้องโหลดมันแบบเย็นสนิท
+  //  ถ้าไม่ดึงมาแคชไว้ตั้งแต่ห้องรอ วีดีโอจะเริ่มเล่นช้ากว่านาฬิกาคัตซีนของ server แล้วโดนตัดจบก่อนดูจบ
+  //  (เช็คจาก p.character.id ไม่ใช่ p.characterId — payload ของ buildStateFor ไม่มีฟิลด์ characterId)
+  const preloadConnorIntro = (players || []).some((p) => p.character?.id === "conner");
+  if (!ammoTypes.length && !preloadImpact && !preloadConnorIntro) return null;
   return (
     <div aria-hidden className="hidden">
       {ammoTypes.map((a) => GUTS_AMMO_INFO[a] && (
         <video key={a} src={GUTS_AMMO_INFO[a].video} preload="auto" muted playsInline />
       ))}
       {preloadImpact && <video src="/characters/ignis/dark_skill3/trgger_dark__skill3.mp4" preload="auto" muted playsInline />}
+      {preloadConnorIntro && <video src="/characters/connor/conner_openning.mp4" preload="auto" muted playsInline />}
     </div>
   );
 }
