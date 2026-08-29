@@ -58,7 +58,7 @@ export default function Setup({ taken, initialName = "", initialPos = null, onNe
           <span className="p-logo-wrap self-start">
             <span className="p-logo-glow" />
             <img
-              src="/image/logo_current.png"
+              src="/image/logo_current.webp"
               alt="ECHO"
               className="p-logo-img h-20 sm:h-24 lg:h-32 w-auto"
             />

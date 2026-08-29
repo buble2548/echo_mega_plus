@@ -37,7 +37,7 @@ body {
   background:
     radial-gradient(circle at 18% 12%, rgba(155, 79, 150, 0.18), transparent 45%),
     radial-gradient(circle at 85% 88%, rgba(11, 45, 74, 0.35), transparent 45%),
-    url("/image/background.png") center / cover no-repeat,
+    url("/image/background.webp") center / cover no-repeat,
     #3a3a3c;
   background-attachment: fixed;
 }

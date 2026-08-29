@@ -111,7 +111,7 @@ const TransitionCurtain = forwardRef(function TransitionCurtain({ screenKey }, r
       <span className={`p-curtain-bar p-curtain-bar-b ${backCls} ${holdCls}`} />
       <span className={`p-curtain-bar p-curtain-bar-c ${backCls} ${holdCls}`} />
       <span className={`p-curtain-logo ${state.mode === "hold" ? "p-curtain-logo-hold" : ""} ${state.mode === "hold" && logoShow ? "show" : ""}`}>
-        <img src="/image/logo_current.png" alt="" />
+        <img src="/image/logo_current.webp" alt="" />
       </span>
     </div>
   );

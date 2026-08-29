@@ -74,7 +74,7 @@ function TeamModeView({ state, onBack }) {
         <div className="text-center min-h-0">
           <span className="p-logo-wrap mx-auto">
             <span className="p-logo-glow" />
-            <img src="/image/logo_current.png" alt="ECHO" className="p-logo-img h-10 sm:h-14 w-auto" />
+            <img src="/image/logo_current.webp" alt="ECHO" className="p-logo-img h-10 sm:h-14 w-auto" />
           </span>
           <div className="mt-1 text-white/70 font-bold text-xs sm:text-sm" style={{ fontFamily: P_DISPLAY }}>{votedCount}/{count} โหวตแล้ว · คะแนนมากสุดชนะ</div>
           <h1 className="text-2xl sm:text-4xl font-black text-white text-hard leading-tight" style={{ fontFamily: P_DISPLAY }}>โหวตโหมดการเล่น</h1>
@@ -305,7 +305,7 @@ export default function Lobby({ state, onBack, lowQ, onToggleLowQ, skillConfirmO
           <div className="text-center pointer-events-none">
             <span className="p-logo-wrap mx-auto">
               <span className="p-logo-glow" />
-              <img src="/image/logo_current.png" alt="ECHO" className="p-logo-img h-12 sm:h-14 lg:h-16 w-auto" />
+              <img src="/image/logo_current.webp" alt="ECHO" className="p-logo-img h-12 sm:h-14 lg:h-16 w-auto" />
             </span>
             <p className="mt-1 text-sm sm:text-base text-white/70" style={{ fontFamily: P_DISPLAY }}>
               {count}/{state.maxPlayers} ที่นั่ง

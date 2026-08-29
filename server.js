@@ -15,6 +15,7 @@ process.on("unhandledRejection", (err) => {
 });
 
 const express = require("express");
+const compression = require("compression");
 const http = require("http");
 const crypto = require("crypto");
 const { Server } = require("socket.io");
@@ -69,6 +70,9 @@ const io = new Server(server, {
   // Socket events use small payloads; reject oversized packets before parsing.
   maxHttpBufferSize: 64 * 1024,
   cors: process.env.ALLOWED_ORIGIN ? { origin: process.env.ALLOWED_ORIGIN } : undefined,
+  // state ที่ส่งเป็น JSON ภาษาไทย (ชื่อ/คำอธิบายสกิลของผู้เล่นทุกคน) บีบอัดได้หลายเท่าตัว
+  //  socket.io v4 ปิด permessage-deflate ไว้เป็นค่าเริ่มต้น — เปิดเฉพาะแพ็กเก็ตที่ใหญ่พอจะคุ้มค่า CPU
+  perMessageDeflate: { threshold: 1024 },
 });
 
 const clientDist = path.join(__dirname, "client", "dist");
@@ -79,13 +83,19 @@ const staticDir = useReact ? clientDist : path.join(__dirname, "public");
 // ไปที่นั่นแทนการเสิร์ฟจากเครื่องเอง (R2 ไม่คิดค่า egress ต่างจาก bandwidth ของ server หลักที่มีโควตา)
 // ไม่ตั้งค่านี้ = fallback เสิร์ฟจากไฟล์ในเครื่องตามเดิม (เช่นตอน dev ในเครื่อง)
 const ASSET_BASE_URL = process.env.ASSET_BASE_URL; // เช่น https://pub-xxxx.r2.dev
+// โฟลเดอร์สื่อทั้งหมดที่ย้ายไป R2 — /characters (รูป/วิดีโอ/เพลงตัวละคร), /item (ปืนหน่วย GUTS
+//  Select + คีย์/วีดีโอกระสุน), /overload_force (สนาม), /theme_song + /effect_sound (เพลง/เสียง),
+//  /image (พื้นหลัง + สแปลช) — สามอันหลังยัง track ใน git อยู่ ต้องอัปขึ้น R2 ให้ครบก่อนถึงจะ redirect ติด
+const R2_DIRS = ["characters", "item", "overload_force", "theme_song", "effect_sound", "image"];
 if (ASSET_BASE_URL) {
-  app.get("/characters/*", (req, res) => res.redirect(302, ASSET_BASE_URL + req.path));
-  // ไฟล์ไอเทม (ปืนหน่วย GUTS Select + คีย์/วีดีโอกระสุน) เก็บที่เดียวกัน — /item/... บน R2
-  app.get("/item/*", (req, res) => res.redirect(302, ASSET_BASE_URL + req.path));
-  app.get("/overload_force/*", (req, res) => res.redirect(302, ASSET_BASE_URL + req.path));
+  for (const dir of R2_DIRS) {
+    app.get(`/${dir}/*`, (req, res) => res.redirect(302, ASSET_BASE_URL + req.path));
+  }
 }
 
+// gzip ให้ index.html + bundle js/css ของ vite (637 KB -> ~170 KB) — compression ข้ามไฟล์ที่บีบมาแล้ว
+//  อย่าง jpg/png/webp/mp3/mp4 ให้เองอยู่แล้ว จึงไม่เปลืองซีพียูฟรี ๆ กับไฟล์สื่อ
+app.use(compression());
 app.use(express.static(staticDir, {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith(".html")) {
@@ -884,6 +894,7 @@ let yunaMusicSeq = 0;        // เพิ่มทุกครั้งที่
 let yunaLongingPendingId = null; // ตายในเทิร์น 1-10 แล้วรอฟื้นด้วย Longing — รอฉากโจมตีจบก่อน (ดู endTurn())
 let yunaPity = 0;            // ระบบกันดวงซวย: หน้าต่างไหนไม่ติด +5% สะสมไปเรื่อยๆ ติดแล้วรีเซ็ตกลับ 0 (ดู characters/yuna.js's rollWindow)
 
+const RESYNC_EVERY = 10; // ทุกกี่วินาทีถึงจะ broadcast state ตัวเต็ม (นอกนั้นส่งแค่ "tick")
 function clearPhaseTimer() {
   if (phaseTimerId) clearInterval(phaseTimerId);
   phaseTimerId = null;
@@ -898,7 +909,12 @@ function startPhaseTimer(seconds, onExpire) {
   phaseTimerId = setInterval(() => {
     timeLeft--;
     if (timeLeft <= 0) { clearPhaseTimer(); onExpire(); }
-    else broadcastState();
+    // ทุกวินาที client ต้องการแค่ตัวเลขนับถอยหลัง — ส่ง "tick" (ไม่กี่ไบต์) แทน state ตัวเต็ม
+    //  (state ตัวเต็มมีคำอธิบายสกิลของผู้เล่นทุกคน ~10 KB/คน = bandwidth มหาศาลถ้ายิงทุกวินาที)
+    //  ยังคง broadcast ตัวเต็มทุก ๆ RESYNC_EVERY วิ เป็นตาข่ายกันเหนียว เผื่อมีจุดไหนแก้ state
+    //  แล้วลืมเรียก broadcastState() เอง (เดิมตัวจับเวลากลบให้ภายใน 1 วิ)
+    else if (timeLeft % RESYNC_EVERY === 0) broadcastState();
+    else io.emit("tick", timeLeft);
   }, 1000);
 }
 function teamModeActive() {

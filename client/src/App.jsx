@@ -86,6 +86,9 @@ export default function App() {
       prevGameStateRef.current = s.gameState;
       setState(s);
     };
+    // ตัวเลขนับถอยหลังรายวินาที: server ส่งมาแค่ตัวเลข (ไม่ใช่ state ตัวเต็ม) เพื่อประหยัด bandwidth
+    //  -> แปะทับลงใน state ก้อนเดิม จอที่อ่าน state.timeLeft อยู่แล้วทำงานเหมือนเดิมทุกจุด
+    const onTick = (t) => setState((s) => (s && s.timeLeft !== t ? { ...s, timeLeft: t } : s));
     const onRoster = (r) => setRoster(r);
     const onPositions = (t) => setTaken(t);
     const onTakenChars = (list) => setTakenChars(Array.isArray(list) ? list : []);
@@ -133,6 +136,7 @@ export default function App() {
     };
 
     socket.on("state", onState);
+    socket.on("tick", onTick);
     socket.on("roster", onRoster);
     socket.on("positions", onPositions);
     socket.on("takenChars", onTakenChars);
@@ -149,6 +153,7 @@ export default function App() {
     if (socket.connected) onConnect();
     return () => {
       socket.off("state", onState);
+      socket.off("tick", onTick);
       socket.off("roster", onRoster);
       socket.off("positions", onPositions);
       socket.off("takenChars", onTakenChars);

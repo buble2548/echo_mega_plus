@@ -114,7 +114,7 @@ export default function CharacterSelect({ roster, position, name, takenChars = [
         <div className="relative flex items-center flex-wrap px-5 py-3 gap-3 sm:gap-4">
           <span className="p-logo-wrap shrink-0">
             <span className="p-logo-glow" />
-            <img src="/image/logo_current.png" alt="ECHO" className="p-logo-img h-11 sm:h-14 w-auto" />
+            <img src="/image/logo_current.webp" alt="ECHO" className="p-logo-img h-11 sm:h-14 w-auto" />
           </span>
           <h2
             className="flex-1 text-center text-base sm:text-xl font-bold text-white uppercase tracking-wide min-w-[8rem]"

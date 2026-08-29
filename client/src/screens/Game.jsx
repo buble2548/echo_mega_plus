@@ -3609,7 +3609,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
         {/* กลางจอ: กองการ์ดกลาง ทับตำแหน่งโลโก้เดิม (โลโก้เป็นแค่วอเตอร์มาร์กจางๆ ด้านหลัง) */}
         <div className="flex-1 min-h-0 grid place-items-center pointer-events-none">
           <div className="relative grid place-items-center">
-            <img src="/image/logo_current.png" alt="" className="h-14 w-auto opacity-25" />
+            <img src="/image/logo_current.webp" alt="" className="h-14 w-auto opacity-25" />
             <div className="absolute inset-0 grid place-items-center">
               {boss ? (
                 <YuukiBossCard p={boss} phase={phase} compact hostRef={(el) => registerOther(boss.id, el)} targetable={isTargetable(boss, iAmAttacker, targetChain)} onPick={(id) => resolveAttackPick(id, targetChain)} onInspect={setStatusViewId} />
@@ -3924,7 +3924,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
       {/* กองการ์ดกลาง ทับตำแหน่งโลโก้กลางโต๊ะเดิม (โลโก้เป็นแค่วอเตอร์มาร์กจางๆ ด้านหลัง) — ใหญ่ขึ้นชัดเจน */}
       <div className="absolute inset-x-0 top-[40%] flex justify-center pointer-events-none">
         <div className="relative grid place-items-center">
-          <img src="/image/logo_current.png" alt="" className="h-16 sm:h-20 w-auto opacity-25" />
+          <img src="/image/logo_current.webp" alt="" className="h-16 sm:h-20 w-auto opacity-25" />
           <div className="absolute inset-0 grid place-items-center">
             {boss ? (
               <YuukiBossCard p={boss} phase={phase} hostRef={(el) => registerOther(boss.id, el)} targetable={isTargetable(boss, iAmAttacker, targetChain)} onPick={(id) => resolveAttackPick(id, targetChain)} onInspect={setStatusViewId} />
