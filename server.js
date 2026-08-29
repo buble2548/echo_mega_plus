@@ -4080,10 +4080,10 @@ function useSkill(id, tier, targets, item) {
   if (isConnerPick) {
     flashSuffix = CHAR_HOOKS.conner.applyInstantSkill(engine, p, tier, connerTarget) || flashSuffix;
     if (tier === "ultimate" && connerTarget) {
-      // สเปคระบุลำดับ "เล่นวีดีโอก่อน แล้วค่อยเกิดความเสียหาย" — ครั้งแรกจึงหน่วงดาเมจไว้รอวีดีโอจบ
-      //  ครั้งที่ 2 เป็นต้นไปวีดีโอกลายเป็นการ์ดแจ้งเตือน (ไม่มีคัตซีนให้รอ) จึงลงดาเมจทันทีตรงนี้
-      if (CHAR_HOOKS.conner.queueCloseCaseVideo(engine, p)) connerCloseCase = connerTarget;
-      else CHAR_HOOKS.conner.applyCloseCase(engine, p, connerTarget);
+      // สเปคระบุลำดับ "เล่นวีดีโอก่อน แล้วค่อยเกิดความเสียหาย" และวีดีโอท่านี้เล่นทุกครั้งที่ปล่อย
+      //  จึงหน่วงดาเมจไว้เสมอ แล้วลงจริงหลังคัตซีนจบ (ดูจุดที่เรียก pausePlayingForCutscene ด้านล่าง)
+      CHAR_HOOKS.conner.queueCloseCaseVideo(engine, p);
+      connerCloseCase = connerTarget;
     }
   }
   // ---------- อาจารย์ ไบเลธ (characters/byleth.js): ทบทวนบทเรียน / ดาบต้องสาป / หลักสูตรการสอน ----------
@@ -4286,9 +4286,15 @@ function useSkill(id, tier, targets, item) {
   // วีดีโอสวนกลับที่ค้างคิว (Wonder of U ซาโตรุ) — เล่นทันทีช่วงจั่วการ์ด
   if (gameState === "PLAYING" && cutsceneQueue.length) {
     if (isIgnisImpact) pausePlayingForCutscene(() => CHAR_HOOKS.ignis.applyImpact(engine, p, ignisImpactTarget));
-    else if (connerCloseCase) pausePlayingForCutscene(() => CHAR_HOOKS.conner.applyCloseCase(engine, p, connerCloseCase));
-    else pausePlayingForCutscene();
+    else if (connerCloseCase) {
+      const t = connerCloseCase;
+      connerCloseCase = null;
+      pausePlayingForCutscene(() => CHAR_HOOKS.conner.applyCloseCase(engine, p, t));
+    } else pausePlayingForCutscene();
   }
+  // ตาข่ายสำรอง (คอนเนอร์ "จัดการปิดคดี"): ไม่ได้เข้าเส้นทางคัตซีนด้วยเหตุใดก็ตาม -> ลงดาเมจทันที
+  //  ไม่งั้นแต้มสกิล 8 หน่วยหายไปเปล่าๆ โดยเป้าหมายไม่โดนอะไรเลย
+  if (connerCloseCase) CHAR_HOOKS.conner.applyCloseCase(engine, p, connerCloseCase);
   broadcastState();
   checkAllLocked();
 }

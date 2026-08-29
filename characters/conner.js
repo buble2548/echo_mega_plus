@@ -18,8 +18,8 @@
 //  สถานะการไล่ล่าเก็บที่ตัวคอนเนอร์ (p.connorChase) ไม่ใช่ตัวแปร module — สแนปช็อต Overload Force
 //  จึงย้อนคืนได้ครบเหมือนฟิลด์อื่น และรีเซ็ตทิ้งเองผ่าน resetCombat()
 //
-//  วีดีโอ: connor_arrest_* / connor_passive4 เล่น **ทุกครั้ง** (queueCutscene ตรงๆ)
-//          ส่วน connor_skill2 / connor_skill3 / conner_openning เล่นครั้งเดียวต่อเกม (triggerCutscene)
+//  วีดีโอ: connor_arrest_* / connor_passive4 / connor_skill3 เล่น **ทุกครั้ง** (queueCutscene ตรงๆ)
+//          ส่วน connor_skill2 (สอบปากคำ) และ conner_openning (เปิดตัว) เล่นครั้งเดียวต่อเกม (triggerCutscene)
 // ============================================================
 
 const ID = "conner";
@@ -267,11 +267,10 @@ module.exports = {
   // ---------- ท่าไม้ตาย: จัดการปิดคดี ----------
   //  ลำดับตามสเปค: เลือกเป้าหมาย -> เล่นวีดีโอ -> ค่อยเกิดความเสียหาย
   //  useSkill() จึงคิววีดีโอไว้แล้วเรียก pausePlayingForCutscene(() => applyCloseCase(...)) ให้ผลลงหลังวีดีโอจบ
-  //  คืน true = คิววีดีโอไว้จริง (ต้องหน่วงดาเมจรอ) · false = เคยเล่นไปแล้ว เหลือแค่การ์ดแจ้งเตือน ลงดาเมจได้เลย
+  //  เล่นวีดีโอทุกครั้งที่ปล่อยท่า (queueCutscene ตรงๆ ไม่ผ่าน triggerCutscene ที่จำกัดครั้งเดียวต่อเกม)
+  //  ดาเมจจึงถูกหน่วงรอวีดีโอจบเสมอ — ผู้เรียกต้องลงดาเมจผ่าน applyCloseCase() หลังคัตซีนจบ
   queueCloseCaseVideo(engine, p) {
-    const first = !(p.cutsceneShown && p.cutsceneShown.connorCloseCase);
-    engine.triggerCutscene(p, "connorCloseCase"); // connor_skill3.mp4 — 1 ครั้งต่อเกม
-    return first;
+    engine.queueCutscene(p, "connorCloseCase"); // connor_skill3.mp4
   },
   applyCloseCase(engine, p, target) {
     if (!p || !p.alive || !target || !target.alive) return;

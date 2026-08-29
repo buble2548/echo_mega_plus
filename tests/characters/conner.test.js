@@ -461,8 +461,11 @@ test('จัดการปิดคดี: หลบหลีกได้ — �
   assert.equal(a.statuses.evade || 0, 0);
 });
 
-test('จัดการปิดคดี: วีดีโอเล่นครั้งเดียวต่อเกม (ครั้งที่ 2 ลงดาเมจทันที)', () => {
+test('จัดการปิดคดี: วีดีโอเล่นทุกครั้งที่ปล่อยท่า (ไม่ใช่ครั้งเดียวต่อเกม)', () => {
   const { c } = setup();
-  assert.equal(conner.queueCloseCaseVideo(engine, c), true);
-  assert.equal(conner.queueCloseCaseVideo(engine, c), false);
+  queued = [];
+  conner.queueCloseCaseVideo(engine, c);
+  conner.queueCloseCaseVideo(engine, c);
+  conner.queueCloseCaseVideo(engine, c);
+  assert.deepEqual(queued, ['connorCloseCase', 'connorCloseCase', 'connorCloseCase']);
 });
