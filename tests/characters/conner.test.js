@@ -264,6 +264,51 @@ test('ไล่ล่า: นับแต้ม 3 ครั้ง — เทิ�
   assert.equal(conner.chaseActive(engine), false);
 });
 
+test('ไล่ล่า: ใครถึง 2 แต้มก่อน ตัดจบทันทีไม่ต้องนับครบ 3 ครั้ง', () => {
+  const { c, a } = setup();
+  a.connorStress = 9;
+  a.armor = 0;
+  conner.askArrest(engine, c, a);
+  conner.answerArrest(engine, a, false);
+  queued = [];
+
+  const setScores = (mine, theirs) => {
+    c.cards = [{ value: mine, color: 'red' }];
+    a.cards = [{ value: theirs, color: 'red' }];
+  };
+
+  setScores(10, 4);                       // 1 : 0
+  conner.chaseResolveRound(engine);
+  assert.deepEqual([c.connorChase.mine, c.connorChase.theirs], [1, 0]);
+  assert.equal(queued.includes('connorArrest2'), true);
+
+  setScores(9, 3);                        // 2 : 0 -> ตัดจบทันทีตั้งแต่ครั้งที่ 2
+  conner.chaseResolveRound(engine);
+  assert.equal(conner.chaseActive(engine), false);
+  assert.equal(queued.includes('connorArrest3'), false); // ข้ามคลิประหว่างทาง
+  assert.equal(queued.includes('connorArrestTrue'), true);
+  assert.equal(a.statuses.stun, 3);
+});
+
+test('ไล่ล่า: เป้าหมายถึง 2 แต้มก่อนก็ตัดจบทันทีเหมือนกัน', () => {
+  const { c, a } = setup();
+  a.connorStress = 9;
+  conner.askArrest(engine, c, a);
+  conner.answerArrest(engine, a, false);
+  queued = [];
+  const setScores = (mine, theirs) => {
+    c.cards = [{ value: mine, color: 'red' }];
+    a.cards = [{ value: theirs, color: 'red' }];
+  };
+  setScores(3, 10);
+  conner.chaseResolveRound(engine);
+  setScores(2, 9);
+  conner.chaseResolveRound(engine);
+  assert.equal(conner.chaseActive(engine), false);
+  assert.equal(queued.includes('connorArrestFalse'), true);
+  assert.equal(c.statuses.stun, 3);
+});
+
 test('ไล่ล่า: เสมอ (1:1) = คอนเนอร์แพ้ — เป้าหมายหนีรอด คอนเนอร์สตั้น 3 เทิร์น', () => {
   const { c, a } = setup();
   a.connorStress = 9;

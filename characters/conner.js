@@ -45,7 +45,8 @@ const INTIMIDATE_SELF_REFUND = 1;   // ระดับผู้กระทำ�
 const CLOSE_CASE_DMG = 5;
 
 // ---------- สกิลติดตัว 2 จับกุมขั้นเด็ดขาด ----------
-const CHASE_ROUNDS = 3;             // นับแต้มดวลกัน 3 ครั้ง
+const CHASE_ROUNDS = 3;             // นับแต้มดวลกันสูงสุด 3 ครั้ง
+const CHASE_CLINCH = 2;             // ใครถึง 2 แต้มก่อน = ชนะทันที ไม่ต้องนับให้ครบ 3 (เสียงข้างมากของ 3)
 const SURRENDER_STUN = 3;           // ยอมจำนน: สตั้น 3 เทิร์น
 const SURRENDER_ACCUSED = 5;        // ยอมจำนน: ติด "ผู้ต้องหา" 5 เทิร์น
 const CAUGHT_STUN = 3;              // ขัดขืนแล้วแพ้: สตั้น 3 เทิร์น
@@ -118,6 +119,7 @@ module.exports = {
   STRESS_OFFENDER,
   STRESS_CRIMINAL,
   CHASE_ROUNDS,
+  CHASE_CLINCH,
   REVIVE_MAX,
   REVIVE_DELAY,
   CLOSE_CASE_DMG,
@@ -397,9 +399,15 @@ module.exports = {
     // ทุกคนได้ผลเป็น "ปลอดภัย" — ไม่มีผู้ชนะ/ผู้แพ้ของรอบระหว่างไล่ล่า
     for (const o of engine.alivePlayers()) o.result = "safe";
 
-    if (chase.round < CHASE_ROUNDS) {
+    // ตัดจบทันทีที่ฝ่ายใดฝ่ายหนึ่งถึง 2 แต้ม — เทิร์นที่เหลือพลิกผลไม่ได้แล้ว (สูงสุดได้อีกแค่ 1 แต้ม)
+    //  จึงข้ามคลิประหว่างทาง (connorArrest3) ไปเล่นคลิปสรุปผลเลย
+    const clinched = chase.mine >= CHASE_CLINCH || chase.theirs >= CHASE_CLINCH;
+    if (!clinched && chase.round < CHASE_ROUNDS) {
       engine.queueCutscene(owner, chase.round === 1 ? "connorArrest2" : "connorArrest3");
       return true;
+    }
+    if (clinched && chase.round < CHASE_ROUNDS) {
+      engine.log(`🚨 ${chase.mine > chase.theirs ? owner.name : target.name} ขึ้นนำ ${Math.max(chase.mine, chase.theirs)} แต้มแล้ว — ตัดสินผลการไล่ล่าทันทีโดยไม่ต้องนับให้ครบ ${CHASE_ROUNDS} ครั้ง`);
     }
     this.finishChase(engine, owner, target, chase);
     return true;
