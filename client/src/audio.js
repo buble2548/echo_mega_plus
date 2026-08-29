@@ -113,6 +113,8 @@ const FILES = {
   byleth_ex_night: "/characters/byleth/ex/night_ex.mp3",
   byleth_end_day: "/characters/byleth/end/day_end.mp3",
   byleth_end_night: "/characters/byleth/end/night_end.mp3",
+  // คอนเนอร์ RK800: เพลงไล่ล่า (สกิลติดตัว 2 จับกุมขั้นเด็ดขาด) — เล่นค้างตลอด 3 เทิร์นของการไล่ล่า
+  conner_theme: "/characters/connor/conner_theme.m4a",
   byleth_hit: "/characters/byleth/hit_sound.mp3", // เสียงโจมตีของ "ดาบต้องสาป"
   action_button: "/effect_sound/action_button.wav",
   trun_change: "/effect_sound/trun_change.wav",

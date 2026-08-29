@@ -1245,6 +1245,9 @@ function scoreOf(p) {
   return raw;
 }
 function bustedOf(p) {
+  // คอนเนอร์ RK800 (characters/conner.js): ระหว่างการไล่ล่า ผู้เล่นที่ไม่เกี่ยวข้องถูกบังคับให้ "ไพ่แตก" ทันที
+  //  (ดาเมจไพ่แตก/ดาเมจแพ้ถูกระงับทั้งหมดในเทิร์นไล่ล่าอยู่แล้ว — ดู CHAR_HOOKS.conner.chaseResolveRound)
+  if (p && p.connorFrozen) return true;
   if (overloadForceActive) return false;
   if (p.statuses && (p.statuses.upg || p.statuses.fiber)) return false;
   return calculateScore(p.cards) + (p.cardBonus || 0) > 21;
@@ -1483,6 +1486,8 @@ function instantDeath(p) {
   // ริต้า เบอร์นัล (สกิลติดตัว 2 patch 2.1.7, characters/phenex.js): ตกรอบจริงขณะท่าไม้ตาย 2 ยังทำงานอยู่ -> ปลดปล่อยความเจ็บปวดที่สะสมทั้งหมดก่อนตาย
   if (p.characterId === "phenex") CHAR_HOOKS.phenex.maybeReleasePainOnDeath(engine, p);
   p.hp = 0; p.alive = false; p.result = "dead"; p.locked = true;
+  // คอนเนอร์ RK800 (สกิลติดตัว 3 ปัญญาประดิษฐ์): จองคิวฟื้นคืนชีพอีก 10 เทิร์น (ไม่ใช่การกันตาย — ตกรอบจริงก่อน)
+  CHAR_HOOKS.conner.onDeath(engine, p);
   CHAR_HOOKS.kai.pruneOverhaulSlots(engine); // ไค ชิซากิ: ผู้ถือรังสรรค์/ลงทัณฑ์ตกรอบ -> ลบออกจาก Overhaul tracker
   // ยูนะ: เป้าหมายที่ได้รับพร (Delete/Smile for You/Longing) ตาย/หมดสภาพ -> เพลง+บัฟยูนะปิดลงทันที
   //  ยกเว้น Break Beat Bark เพราะมีผลทั้งสนาม ไม่ผูกกับผู้เล่นคนใดคนหนึ่งโดยเฉพาะ
@@ -1634,6 +1639,10 @@ function displayImg(p) {
 //  คืน { music, at } — at = ลำดับการเปิดร่าง ให้ client รู้ว่าเป็น "การเปิดครั้งใหม่"
 //  (เปิดท่าซ้ำ / คนอื่นเปิดท่าเพลงเดียวกันทับ) -> เพลงต้องเริ่มใหม่จากต้น
 function activeSkillMusic() {
+  // คอนเนอร์ RK800 (characters/conner.js): เพลงไล่ล่า conner_theme ทับทุกเพลงตลอดช่วงจับกุมขั้นเด็ดขาด
+  //  (เกตเดียวกับผลจริงของโหมดไล่ล่า — จบการไล่ล่าเมื่อไหร่เพลงกลับสู่ปกติทันที)
+  const bestConner = CHAR_HOOKS.conner.activeMusic(engine);
+  if (bestConner) return bestConner;
   // Ultraman Trigger: เพลงประจำร่างเล่นค้างตลอด 10 เทิร์นและมีลำดับสูงสุด
   let bestTrigger = null;
   for (const p of alivePlayers()) {
@@ -2145,6 +2154,7 @@ function resetCombat(p) {
   p.senaNext = false;       // โดนท่านประธานเซนะจังเจอตัว -> เทิร์นถัดไปสตั้น 1 เทิร์น
   p.kotoneExtraAtk = false; // Self-affirmation Explosion! Love Love: รอ postAttackFollowup อ่านเพื่อโจมตีเพิ่มอีก 1 ครั้ง
   // ---------- เอจิ (patch 2.4 new) ----------
+  CHAR_HOOKS.conner.resetCombat(p); // คอนเนอร์: ความเครียดของทุกคน + คำขาดจับกุม/สถานะไล่ล่า/โควตาฟื้นคืนชีพ
   CHAR_HOOKS.byleth.resetCombat(p); // ความรู้/หลักสูตร/ผลทบทวนบทเรียนที่ค้าง + ธงสตั้น-ห้ามสกิลพื้นฐานที่หลักสูตรของไบเลธตั้งไว้ให้คนอื่น
   CHAR_HOOKS.haruka.resetCombat(p); // harukaBasicUses / harukaBleedProcs (โควตารายเทิร์น) + harukaStunPending (สตั้นค้างจากการสวนกลับ)
   CHAR_HOOKS.eiji.resetCombat(p); // eijiOrdinal (สแตค Ordinal Scale ของเทิร์นนี้) + eijiDodgeUsedRound (โควตาหลบ 1 ครั้ง/เทิร์น)
@@ -2322,10 +2332,22 @@ function buildStateFor(viewerId) {
   // ข้อเสนอ/คำถามต่อสัญญา (เจ้าแห่งเน็ตบ้าน) ที่รอ "ผู้ชม state คนนี้" ตอบ — โชว์เฉพาะช่วงจั่วการ์ด
   const viewer = players[viewerId];
   let contractOffer = null;
+  let connorArrestAsk = null; // คอนเนอร์ RK800: คำขาดจับกุมขั้นเด็ดขาดที่รอผู้ชมคนนี้ตอบ
   let renewAsk = null;
   let locaOffer = null;
   if (gameState === "PLAYING" && viewer && viewer.alive) {
     const offerer = Object.values(players).find((o) => o.alive && o.contractOffer === viewerId);
+    // คอนเนอร์ RK800: คำขาด "ยอมจำนน / ขัดขืน" ที่ยื่นมาที่เรา
+    if (viewer.connorArrestAsk) {
+      const from = players[viewer.connorArrestAsk.fromId];
+      if (from && from.alive) {
+        connorArrestAsk = {
+          fromId: from.id, from: from.name,
+          color: POSITION_COLORS[from.position] || "#C0392B",
+          img: CHAR_HOOKS.conner.IMG.skill2,
+        };
+      }
+    }
     if (offerer) contractOffer = { fromId: offerer.id, from: offerer.name, color: POSITION_COLORS[offerer.position] || "#9B4F96", img: "/characters/broadband_man/broadband_man_skill3.jpg" };
     if (viewer.renewPending) {
       const boss = CHAR_HOOKS.broadband_man.contractBoss(engine, viewer);
@@ -2356,6 +2378,8 @@ function buildStateFor(viewerId) {
   // สมุดการ์ดกองกลาง: การ์ดทั้ง 43 ใบตามลำดับคงที่ + ใบไหนถูกจั่วไปแล้วในรอบนี้ (centralDeck สับใหม่ทุกรอบ — สมุดนี้จึงนับเฉพาะรอบปัจจุบัน)
   const remainingCardKeys = new Set(centralDeck.map(cardKey));
   const deckLedger = canonicalDeckCards().map((c) => ({ ...c, drawn: !remainingCardKeys.has(cardKey(c)) }));
+  // คอนเนอร์ RK800: มีคอนเนอร์อยู่ในแมตช์นี้ไหม (มิเตอร์ความเครียดโผล่บน UI เฉพาะตอนมี)
+  const connorInMatch = !!CHAR_HOOKS.conner.connerSlot(engine);
   // ---------- ริดดี้ มาร์เซนาส (patch 2.0.9): popup ระบบพันธมิตร (ดู characters/riddhe.js's buildViewerState) ----------
   let allyChoices = null, allyOfferAsk = null, allyBreakAskUi = null, allyFinalAskUi = null;
   if (gameState === "PLAYING" && viewer && viewer.alive) {
@@ -2368,6 +2392,7 @@ function buildStateFor(viewerId) {
     allyBreakAsk: allyBreakAskUi, // ฝ่ายถูกคู่พันธมิตรตี: เลือกยกเลิกพันธมิตรไหม
     allyFinalAsk: allyFinalAskUi, // ริดดี้: เหลือแค่คู่พันธมิตร — คงพันธมิตร = ชนะทั้งคู่
     allyWin: allyWinFlag,         // จบเกมแบบชนะทั้งคู่ (สกิลติดตัว 2 ริดดี้)
+    connorArrestAsk, // คอนเนอร์ RK800: คำขาด "ยอมจำนน / ขัดขืน" ที่รอเราตอบ (ไม่ตอบก่อนเปิดไพ่ = ขัดขืน)
     contractOffer, // ข้อเสนอสัญญาที่รอเราตอบ (สนใจใช้บริการเราไหม)
     renewAsk,      // คำถามต่อสัญญาที่รอเราตอบ (ชำระค่าบริการ)
     locaOffer,     // ข้อเสนอผลโลกากากาที่รอเราตอบ (ซาโตรุ)
@@ -2408,6 +2433,19 @@ function buildStateFor(viewerId) {
       const owner = Object.values(players).find((o) => o.alive && o.characterId === "byleth" && o.bylethCourse && !passiveSealed(o));
       return owner ? owner.bylethCourse : null;
     })(),
+    // คอนเนอร์ RK800: ออร่าขอบจอแดงระหว่างการไล่ล่า + สกอร์ดวลให้ทุกคนเห็น (เกตเดียวกับผลจริงของโหมดไล่ล่า)
+    connorFieldFx: CHAR_HOOKS.conner.fieldFx(engine),
+    connorChase: (() => {
+      const owner = CHAR_HOOKS.conner.chaseOwner(engine);
+      if (!owner) return null;
+      const t = players[owner.connorChase.targetId];
+      return {
+        byId: owner.id, by: owner.name,
+        targetId: owner.connorChase.targetId, target: t ? t.name : "",
+        round: owner.connorChase.round, rounds: CHAR_HOOKS.conner.CHASE_ROUNDS,
+        mine: owner.connorChase.mine, theirs: owner.connorChase.theirs,
+      };
+    })(),
     yunaFieldFx: yunaBeatBarkActive() ? "beatbark" : null, // Break Beat Bark!: ออร่าขอบจอแดงทั้งสนาม (เกตเดียวกับผลจริง)
     cutscene: gameState === "CUTSCENE" ? cutsceneInfo : null,
     attack: gameState === "ATTACKING" ? lastAttack : null,
@@ -2423,6 +2461,8 @@ function buildStateFor(viewerId) {
       const promoShow = (p.statuses.promo || 0) > 0;
       // นายยังมีอนาคตอีกยาวไกล (ริดดี้ patch 2.0.9): คู่พันธมิตรเห็นแต้มการ์ดของกันและกันได้ตลอด
       const allyShow = !!(viewer && viewer.alive && p.alive && p.allyId === viewer.id && viewer.allyId === p.id);
+      // คอนเนอร์ RK800 (สกิลพื้นฐาน วิเคราะห์สถานการณ์): เทิร์นนี้เห็นไพ่และแต้มของทุกคน (เห็นคนเดียว ไม่แชร์ให้ใคร)
+      const connorScan = !!(viewer && viewer.alive && CHAR_HOOKS.conner.analyzeActive(viewer));
       const ch = CHAR_BY_ID[p.characterId] || {};
       const pub = (s) => (s ? { name: s.name, desc: s.desc, cost: s.cost, img: s.img, ammo: s.ammo } : null);
       // สกิลพื้นฐานสลับกลางคืน (โคโตเนะ) + Apple guy: ปกสกิลพื้นฐานเปลี่ยนตามของส่งมอบที่เลือกอยู่
@@ -2539,11 +2579,11 @@ function buildStateFor(viewerId) {
         teamConfirmed: !!p.teamConfirmed,
         modeVote: p.modeVote || null,
         locked: p.locked,
-        busted: (show || promoShow || allyShow) ? bustedOf(p) : false,
+        busted: (show || promoShow || allyShow || connorScan) ? bustedOf(p) : false,
         result: p.result,
         cardCount: p.cards.length,
-        cards: takumiBlackout ? null : (mine ? p.cards : null),
-        score: takumiBlackout ? null : ((show || promoShow || allyShow) ? scoreOf(p) : null),
+        cards: takumiBlackout ? null : ((mine || connorScan) ? p.cards : null),
+        score: takumiBlackout ? null : ((show || promoShow || allyShow || connorScan) ? scoreOf(p) : null),
         hp: takumiBlackout ? null : p.hp, maxHp: takumiBlackout ? null : maxHpOf(p), // Locacaca (ซาโตรุ): Max HP ลดถาวรได้ / ทาคุมิ: บังตาระหว่างท่าไม้ตายทำงาน
         armor: takumiBlackout ? null : p.armor, maxArmor: takumiBlackout ? null : maxArmorOf(p),
         shield: takumiBlackout ? null : p.shield,
@@ -2554,7 +2594,7 @@ function buildStateFor(viewerId) {
         rachan: !!(p.seen && p.seen.rachan) && (p.statuses.rachan || 0) > 0,
         // ยูนะ: ออร่าเฉพาะเป้าหมาย (Longing สีทอง / Delete สีม่วง / Smile for You สีเขียว-ฟ้า) — beatbark ไม่มีเป้าหมายเดี่ยว ดู yunaFieldFx
         fieldAura: (p.id === yunaTargetId && roundNumber <= yunaWindowEnd) ? yunaEffect : null,
-        hisakawa: p.characterId === "hisakawa_sister" ? CHAR_HOOKS.hisakawa_sister.publicState(p) : undefined,
+        hisakawa: p.characterId === "hisakawa_sister" ? CHAR_HOOKS.hisakawa_sister.publicState(p, roundNumber) : undefined,
         // ซาโตรุ (patch 2.0.8.2): แต้มสกิลถูกซ่อนจากผู้เล่นอื่นเสมอ (-1 = ซ่อน) / ทาคุมิ: บังตาแต้มสกิลของทุกคนยกเว้นตัวเองระหว่างท่าไม้ตายทำงาน (sentinel -1 แบบเดียวกัน กลับด้าน)
         skillPoints: (takumiBlackout && !mine) ? -1 : ((p.characterId === "satoru" && !mine && !passiveSealed(p)) ? -1 : p.skillPoints),
         maxSkill: maxSkillOf(p), // Bard: เพดานพลังงาน 9
@@ -2584,6 +2624,7 @@ function buildStateFor(viewerId) {
         piggyMax: p.characterId === "kotone" ? CHAR_HOOKS.kotone.PIGGY_MAX : undefined,
         kotoneReady: p.characterId === "kotone" ? CHAR_HOOKS.kotone.readyStacks(p) : undefined, // [ความพร้อม] ที่สะสมอยู่
         kotoneReadyNeed: p.characterId === "kotone" ? CHAR_HOOKS.kotone.READY_NEED : undefined,
+        kotoneReadyMax: p.characterId === "kotone" ? CHAR_HOOKS.kotone.READY_MAX : undefined,
         kotoneForm: p.characterId === "kotone" ? CHAR_HOOKS.kotone.formActive(p) : undefined,   // อยู่ในร่าง [พร้อมลุย] หรือไม่
         // ---------- เอจิ (patch 2.4 new): UI อัตราหลบหลีกปัจจุบัน (ไม่ใช่สถานะสะสม) ----------
         eijiDodge: p.characterId === "eiji" ? CHAR_HOOKS.eiji.dodgeChance(p) : undefined,        // % หลบหลีกรวมของเทิร์นนี้
@@ -2600,6 +2641,19 @@ function buildStateFor(viewerId) {
         bylethSkillMax: p.characterId === "byleth" ? CHAR_HOOKS.byleth.SKILL_USES_PER_TURN : undefined,
         bylethStrikeUsed: p.characterId === "byleth" ? !!p.bylethStrikeUses : undefined,          // ดาบต้องสาป (ฟาดทันที) ใช้โควตาเทิร์นนี้ไปแล้วหรือยัง
         bylethRevived: p.characterId === "byleth" ? !!p.bylethRevived : undefined,                // sothis: ใช้ฟื้นคืนชีพไปแล้วหรือยัง
+        // ---------- คอนเนอร์ RK800 (patch 2.7 new) ----------
+        //  มิเตอร์ความเครียดเป็นข้อมูลสาธารณะ (ทุกคนเห็นของกันและกัน) และโผล่เฉพาะตอนมีคอนเนอร์อยู่ในแมตช์
+        connorStress: (connorInMatch && p.characterId !== "conner") ? CHAR_HOOKS.conner.stressOf(p) : undefined,
+        connorStressMax: (connorInMatch && p.characterId !== "conner") ? CHAR_HOOKS.conner.STRESS_MAX : undefined,
+        connorLevel: (connorInMatch && p.characterId !== "conner") ? CHAR_HOOKS.conner.levelKeyOf(p) : undefined,
+        connorFrozen: !!p.connorFrozen, // ถูกแช่เพราะอยู่นอกวงไล่ล่า (บังคับไพ่แตก กดอะไรไม่ได้)
+        connorRevives: p.characterId === "conner" ? (p.connorRevives || 0) : undefined,        // ใช้ฟื้นคืนชีพไปแล้วกี่ครั้ง
+        connorRevivesMax: p.characterId === "conner" ? CHAR_HOOKS.conner.REVIVE_MAX : undefined,
+        connorReviveIn: p.characterId === "conner" && !p.alive && p.connorReviveRound
+          ? Math.max(0, p.connorReviveRound - roundNumber) : undefined,                         // เหลือกี่เทิร์นก่อนกลับมา
+        connorAnalyze: p.characterId === "conner" ? !!p.connorAnalyze : undefined,              // เทิร์นนี้กดวิเคราะห์แล้ว (= ไม่โจมตี)
+        // ประเมินความเสียหายที่ผู้เล่นคนนี้จะฟาดใส่คอนเนอร์ได้ — เห็นเฉพาะคอนเนอร์ที่กำลังวิเคราะห์สถานการณ์
+        connorEstDmg: (connorScan && !mine && p.alive) ? estimateAttackOn(p, viewer) : undefined,
         harukaBasicUses: p.characterId === "haruka" ? (p.harukaBasicUses || 0) : undefined,
         harukaBasicMax: p.characterId === "haruka" ? CHAR_HOOKS.haruka.BASIC_USES_PER_TURN : undefined,
         shradeForm: !!p.shradeForm,        // ชเรด เอลัน: รวมร่างทำนองเพลงแล้ว (อควาเรียน สปาด้า — ถาวร)
@@ -2649,6 +2703,8 @@ function buildStateFor(viewerId) {
         character: {
           // โอเบรอน: กลางคืนสลับชื่อ + สกิลรอง/ท่าไม้ตายเป็นเวอร์ชันกลางคืน (ฝันร้ายยามค่ำคืน / Lie Like Vortigern)
           id: ch.id,
+          // ภาพประจำตัวละคร (ไม่ผูกกับร่าง/แฝดที่กำลังคุมอยู่) — ฉากเปิดตัวตอนแมตช์เริ่มใช้ภาพนี้
+          img: ch.img,
           name: ch.id === "shrade_elan" && p.shradeForm ? SHRADE_SPADA_NAME
             : nightNow && ch.nightName ? ch.nightName : ch.name,
           passive: ch.passive ? { name: ch.passive.name, desc: ch.passive.desc } : null,
@@ -2671,7 +2727,19 @@ function broadcastState() {
   for (const id of Object.keys(players)) io.to(id).emit("state", buildStateFor(id));
 }
 function broadcastPositions() {
-  for (const [sid, sock] of io.sockets.sockets) sock.emit("positions", positionsFor(sid));
+  const taken = takenUniqueChars();
+  for (const [sid, sock] of io.sockets.sockets) {
+    sock.emit("positions", positionsFor(sid));
+    sock.emit("takenChars", taken);
+  }
+}
+// ตัวละคร unique ที่มีคนเลือกไปแล้วในแมตช์นี้ (หน้าเลือกตัวละครใช้ปิดการ์ดไม่ให้เลือกซ้ำ)
+function takenUniqueChars() {
+  return [...new Set(
+    Object.values(players)
+      .filter((p) => (CHAR_BY_ID[p.characterId] || {}).unique)
+      .map((p) => p.characterId)
+  )];
 }
 
 
@@ -2790,10 +2858,12 @@ function startMatch() {
     queueYuukiCutscene(YUUKI_VIDEO.spawn, "ยูกิ Overload", 9, "yuukiSpawn");
     lastLog.push("⚡ โหมด Over Load เริ่มขึ้น — ยูกิ Overload ปรากฏตัวทันที!");
     runCutsceneQueue(dealRound);
-  } else if (CHAR_HOOKS.miyako.maybeQueueRivalIntro(engine)) {
-    runCutsceneQueue(dealRound);
   } else {
-    dealRound();
+    // คอนเนอร์ RK800: วีดีโอเปิดตัวเล่น 1 ครั้งตอนเริ่มเกม (ก่อนฉากคู่ปรับของมิยาโกะถ้ามีทั้งคู่)
+    const connerIntro = CHAR_HOOKS.conner.maybeQueueIntro(engine);
+    const miyakoIntro = CHAR_HOOKS.miyako.maybeQueueRivalIntro(engine);
+    if (connerIntro || miyakoIntro) runCutsceneQueue(dealRound);
+    else dealRound();
   }
 }
 
@@ -2899,6 +2969,7 @@ function cardLabel(c) {
 function useInventoryItem(id, uid, opts = {}) {
   const p = players[id];
   if (!p || !p.alive) return;
+  if (CHAR_HOOKS.conner.actionBlocked(engine, p)) return; // คอนเนอร์: อยู่นอกวงไล่ล่า -> ถูกแช่ ใช้ไอเทมไม่ได้
   const idx = (p.inventory || []).findIndex((it) => it.uid === uid);
   if (idx < 0) return;
   const item = p.inventory[idx];
@@ -2977,6 +3048,8 @@ function useInventoryItem(id, uid, opts = {}) {
     return;
   }
   p.inventory.splice(idx, 1);
+  // คอนเนอร์ RK800 (สกิลติดตัว 1 สืบสวน): การใช้ไอเทม 1 ครั้ง = ความเครียด +1
+  CHAR_HOOKS.conner.onItemUsed(engine, p);
   if (cutsceneKey) {
     // เล่นวีดีโอก่อน แล้วค่อยให้ผลของกระสุนเกิดขึ้นตอนวีดีโอจบ (ผู้เล่นจะเห็นความเสียหายโผล่หลังจบวีดีโอ)
     queueCutscene(p, cutsceneKey);
@@ -3110,6 +3183,9 @@ function dealRound() {
       p.skillDrain = Math.max(p.skillDrain || 0, p.skillDrainPending);
       p.skillDrainPending = 0;
     }
+    // คอนเนอร์ RK800 (สกิลติดตัว 3 ปัญญาประดิษฐ์): ครบ 10 เทิร์นหลังตาย -> กลับเข้าสนามด้วยเลือด 3 เกราะ 2
+    //  ต้องอยู่ "ก่อน" บล็อกข้ามผู้เล่นที่ตายแล้ว ไม่งั้นเทิร์นที่ฟื้นจะไม่ได้รับไพ่ใบแรก
+    if (!p.alive) CHAR_HOOKS.conner.maybeRevive(engine, p);
     if (!p.alive) { p.cards = []; p.locked = true; p.busted = false; p.overloadDrawReady = false; continue; }
 
     if (isYuuki(p) && p.hp <= 4) {
@@ -3204,6 +3280,9 @@ function dealRound() {
     if (!p.armorLocked && !((p.statuses.decay || 0) > 0) && !moonCellActive() && roundNumber % 2 === 0) {
       healArmor(p, 1);
     }
+    // คู่แฝดฮิซากาว่า: แฝดที่พักอยู่ฟื้นเกราะเองได้ตามจังหวะเดียวกัน แม้ไม่ได้ถูกควบคุมอยู่
+    //  (เงื่อนไข "ผุพัง" คิดจากสถานะของแฝดคนนั้นเอง — ดู CHAR_HOOKS.hisakawa_sister.regenRestingArmor)
+    if (!p.armorLocked && !moonCellActive() && roundNumber % 2 === 0) CHAR_HOOKS.hisakawa_sister.regenRestingArmor(engine, p);
     // เสือนอนกิน (เจ้าแห่งเน็ตบ้าน): ฟื้นพลังชีวิต 1 หน่วยในเทิร์นถัดไป (กรณีไม่มีคู่สัญญา)
     if ((p.healNextTurn || 0) > 0) {
       const heal = healHp(p, p.healNextTurn);
@@ -3271,6 +3350,8 @@ function dealRound() {
     if (p.characterId === "eiji") CHAR_HOOKS.eiji.onRoundStartTick(engine, p);
     // ---------- มิซึซาว่า ฮารุกะ (characters/haruka.js): รีเซ็ตโควตาสกิลพื้นฐาน 2 ครั้ง + โควตาเลือดไหลของสกิลติดตัว ----------
     if (p.characterId === "haruka") CHAR_HOOKS.haruka.onRoundStartTick(engine, p);
+    // ---------- คอนเนอร์ RK800 (characters/conner.js): รีเซ็ตโควตา "จั่วไพ่ = เครียด +1 ต่อเทิร์น" + ธงวิเคราะห์สถานการณ์ ----------
+    CHAR_HOOKS.conner.onRoundStartTick(engine, p);
     // ---------- อาจารย์ ไบเลธ (characters/byleth.js): รีเซ็ตโควตาสกิล 5 ครั้ง + หลักสูตรกินความรู้เทิร์นละ 1 ----------
     if (p.characterId === "byleth") CHAR_HOOKS.byleth.onRoundStartTick(engine, p);
     // สตั้น/ห้ามใช้สกิลพื้นฐาน ที่หลักสูตรของไบเลธตั้งไว้เมื่อเทิร์นก่อน -> เริ่มมีผลตอนนี้
@@ -3304,6 +3385,10 @@ function dealRound() {
   //  ต้องแปะ "หลัง" ลูปต้นเทิร์นจบทั้งวง เพราะ tickBurn ของแต่ละคนอยู่ในลูปด้านบน — ถ้าแปะในลูป
   //  คนที่ยังวนไม่ถึงจะถูกกินหน่วยที่เพิ่งได้ทิ้งในเทิร์นเดียวกัน (ผลไม่เท่ากันตามลำดับที่นั่ง)
   CHAR_HOOKS.escanor.flushPendingBurn(engine);
+
+  // ---------- คอนเนอร์ RK800 (characters/conner.js): การไล่ล่ายังดำเนินอยู่ -> แช่ผู้เล่นนอกวงใหม่ทุกเทิร์น ----------
+  //  ต้องอยู่หลังลูปต้นเทิร์น เพราะในลูปเพิ่งตั้ง p.locked = false และแจกไพ่ใบแรกให้ทุกคนไปแล้ว
+  CHAR_HOOKS.conner.onRoundStartAfterLoop(engine);
 
   // ความตายที่โรยรา (ชิกิ patch 2.0.8, characters/shiki.js): ทุกเทิร์นที่ท่าไม้ตายยังทำงาน มอบเส้นชีวิต +1 ให้ทุกคนยกเว้นตัวเอง
   CHAR_HOOKS.shiki.onRoundStartWitherTick(engine);
@@ -3344,6 +3429,7 @@ function hit(id) {
   if ((p.statuses.riddheguard || 0) > 0) return; // ฉันจะไม่ยอมสูญเสียใครไปอีก (ริดดี้): จั่วการ์ดเพิ่มไม่ได้
   if ((p.statuses.phenexTaunt || 0) > 0) return; // ไม่อยากให้ใครต้องเจ็บปวด (ริต้า เบอร์นัล): ระหว่างล่อเป้าจั่วการ์ดเพิ่มไม่ได้
   if ((p.tepeuPonderTurns || 0) > 0) return; // ครุ่นคิด (เทเปา): จั่วไพ่ไม่ได้ระหว่างนี้ (ยังโจมตีได้ถ้าชนะ)
+  if (CHAR_HOOKS.conner.actionBlocked(engine, p)) return; // คอนเนอร์: อยู่นอกวงไล่ล่า -> ถูกแช่ ทำอะไรไม่ได้
   if (scoreOf(p) >= scoreCap(p)) return; // แต้มเต็มเพดาน (เช่น 21 พอดี) = จั่วไม่ได้ รอผู้ใช้ใช้สกิล/เปิดไพ่เอง
   // โชคลาภ (patch 2.2 new): จั่วปุ๊ป ถ้ามีบัฟสะสมอยู่ ใช้ 1 หน่วยทันทีแล้วหน่วยนั้นหายไป
   //  ปรับไพ่ที่จั่วให้แต้มรวมตกอยู่ 19-21 (สุ่มถ่วงน้ำหนัก มีเคสพิเศษถ้าแต้มปัจจุบันเป็น 19/20 อยู่แล้ว)
@@ -3387,6 +3473,9 @@ function hit(id) {
       lastLog.push(`🌀 ${p.name} อยู่ในสภาพชา — จั่วติดมาอีกใบ (${cardLabel(extra)})`);
     }
   }
+  // คอนเนอร์ RK800 (สกิลติดตัว 1 สืบสวน): การจั่วไพ่ทำให้เครียด +1 — นับครั้งเดียวต่อเทิร์นไม่ว่าจะจั่วกี่ใบ
+  //  นับเฉพาะตอนได้ไพ่จริง (กองหมดกลางคัน = ไม่นับ)
+  if (drawn) CHAR_HOOKS.conner.onCardDraw(engine, p);
   p.busted = bustedOf(p);
   if (p.busted) { voidUltimateOnBust(p); maybeMoonBurst(p); CHAR_HOOKS.mageslayer.onBustOrLoseRoll(engine, p); }
   // ไพ่แตก: ไม่ล็อกอัตโนมัติ — ยังกดสกิล/ใช้ไอเทมได้ต่อไป จนกว่าจะกดเปิดไพ่เอง หรือทุกคนเปิดไพ่ครบ
@@ -3432,10 +3521,16 @@ function useSkill(id, tier, targets, item) {
   const p = players[id];
   if (!effectSourceId && p) return withEffectSource(p, () => useSkill(id, tier, targets, item));
   if (!p || !p.alive) return;
-  if (gameState !== "PLAYING" || p.locked) return;
+  if (gameState !== "PLAYING") return;
   if (!["basic", "secondary", "ultimate"].includes(tier)) return;
+  // คู่แฝดฮิซากาว่า — สกิลพื้นฐาน 1 (สลับตัว/ชุบแฝด) คือ "ทางหนี" ประจำตัว: อะไรก็ตามที่ทำให้กดสกิลไม่ได้
+  //  (สตั้น, หลับไหล, หอกลองกินัส, MOON*CELL ฯลฯ) จะไม่มีผลกับช่องนี้ช่องเดียว เพื่อให้ยังหนีไปคุมแฝดอีกคนได้เสมอ
+  //  — แต่ยังต้องอยู่ในเฟสจั่วการ์ด และยังจำกัดสลับ 1 ครั้ง/เทิร์นตามเดิม (hisakawaSwitchedRound)
+  const isHisakawaEscape = p.characterId === "hisakawa_sister" && tier === "basic";
+  if (p.locked && !isHisakawaEscape) return;
   // MOON*CELL (คิชินามิ ฮาคุโนะ): สกิลทั้งหมดของทุกคนใช้ไม่ได้เลย (รวมของฮาคุโนะเจ้าของท่าเองด้วย — เหลือแค่สกิลติดตัว)
-  if (moonCellActive()) return;
+  if (moonCellActive() && !isHisakawaEscape) return;
+  if (CHAR_HOOKS.conner.actionBlocked(engine, p)) return; // คอนเนอร์: อยู่นอกวงไล่ล่า -> ถูกแช่ กดสกิลไม่ได้
   if (CHAR_HOOKS.shrade_elan.charging(p)) return; // แด่เพื่อนรักของฉัน: ระหว่างชาร์จใช้สกิลอื่นไม่ได้
   if ((p.statuses.riddheguard || 0) > 0) return; // ฉันจะไม่ยอมสูญเสียใครไปอีก (ริดดี้): ระหว่างทำงานกดสกิลไม่ได้
   if ((p.statuses.phenexTaunt || 0) > 0) return; // ไม่อยากให้ใครต้องเจ็บปวด (ริต้า เบอร์นัล): ระหว่างล่อเป้ากดสกิลไม่ได้เลย
@@ -3477,6 +3572,9 @@ function useSkill(id, tier, targets, item) {
     });
     lastLog.push(`🎼 ${p.name} เติมโน้ต${note === "R" ? "ทำนองแห่งโลหิต ❤️" : "ทำนองแห่งวิญญาณ 💚"} (ช่องที่ ${p.bardNotes.length}/3)${free ? " — ไม่เสียพลังงาน" : ""}`);
     if (p.bardNotes.length >= 3) bardCompose(p, true);
+    // คอนเนอร์ RK800 (สกิลติดตัว 1 สืบสวน): การเติมโน้ตคือ "การกดสกิล" ของคีตกวี (มีแค่พื้นฐาน/รอง)
+    //  จึงนับความเครียด +1 ต่อครั้งเหมือนตัวละครอื่น — ช่องนี้ return ก่อนถึงจุดนับหลักของ useSkill()
+    CHAR_HOOKS.conner.onSkillUsed(engine, p);
     // วีดีโอสวนกลับที่ค้างคิว (Wonder of U ซาโตรุ — บทเพลงเล็งใส่ซาโตรุ) เล่นทันทีช่วงจั่วการ์ด
     if (gameState === "PLAYING" && cutsceneQueue.length) pausePlayingForCutscene();
     broadcastState();
@@ -3554,7 +3652,7 @@ function useSkill(id, tier, targets, item) {
   // ฟุจิตะ โคโตเนะ (rework 2.3): ร่าง [พร้อมลุย] ทับปุ่มทั้ง 3 ช่อง — ต้องอยู่ "หลัง" การสลับกลางคืนด้านบน
   if (ch.id === "kotone") skill = CHAR_HOOKS.kotone.dynamicSkillFor(p, ch, tier, isNightRound(roundNumber));
   if (!skill) return;
-  if ((p.statuses.noskill || 0) > 0) return; // โดนหอกลองกินัสปัก: เทิร์นนี้ใช้สกิลไม่ได้
+  if ((p.statuses.noskill || 0) > 0 && !isHisakawaEscape) return; // โดนหอกลองกินัสปัก: เทิร์นนี้ใช้สกิลไม่ได้ (ยกเว้นทางหนีของฮิซากาว่า)
   if (isTriggerSkill && tier === "secondary" && (!(p.statuses.triggerCircle > 0) || p.statuses.triggerMulti > 0 || p.statuses.triggerZeperion > 0)) return;
   if (isTriggerSkill && tier === "ultimate" && (!(p.statuses.triggerCircle > 0) || p.statuses.triggerMulti > 0 || p.statuses.triggerZeperion > 0)) return;
   if (isHisakawaSkill && !CHAR_HOOKS.hisakawa_sister.canUseSkill(engine, p, tier, skill)) return;
@@ -3655,7 +3753,7 @@ function useSkill(id, tier, targets, item) {
   //  (แพทเทิร์นเดียวกับทาคุมิ กว้างขึ้นครอบคลุมทั้ง 3 ช่อง — เงื่อนไขเฉพาะท่าอยู่ที่ CHAR_HOOKS.byleth.canUseSkill)
   const isBylethPick = p.characterId === "byleth";
   if (isBylethPick && (p.bylethSkillUsesRound || 0) >= CHAR_HOOKS.byleth.SKILL_USES_PER_TURN) return;
-  if (p.skillUsedRound && !gambleRepeat && !isBylethPick && !isHarukaBasic && !isApplePick && !isTohnoPick && !isHakunoGender && !isDoomguyPick && !isKaiPick && !isTakumiPick) return; // ใช้สกิลได้เพียง 1 อันต่อเทิร์น (ซ้ำ/ซ้อนไม่ได้)
+  if (p.skillUsedRound && !gambleRepeat && !isBylethPick && !isHarukaBasic && !isApplePick && !isTohnoPick && !isHakunoGender && !isDoomguyPick && !isKaiPick && !isTakumiPick && !isHisakawaFreeAction) return; // ใช้สกิลได้เพียง 1 อันต่อเทิร์น (ซ้ำ/ซ้อนไม่ได้)
   // MOON*CELL (คิชินามิ ฮาคุโนะ): ต้องมีแต้มคำสาปแห่งดวงจันทร์ครบ 3 เท่านั้น
   if (st === "moonCell" && (p.hakunoMoonPoints || 0) < HAKUNO_MOONCELL_NEED) return;
   // ข้าขอบัญชา (ชาย/หญิง คิชินามิ ฮาคุโนะ): กดซ้ำไม่ได้จนกว่าผลเดิมจะหมด
@@ -3733,6 +3831,19 @@ function useSkill(id, tier, targets, item) {
     if (tier === "secondary" && item === "strike") {
       bylethStrikeTarget = CHAR_HOOKS.byleth.prepareStrikeTarget(engine, p, targets);
       if (!bylethStrikeTarget) return;
+    }
+  }
+  // ---------- คอนเนอร์ RK800 (characters/conner.js) ----------
+  //  พื้นฐาน: กดไม่ได้ระหว่างโหมดจับกุมขั้นเด็ดขาด · รอง/ท่าไม้ตาย: ต้องเลือกเป้าหมาย 1 คน
+  //  (ท่าไม้ตายเล็งได้เฉพาะระดับ "อาชญากร" — เช็คทั้งที่ canUseSkill (มีเป้าให้เล็งไหม) และ prepareTarget (เป้าที่ส่งมาถูกระดับไหม))
+  const isConnerPick = p.characterId === "conner";
+  let connerTarget = null;
+  let connerCloseCase = null; // เป้าหมายของ "จัดการปิดคดี" ที่รอลงดาเมจหลังวีดีโอจบ
+  if (isConnerPick) {
+    if (!CHAR_HOOKS.conner.canUseSkill(engine, p, tier)) return;
+    if (tier === "secondary" || tier === "ultimate") {
+      connerTarget = CHAR_HOOKS.conner.prepareTarget(engine, p, tier, targets);
+      if (!connerTarget) return;
     }
   }
   // ---------- ชเรด เอลัน (patch พิเศษ) ----------
@@ -3948,6 +4059,16 @@ function useSkill(id, tier, targets, item) {
   if (isEiji) flashSuffix = CHAR_HOOKS.eiji.applyInstantSkill(engine, p, tier) || flashSuffix;
   // ---------- มิซึซาว่า ฮารุกะ (characters/haruka.js): ไข่ต้ม และอาหารเสริม / amazon punish / New Omega ----------
   if (isHaruka) flashSuffix = CHAR_HOOKS.haruka.applyInstantSkill(engine, p, tier) || flashSuffix;
+  // ---------- คอนเนอร์ RK800 (characters/conner.js): วิเคราะห์สถานการณ์ / ข่มขวัญ-จับกุม / จัดการปิดคดี ----------
+  if (isConnerPick) {
+    flashSuffix = CHAR_HOOKS.conner.applyInstantSkill(engine, p, tier, connerTarget) || flashSuffix;
+    if (tier === "ultimate" && connerTarget) {
+      // สเปคระบุลำดับ "เล่นวีดีโอก่อน แล้วค่อยเกิดความเสียหาย" — ครั้งแรกจึงหน่วงดาเมจไว้รอวีดีโอจบ
+      //  ครั้งที่ 2 เป็นต้นไปวีดีโอกลายเป็นการ์ดแจ้งเตือน (ไม่มีคัตซีนให้รอ) จึงลงดาเมจทันทีตรงนี้
+      if (CHAR_HOOKS.conner.queueCloseCaseVideo(engine, p)) connerCloseCase = connerTarget;
+      else CHAR_HOOKS.conner.applyCloseCase(engine, p, connerTarget);
+    }
+  }
   // ---------- อาจารย์ ไบเลธ (characters/byleth.js): ทบทวนบทเรียน / ดาบต้องสาป / หลักสูตรการสอน ----------
   if (isBylethPick) flashSuffix = CHAR_HOOKS.byleth.applyInstantSkill(engine, p, tier, item, bylethStrikeTarget) || flashSuffix;
   // ---------- ชเรด เอลัน (characters/shrade_elan.js) ----------
@@ -4137,6 +4258,8 @@ function useSkill(id, tier, targets, item) {
     io.emit("skillFlash", { name: skill.name + flashSuffix, img: flashImg, by: p.name, color: POSITION_COLORS[p.position] || "#9B4F96", sound: flashSound });
   }
   // จำสกิลที่ใช้ในรอบ (ท่าไม้ตายมี cutscene ของตัวเอง / สกิลหลังเปิดไพ่ไปโชว์ตอนโจมตี)
+  // คอนเนอร์ RK800 (สกิลติดตัว 1 สืบสวน): การกดสกิล 1 ครั้ง = ความเครียด +1 (ไม่ลงที่ตัวคอนเนอร์เอง)
+  CHAR_HOOKS.conner.onSkillUsed(engine, p);
   roundSkills.push({ playerId: id, tier, name: skill.name, img: skill.img || null, status: st }); // tier: หลักสูตร "พิเศษ" ของไบเลธอ่านว่าใครกดสกิลระดับไหนในเทิร์นนี้
 
   p.busted = bustedOf(p);
@@ -4146,6 +4269,7 @@ function useSkill(id, tier, targets, item) {
   // วีดีโอสวนกลับที่ค้างคิว (Wonder of U ซาโตรุ) — เล่นทันทีช่วงจั่วการ์ด
   if (gameState === "PLAYING" && cutsceneQueue.length) {
     if (isIgnisImpact) pausePlayingForCutscene(() => CHAR_HOOKS.ignis.applyImpact(engine, p, ignisImpactTarget));
+    else if (connerCloseCase) pausePlayingForCutscene(() => CHAR_HOOKS.conner.applyCloseCase(engine, p, connerCloseCase));
     else pausePlayingForCutscene();
   }
   broadcastState();
@@ -4458,7 +4582,9 @@ function checkAllLocked() {
     c.some((p) => p.allyPrompt && c.some((o) => o.id !== p.id && o.characterId === "banagher")) ||
     c.some((p) => p.allyOffer && players[p.allyOffer] && players[p.allyOffer].alive) ||
     c.some((p) => p.allyBreakAsk) ||
-    c.some((p) => p.allyFinalAsk);
+    c.some((p) => p.allyFinalAsk) ||
+    // คอนเนอร์ RK800: คำขาด "ยอมจำนน / ขัดขืน" ที่ยังไม่ตอบ (ไม่ตอบก่อนเปิดไพ่ = ขัดขืน)
+    c.some((p) => p.connorArrestAsk && players[p.connorArrestAsk.fromId] && players[p.connorArrestAsk.fromId].alive);
   // ถ้าไม่เหลือใครรอดเลย (เช่น ทาคุโตะระเบิดใส่ทุกคนตายหมดรวมถึงตัวเอง) ก็ต้องสรุปผลด้วยเช่นกัน ไม่งั้นเกมค้าง
   const humans = c.filter((p) => !isYuuki(p));
   if (humans.every((p) => p.locked) && !pendingAnswer) resolveRound();
@@ -4635,6 +4761,12 @@ function resolveRound() {
       if (p.alive) lastLog.push(`🤝 ${p.name} ไม่ตอบ — คงพันธมิตรต่อไป`);
       p.allyBreakAsk = null;
     }
+    // คอนเนอร์ RK800: ไม่ตอบคำขาดจับกุมก่อนเปิดไพ่ = ถือว่า "ขัดขืน" (การนิ่งเฉยไม่ใช่การยอมจำนน)
+    //  live = false -> วีดีโอเริ่มไล่ล่าเข้าคิวไว้เฉยๆ ให้ afterResolve กวาดไปเล่น (ห้าม pausePlayingForCutscene ตอนนี้)
+    if (p.connorArrestAsk) {
+      if (p.alive) CHAR_HOOKS.conner.answerArrest(engine, p, false, false);
+      else p.connorArrestAsk = null;
+    }
     p.allyFinalAsk = false; // ไม่ตอบ = ยังไม่ตัดสินใจ (จะถูกถามใหม่ตอนจบเทิร์นถ้ายังเหลือแค่คู่พันธมิตร)
   }
 
@@ -4684,6 +4816,19 @@ function resolveRound() {
   yuukiReactiveDrawCredits = 0;
   autoPlayYuuki(true, 2);
 
+  // ---------- คอนเนอร์ RK800 (สกิลติดตัว 2 จับกุมขั้นเด็ดขาด, characters/conner.js) ----------
+  //  ระหว่างการไล่ล่า: ไม่มีผู้ชนะ/ผู้แพ้ ไม่มีดาเมจแพ้จั่ว/ไพ่แตก ไม่มี Overload Force — นับแค่แต้มดวลกัน
+  //  (roundWinnerId ค้างเป็น null -> afterSummary จะข้ามเฟสโจมตีให้เองอยู่แล้ว แต่ยังกันซ้ำอีกชั้นที่นั่น)
+  if (CHAR_HOOKS.conner.chaseResolveRound(engine)) {
+    roundWinnerId = null;
+    roundTiedWin = false;
+    // ข้าม afterResolve() ทั้งก้อนโดยตั้งใจ — เอฟเฟกต์หลังเปิดไพ่ที่ยิงใส่ "คนที่ไพ่แตก" (Ashen Trail ของโอกูริ,
+    //  ถึงจะมองไม่เห็นฯ ของทาคุมิ ฯลฯ) จะกวาดโดนคนที่ถูกแช่ไว้ ทั้งที่กติกาไล่ล่าระบุว่าพวกเขาไม่รับความเสียหาย
+    //  จากการถูกบังคับให้ไพ่แตก -> ไปสรุปผลตรงๆ หลังเล่นคลิปที่คิวไว้จบ
+    runCutsceneQueue(goSummary);
+    return;
+  }
+
   const combatants = alivePlayers();
   roundWinnerId = null;
 
@@ -4724,6 +4869,8 @@ function resolveRound() {
     CHAR_HOOKS.tepeu.onRoundWin(engine, w, combatants);
     // อาจารย์ ไบเลธ หลักสูตร "มาตราฐาน": ผู้ชนะติดสตั้น 1 เทิร์นในเทิร์นหน้า (ยกเว้นตัวไบเลธเอง)
     CHAR_HOOKS.byleth.onRoundWinner(engine, w);
+    // คอนเนอร์ RK800 (สกิลติดตัว 1 สืบสวน): การชนะการจั่ว = ความเครียด +1
+    CHAR_HOOKS.conner.onRoundWin(engine, w);
     // ระบบเหรียญ (patch 2.2 full): ชนะการจั่วได้เหรียญเพิ่ม +1 (เพดาน 30)
     if (!isYuuki(w)) addGold(w, GOLD_WIN_BONUS);
     // patch 2.1.3.5: ชนะจั่วการ์ดไม่ได้แต้มสกิลอีกต่อไป
@@ -4937,6 +5084,8 @@ function attackableTargets(atkId) {
   return alivePlayers().filter((p) => p.id !== atkId && !sameTeam(attacker, p) && !sealActive(p));
 }
 function afterSummary() {
+  // คอนเนอร์ RK800 (สกิลติดตัว 2): ระหว่างการไล่ล่า ทุกเทิร์นเหลือแค่ จั่ว -> สรุปแต้ม ไม่มีเฟสโจมตีเลย
+  if (CHAR_HOOKS.conner.chaseActive(engine)) { endTurn(); return; }
   const winner = players[roundWinnerId];
   // หลับไหล (Lie Like Vortigern): ผู้ชนะที่ยังหลับอยู่ ออกการกระทำไม่ได้ -> ไม่มีเทิร์นโจมตี
   //  (เทิร์นที่เพิ่งโดนกล่อม sleepFresh ยังโจมตีได้ — การหลับเริ่มเทิร์นถัดไป)
@@ -4959,6 +5108,13 @@ function afterSummary() {
   // อาจารย์ ไบเลธ หลักสูตร "พิเศษ" (characters/byleth.js): คนที่กดสกิลรองในเทิร์นนี้จะโจมตีไม่ได้
   if (winner && winner.alive && CHAR_HOOKS.byleth.blocksAttack(engine, winner)) {
     lastLog.push(`📕 ${winner.name} กดสกิลรองระหว่าง "หลักสูตร พิเศษ" — ไม่มีเทิร์นโจมตี`);
+    endTurn();
+    return;
+  }
+
+  // คอนเนอร์ RK800 (สกิลพื้นฐาน วิเคราะห์สถานการณ์): ทุ่มกำลังไปกับการประมวลผล -> เทิร์นนี้ชนะก็ไม่ได้โจมตี
+  if (winner && winner.alive && CHAR_HOOKS.conner.blocksAttack(engine, winner)) {
+    lastLog.push(`🧠 ${winner.name} ใช้กำลังประมวลผลไปกับการวิเคราะห์สถานการณ์ — ไม่มีเทิร์นโจมตี`);
     endTurn();
     return;
   }
@@ -5020,6 +5176,9 @@ function afterSummary() {
 //  (เปลี่ยนเป้าหมายได้ ไม่ต้องรอเทิร์นถัดไป — กดยกเลิกได้ผ่าน nanayaCancelReattack)
 // เพลงหมัด อาริมะ (อาริมะ มิยาโกะ สกิลรอง patch 2.2.0): โจมตีต่อได้อีกหลายครั้ง โอกาสลดลงเป็นขั้น (100/75/50/25% สูงสุด 4 ครั้ง)
 function postAttackFollowup(attacker) {
+  // คอนเนอร์ RK800 (สกิลติดตัว 4 การป้องกันตัว): วีดีโอ connor_passive4 เล่นจบแล้ว -> ค่อยลงดาเมจสวนกลับ
+  //  (จุดนี้อยู่หลัง runCutsceneQueue ของ doAttack เสมอ จึงได้ลำดับ "วีดีโอก่อน แล้วจึงเกิดความเสียหาย" ตามสเปค)
+  CHAR_HOOKS.conner.resolvePendingCounter(engine);
   if (isYuuki(attacker)) {
     const next = yuukiAttackTargets.shift();
     if (next && attacker.alive && players[next]?.alive) {
@@ -5051,6 +5210,9 @@ function postAttackFollowup(attacker) {
   if (attacker && attacker.alive && attacker.characterId === "kotone") {
     if (CHAR_HOOKS.kotone.startExtraAttack(engine, attacker)) return;
   }
+  // คู่แฝดฮิซากาว่า (characters/hisakawa_sister.js): ฝันของเหล่าฝาแฝด — แฝดอีกคนออกมาโจมตีต่ออีก 1 ครั้ง
+  //  (เลือกเป้าหมายเองได้ ดาเมจคงที่ 2) ต้องมาก่อนจังหวะอื่นเพราะเป็นส่วนหนึ่งของการโจมตีครั้งนี้
+  if (CHAR_HOOKS.hisakawa_sister.startDreamFollowupAttack(engine, attacker)) return;
   // อาจารย์ ไบเลธ หลักสูตร "จบการศึกษา": แต้มน้อยสุดแบบไพ่ไม่แตก -> ได้โจมตีเพิ่มในเทิร์นเดียวกัน
   if (startBylethGraduationAttack()) {
     return;
@@ -5133,6 +5295,16 @@ function computeAttackBase(engine, attacker, target) {
     oberonDayAtk, shradeDayOff, phenexPurgeAtk, hakunoInvertAtk, hakunoNoRegenAtk,
     ...hookCtx,
   };
+}
+
+// คอนเนอร์ RK800 (สกิลพื้นฐาน วิเคราะห์สถานการณ์): ประเมินพลังโจมตีปกติที่ attacker จะฟาดใส่ target ได้
+//  อ่านจากท่อเดียวกับการโจมตีจริง (computeAttackBase) แต่เป็นแค่ "ค่าประเมิน" — โบนัสที่ตัดสินตอนตีจริง
+//  (สังหารทันที/ล่อเป้า/หลบหลีก/ลดดาเมจฝั่งรับ) ไม่ถูกนับ · ห่อ try/catch เพราะเรียกจาก buildStateFor ทุก broadcast
+function estimateAttackOn(attacker, target) {
+  try {
+    const c = computeAttackBase(engine, attacker, target);
+    return Math.max(0, (c.base || 0) + (c.ntdBonus || 0));
+  } catch { return null; }
 }
 
 function doAttack(byId, targetId) {
@@ -5414,6 +5586,10 @@ function doAttack(byId, targetId) {
   //  ต้องอ่านค่าเลือดไหล "ก่อน" ความเสียหายลง และก่อนที่โอเมก้าจะแปะเลือดไหลก้อนใหม่ (onAttackLanded ด้านล่าง)
   const harukaPunishFx = {};
   dmg = CHAR_HOOKS.haruka.applyPunish(engine, attacker, target, dmg, harukaPunishFx);
+  // คู่แฝดฮิซากาว่า (characters/hisakawa_sister.js): หมัดที่ 2 ของ "ฝันของเหล่าฝาแฝด" — แฝดอีกคนออกมาตีเอง
+  //  ดาเมจคงที่เสมอ ไม่รับโบนัสพลังโจมตี/บัฟใดๆ ของตัวที่กำลังคุมอยู่ (คิดท้ายสุดเพื่อทับทุกอย่าง)
+  const hisakawaDreamAtk = CHAR_HOOKS.hisakawa_sister.isDreamAttack(attacker);
+  if (hisakawaDreamAtk) dmg = CHAR_HOOKS.hisakawa_sister.DREAM_FOLLOWUP_DMG;
 
   // ---------- ริต้า เบอร์นัล (characters/phenex.js): ฝันไปเถอะ — ตั้งรับ สะท้อนความเสียหายทั้งหมดกลับผู้โจมตีแทนที่จะรับเอง ----------
   if (CHAR_HOOKS.phenex.tryReflectHit(engine, attacker, target, dmg)) return;
@@ -5477,13 +5653,17 @@ function doAttack(byId, targetId) {
   // อาจารย์ ไบเลธ (characters/byleth.js): ดาบต้องสาปใช้ได้ครั้งเดียว -> สลายหลังหมัดนี้ · และถ้าเป้าหมายคือไบเลธที่แต้มน้อยสุด เตรียมโจมตีตอบ
   const bylethSwordUsed = CHAR_HOOKS.byleth.onAttackLanded(engine, attacker);
   CHAR_HOOKS.byleth.onAttacked(engine, attacker, target);
+  // คอนเนอร์ RK800 (characters/conner.js): โจมตีปกติใส่คอนเนอร์ -> ผู้โจมตีเครียด +2
+  //  และสกิลติดตัว 4 "การป้องกันตัว" โรล 15% ถ้าคนตีไม่ใช่คนเดิมกับครั้งก่อน (คิววีดีโอไว้ ดาเมจลงที่ postAttackFollowup)
+  CHAR_HOOKS.conner.onConnerAttacked(engine, attacker, target);
+  const connerCounterFired = CHAR_HOOKS.conner.onAttackedNormally(engine, attacker, target);
   // Ginga Strium (ฮิคารุ, characters/hikaru.js): โจมตีโดนเป้าหมาย -> ติดลุกไหม้ให้เป้าหมาย / ถูกโจมตีขณะอยู่ในร่างนี้ -> ผู้โจมตีติดลุกไหม้สวนกลับ
   CHAR_HOOKS.hikaru.onAttackBurnApply(engine, attacker, target);
   const escanorAttackVideoQueued = CHAR_HOOKS.escanor.onAttackLanded(engine, attacker, target);
   CHAR_HOOKS.satoru.applyPassiveAttack(engine, attacker, target);
   const hisakawaAttackFx = CHAR_HOOKS.hisakawa_sister.onAttackLanded(engine, attacker, target);
   const ignisAttackFx = CHAR_HOOKS.ignis.onAttackLanded(engine, attacker, target);
-  const hisakawaDreamFx = CHAR_HOOKS.hisakawa_sister.maybeDreamFollowup(engine, attacker, target);
+  CHAR_HOOKS.hisakawa_sister.maybeDreamFollowup(engine, attacker, target);
   // ริต้า เบอร์นัล: อย่าอยู่เลย แกน่ะ! — เล่นวีดีโอก่อนสรุปผล + ลบ/แบนท่าไม้ตายเป้าหมาย (นับมิติมายาบรรเลงของคีตกวีด้วย)
   if (phenexPurgeAtk) {
     triggerCutscene(attacker, "phenexPurge");
@@ -5678,7 +5858,6 @@ function doAttack(byId, targetId) {
   const addFx = (x, side) => { if (x) fxSkills.push({ ...x, side }); };
   for (const fx of hisakawaAttackFx || []) addFx(fx, fx.side || "atk");
   for (const fx of ignisAttackFx || []) addFx(fx, fx.side || "atk");
-  if (hisakawaDreamFx) addFx(hisakawaDreamFx, "atk");
   if (beam) addFx(skillByStatus(attacker, "beam"), "atk");
   if (ohger) addFx(skillByStatus(attacker, "ohger"), "atk");
   if (rachanAtk) addFx({ name: `คิงโอเจอร์ +${rachanAtk}`, img: OHGER_FORM, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
@@ -5756,6 +5935,7 @@ function doAttack(byId, targetId) {
   if (batReflectDmg > 0) addFx({ name: `เข้ามาเลย — ความเสียหายเกิดกับผู้โจมตีด้วย -${batReflectDmg}`, img: BAT_SKILL3_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
   // ---------- มิซึซาว่า ฮารุกะ (characters/haruka.js) ----------
   if (harukaPunishFx.punishStacks > 0) addFx({ name: `จงไปสู่สุขติ — ระเบิดเลือดไหล +${harukaPunishFx.punishStacks}`, img: CHAR_HOOKS.haruka.IMG.skill2, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
+  if (connerCounterFired) addFx({ name: "การป้องกันตัว — สวนกลับผู้โจมตีทั้งสองคน", img: CHAR_HOOKS.conner.IMG.base, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
   if (bylethSwordUsed > 0) addFx({ name: `ดาบต้องสาป +${bylethSwordUsed}`, img: CHAR_HOOKS.byleth.IMG.skill2, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
   if (harukaBleedApplied > 0) addFx({ name: `โอเมก้า — เลือดไหล +${harukaBleedApplied}`, img: CHAR_HOOKS.haruka.IMG.ult, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
   if (harukaCounterFx) addFx({ name: `อมาซอน — สวนกลับ -${harukaCounterFx.dmg}${harukaCounterFx.bled > 0 ? ` + เลือดไหล ${harukaCounterFx.bled}` : ""}${harukaCounterFx.stunned ? " + สตั้นเทิร์นหน้า" : ""}`, img: CHAR_HOOKS.haruka.IMG.base, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
@@ -5824,7 +6004,12 @@ function endTurn() {
   CHAR_HOOKS.riddhe.onEndTurnGuardArmorTick(engine);
 
   // หลบหลีก (สถานะ Universal): แต่ละสแตคหมดอายุเองตามเทิร์นของตัวเอง / โชคลาภ (Bard): ไม่ได้ใช้ 3 เทิร์นติดกัน = หมดฤทธิ์
+  // คอนเนอร์ RK800: การไล่ล่าล่มกลางคัน (เช่นคอนเนอร์ตาย) -> ปลดธง "ถูกแช่" ของทุกคนเสมอ
+  CHAR_HOOKS.conner.cleanupChase(engine);
   for (const p of Object.values(players)) {
+    // คอนเนอร์ RK800 (สกิลติดตัว 1 สืบสวน): ความเครียดลดลง 1 ต่อเทิร์น (ไพ่แตกในเทิร์นนี้ลดเพิ่มอีก 1)
+    //  ต้องอ่านค่า p.busted ก่อน dealRound() รีเซ็ต — จึงอยู่ท้ายเทิร์นตรงนี้
+    CHAR_HOOKS.conner.onEndTurnDecay(engine, p);
     CHAR_HOOKS.escanor.onEndTurnSolar(engine, p);
     tickEvadeStacks(engine, p);
     CHAR_HOOKS.bard.onEndTurnIdleDecay(engine, p);
@@ -5994,8 +6179,8 @@ function endTurn() {
     if (p.characterId === "hakuno" && p.hakunoGender === "female") gain += 1;
     // Ultraman Trigger: สกิลติดตัวฟื้นแต้มสกิลเพิ่มอีก 1 หน่วยทุกเทิร์น
     if (p.characterId === "ultraman_trigger") gain += 1;
-    // ฟุจิตะ โคโตเนะ (rework 2.3): สกิลติดตัวฟื้นแต้มสกิล +1 ทุกเทิร์น
-    if (p.characterId === "kotone" && !passiveSealed(p)) gain += 1;
+    // ฟุจิตะ โคโตเนะ (rework 2.3): สกิลติดตัว — โอกาส 30% ฟื้นแต้มสกิล +1 ต่อเทิร์น
+    if (p.characterId === "kotone") gain += CHAR_HOOKS.kotone.extraSkillRegen(engine, p);
     if (p.characterId === "hisakawa_sister") gain += CHAR_HOOKS.hisakawa_sister.extraSkillRegen(p);
     if (p.characterId === "ignis") gain += CHAR_HOOKS.ignis.extraSkillRegen(engine, p);
     // ค่าปรับปฏิเสธข้อเสนอ (เจ้าแห่งเน็ตบ้าน): แต้มสกิลหลังจบเทิร์นลด 1
@@ -6326,6 +6511,7 @@ function onPlayerEvent(socket, event, handler, limit = 20) {
 io.on('connection', (socket) => {
   socket.emit("roster", publicRoster());
   socket.emit("positions", positionsFor(socket.id));
+  socket.emit("takenChars", takenUniqueChars());
 
   safeOn(socket, 'reconnectSession', ({ sessionToken } = {}) => {
     if (!consumeEventQuota(socket, 'reconnectSession', 3, 10_000)) return;
@@ -6361,6 +6547,12 @@ io.on('connection', (socket) => {
     releaseReservation(socket.id);
     let ch = CHAR_BY_ID[characterId];
     if (!ch || ch.locked) ch = CHARACTERS.find((c) => !c.locked) || CHARACTERS[0];
+    // ตัวละคร unique (คอนเนอร์ RK800): เลือกได้แค่ 1 คนต่อเกม — ปฏิเสธการเข้าร่วมแทนการสลับตัวให้เงียบๆ
+    //  (ฝั่ง client ปิดการ์ดไว้ตั้งแต่หน้าเลือกตัวละครผ่าน event "takenChars" — ด่านนี้กันเคสกดพร้อมกันเป๊ะ)
+    if (ch.unique && Object.values(players).some((o) => o.characterId === ch.id)) {
+      socket.emit("characterTaken", { characterId: ch.id, name: ch.name });
+      return;
+    }
 
     const playerId = crypto.randomUUID();
     const sessionToken = crypto.randomBytes(32).toString('base64url');
@@ -6509,6 +6701,16 @@ io.on('connection', (socket) => {
   onPlayerEvent(socket, 'allyFinalAnswer', (id, { keep } = {}) => answerAllyFinal(id, !!keep), 4);
   onPlayerEvent(socket, 'bardTarget', (id, { targets } = {}) => withEffectSource(players[id], () => bardTarget(id, targets)), 8);
   onPlayerEvent(socket, 'kaiOverhaul', (id) => withEffectSource(players[id], () => kaiOverhaul(id)), 4);
+  // คอนเนอร์ RK800: เป้าหมายระดับอาชญากรตอบคำขาด — submit = true คือ "ยอมจำนน", false คือ "ขัดขืน"
+  onPlayerEvent(socket, 'connorArrestAnswer', (id, { submit } = {}) => {
+    const t = players[id];
+    if (!t || !t.alive || !t.connorArrestAsk) return;
+    // วีดีโอสอบปากคำ (connor_skill2) อาจกำลังเล่นอยู่ตอนคำขาดโผล่ — ต้องตอบได้ทั้งสองเฟส
+    if (gameState !== 'PLAYING' && gameState !== 'CUTSCENE') return;
+    if (!CHAR_HOOKS.conner.answerArrest(engine, t, !!submit, true)) return;
+    broadcastState();
+    checkAllLocked();
+  }, 4);
   onPlayerEvent(socket, 'contractAnswer', (id, { accept, fromId } = {}) => withEffectSource(players[fromId] || players[id], () => answerContract(id, !!accept, fromId)), 4);
   onPlayerEvent(socket, 'attack', (id, { targetId } = {}) => doAttack(id, targetId), 6);
   onPlayerEvent(socket, 'nanayaToggleEye', (id) => nanayaToggleEye(id), 4);

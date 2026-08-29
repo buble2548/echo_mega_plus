@@ -142,6 +142,12 @@ endTurn()              :5363  ลดเทิร์นสถานะทั้�
 | `ultimate` | 6 | หลอดจุ 8 |
 
 **ใช้ได้ 1 สกิลต่อเทิร์น** (`p.skillUsedRound`) — ยกเว้นตัวที่มีโควตาของตัวเอง (Bard 2 โน้ต/เทิร์น, kai/takumi 5 ครั้ง)
+· **คู่แฝดฮิซากาว่า** สกิลพื้นฐาน (สลับตัว/ชุบแฝด) เป็น **ทางหนี** ที่อะไรก็ปิดกั้นไม่ได้ — `useSkill()` ข้าม `p.locked`
+  (สตั้น/หลับไหล), `noskill` และ `moonCellActive()` ให้เฉพาะ `tier === "basic"` ของตัวละครนี้ (ปุ่มฝั่ง client ปลดล็อกด้วย `isHisakawa`)
+  · ไม่มีโควตาแยก แต่ "รีเซ็ต" `skillUsedRound` ได้ 2 ทาง — สลับตัว/ชุบแฝด (สกิลพื้นฐาน กดได้แม้ใช้สกิลไปแล้ว
+  จำกัดสลับ 1 ครั้ง/เทิร์นด้วย `p.hisakawaSwitchedRound`) และสกิลที่คืนสิทธิ์ให้อีก 1 ครั้ง — สกิลรองทั้งสอง
+  (อย่าทำอะไรเกินตัวสิ / จังหวะนี้แหละ) และ O-KU-RI-MO-NO-Sunday เท่านั้น ส่วน Miracle Live / Miracle Dance กินโควตาตามปกติ
+  (`p.hisakawaBonusRound` กันไม่ให้แจกซ้ำในเทิร์นเดียว) — ทั้งหมดอยู่ใน `CHAR_HOOKS.hisakawa_sister.applySkill()`
 
 **สูตรราคาจริง** (`useSkill` `:3316`–`:3360`)
 ```
@@ -165,6 +171,13 @@ cost = min(SKILL_COST_MAX /* 8 */,
   การฟื้นพลังงานจริงๆ (ไอเทม / พาสซีฟตัวละคร / ไพ่เหลืองครบชุด) **ไม่ใส่** ให้แต้มพื้นฐานจบเทิร์น ค่าชดเชยการแพ้
   หรือการโอนแต้มระหว่างผู้เล่น — ใช้ตัดสินว่าดีบัฟ `manaLeech` (ดูดซับเวท) จะโรล 35% หรือไม่
 
+**โจมตีเพิ่มในเทิร์นเดียวกัน** (เปิดเฟส `ATTACK` ซ้ำจาก `postAttackFollowup()` — เลือกเป้าหมายใหม่ได้ทุกครั้ง):
+yuuki · nanaya · miyako (คอมโบ) · takuto (คอมโบ + ครั้งที่ 3) · kotone · byleth (จบการศึกษา) ·
+**hisakawa_sister** 2 ทาง — "จังหวะนี้แหละ" (แต้มต่ำสุดแบบไม่เสมอ ได้ตีหลังผู้ชนะ · บัฟคู่ ใครคุมอยู่ก็ได้ตี) และ
+"ฝันของเหล่าฝาแฝด" (ทุกครั้งที่โจมตีโดน ทอย 70% ให้แฝดอีกคนออกมาตีเป็นครั้งที่ 2 ดาเมจคงที่ 2 ทับทุกโบนัส —
+ต้องมีแฝดครบทั้งคู่ · `p.hisakawaDreamPending` จอง → `startDreamFollowupAttack()` เปิดเฟส → `p.hisakawaDreamAtk`
+ทำให้ `doAttack()` ทับดาเมจและ `displayImg()` โชว์ภาพแฝดอีกคน · หมัดที่ 2 ไม่ทอยต่อเป็นลูกโซ่)
+
 **สกิลที่สลับตัวเองได้** (`useSkill` เลือก `skill` object ใหม่ก่อนคิดราคา): shrade_elan, shiki (เลือกตอน join), riddhe, banagher, phenex, hakuno (เพศ), hikaru, oguri, takuto, escanor, hisakawa_sister, ignis, oberon (ตามช่วงเวลา), kotone (ตามช่วงเวลา + ร่าง [พร้อมลุย] ทับทั้ง 3 ช่อง)
 
 **คอสที่ไม่ใช่แต้มสกิล**: ท่าไม้ตายในร่าง [พร้อมลุย] ของโคโตเนะจ่าย **6 แต้มสกิล + 6 เหรียญ** — ด่านเงินเช็คที่
@@ -180,6 +193,38 @@ cost = min(SKILL_COST_MAX /* 8 */,
 สถานะ "เริ่มมีผลเทิร์นหน้า" (สตั้นผู้ชนะ / ห้ามสกิลพื้นฐาน) ใช้ธง `bylethStunPending` / `bylethNoBasicPending`
 แล้วแปลงเป็นสถานะจริงที่ `dealRound()` ผ่าน `applyPendingFromCourses()` — ต้องอยู่ก่อนบล็อกเช็คสตั้นเสมอ
 เทสต์: [tests/characters/byleth.test.js](tests/characters/byleth.test.js)
+
+**คอนเนอร์ RK800 (patch 2.7)** — ตัวละคร **unique ตัวแรก** (`unique: true` ใน `characters.js`) เลือกได้ 1 คนต่อเกม
+เซิร์ฟเวอร์กันซ้ำที่ handler `join` (ตอบ `characterTaken` แล้วไม่ให้เข้า) · ฝั่ง client ปิดการ์ดไว้ผ่าน event `takenChars`
+ที่ `broadcastPositions()` ยิงคู่กับ `positions` ทุกครั้ง
+
+- **"ความเครียด" (`p.connorStress` 0-10)** อยู่ที่ **ผู้เล่นคนอื่นทุกคน** ไม่ใช่ที่ตัวคอนเนอร์ — เป็นตัวเลข UI ล้วน
+  ไม่ใช่ `p.statuses` จึงไม่อยู่ในลูปลดเทิร์นของ `endTurn()` และ **ต้าน/ล้างไม่ได้** (ไม่เช็ค `resist` โดยตั้งใจ)
+  ทุกแหล่งต้องผ่าน `CHAR_HOOKS.conner.addStress()` เท่านั้น — จุดที่ engine เรียก: `useSkill()` (+1/ครั้ง) ·
+  `useInventoryItem()` (+1/ครั้ง) · `hit()` (+1 ครั้งเดียวต่อเทิร์น กันซ้ำด้วย `p.connorStressDrewRound`) ·
+  `resolveRound()` ผู้ชนะ (+1) · `doAttack()` ผู้ที่ตีคอนเนอร์ (+2) · `endTurn()` ลดลง 1 (ไพ่แตก -1 เพิ่ม)
+  · **บอสยูกิอยู่นอกระบบนี้ทั้งหมด** (สตั้นจากการจับกุมจะทำให้ `autoPlayYuuki()` ค้าง)
+- **`accused` ("ผู้ต้องหา")** เป็นสถานะนับเทิร์นปกติ (ไม่ต้อง `continue` ในลูป `endTurn`) อยู่ใน `BASIC_DEBUFF_CLEAR`
+  — เป็นเครื่องหมายล้วน ผลอยู่ที่ `CHAR_HOOKS.conner.damageBonus()` (คอนเนอร์ตีแรงขึ้น +2)
+- **โหมด "การไล่ล่า" (สกิลติดตัว 2)** = สวิตช์กติกาสนาม 3 เทิร์น เก็บที่ `p.connorChase` ของคอนเนอร์
+  (`{ targetId, round, mine, theirs }` — เป็น plain object จึงย้อนคืนได้ครบผ่านสแนปช็อต Overload Force)
+  - คนนอกวง: `p.connorFrozen` -> **`bustedOf()` คืน true ทันที** + `locked` + `actionBlocked()` ปิด `hit`/`useSkill`/`useInventoryItem`
+  - `resolveRound()` เรียก `CHAR_HOOKS.conner.chaseResolveRound()` **ก่อนหาผู้ชนะ** — คืน true = ระงับกติกาปกติทั้งก้อน
+    แล้ว **ข้าม `afterResolve()` ไปที่ `runCutsceneQueue(goSummary)` ตรงๆ** เพราะเอฟเฟกต์หลังเปิดไพ่ที่กวาด
+    "คนที่ไพ่แตก" (Ashen Trail ของโอกูริ ฯลฯ) จะไปลงคนที่ถูกแช่ ทั้งที่กติกาบอกว่าพวกเขาไม่รับความเสียหาย
+  - `afterSummary()` ตัดเฟส `ATTACK` ทิ้งทุกเทิร์นระหว่างไล่ล่า
+  - คำขาด "ยอมจำนน / ขัดขืน" ใช้กลไก pending answer แบบเดียวกับสัญญา (`p.connorArrestAsk` +
+    เช็คใน `checkAllLocked()` + กวาดตอนหมดเวลาใน `resolveRound()`) — **ไม่ตอบ = ขัดขืน**
+  - ตัดสิน: แต้มรวมสูงกว่าเท่านั้นถึงชนะ · **เสมอ = คอนเนอร์แพ้**
+  - `cleanupChase()` ที่ `endTurn()` เป็นตาข่ายกันธง `connorFrozen` ค้างถาวรเมื่อคอนเนอร์ตายกลางการไล่ล่า
+- **ฟื้นคืนชีพ (สกิลติดตัว 3)** ไม่ใช่การกันตาย — `instantDeath()` ให้ตกรอบจริงก่อนแล้วค่อยจอง `p.connorReviveRound`
+  (`= roundNumber + 10`) · `dealRound()` เรียก `maybeRevive()` **ก่อน** บล็อกข้ามผู้เล่นที่ตายแล้ว
+  ดังนั้น **ถ้าเกมจบก่อนครบ 10 เทิร์นก็ไม่ได้ฟื้น** (เงื่อนไขจบเกมไม่ถูกแก้)
+- **ลำดับ "วีดีโอก่อน แล้วค่อยเกิดความเสียหาย"** มี 2 ที่: ท่าไม้ตายใช้ `pausePlayingForCutscene(() => applyCloseCase())`
+  (ครั้งที่ 2 ไม่มีคลิปแล้ว -> ลงดาเมจทันที ดูค่าที่ `queueCloseCaseVideo()` คืน) · สกิลติดตัว 4 จองคู่กรณีไว้ที่
+  `p.connorCounterPending` แล้วลงดาเมจที่ `postAttackFollowup()` ซึ่งทำงานหลัง `runCutsceneQueue` ของ `doAttack` เสมอ
+- **คลิปชุดไล่ล่า/ป้องกันตัวเรียกผ่าน `queueCutscene` = เล่นทุกครั้ง** ส่วนเปิดตัว/สอบปากคำ/ปิดคดีใช้ `triggerCutscene` = ครั้งเดียวต่อเกม
+เทสต์: [tests/characters/conner.test.js](tests/characters/conner.test.js)
 
 ---
 
@@ -369,7 +414,9 @@ module.exports = {
 7. **`p.seen[key]` vs `p.cutsceneShown[key]`** — อันแรกกันเอฟเฟกต์ทำงานซ้ำ อันหลังกันวีดีโอเล่นซ้ำ คนละเรื่องกัน
 8. `process.on("uncaughtException")` ที่หัวไฟล์เป็น **ตาข่ายสำรอง** ไม่ใช่ที่จัดการ error — handler ต้อง try/catch เอง (`safeOn`/`onPlayerEvent` ทำให้แล้ว)
 9. ไฟล์สื่อ (รูป/วีดีโอ/เพลง) ไม่ track ใน git — ไม่มีไฟล์ในเครื่อง client จะ fallback เป็นอีโมจิ (`client/src/data/avatars.js`)
-10. `resetCombat(p)` `:1939` คือรายการฟิลด์ผู้เล่นทั้งหมด — **ฟิลด์ใหม่ของตัวละครต้องรีเซ็ตที่นี่** ไม่งั้นค้างข้ามแมตช์
+10. **ตัวละคร `unique`** (คอนเนอร์ RK800) กันซ้ำ **2 ชั้น**: handler `join` ตอบ `characterTaken` และหน้าเลือกตัวละคร
+    ปิดการ์ดจาก event `takenChars` — เพิ่มตัว unique ใหม่ต้องแค่ใส่ `unique: true` ใน `characters.js` เท่านั้น
+11. `resetCombat(p)` `:1939` คือรายการฟิลด์ผู้เล่นทั้งหมด — **ฟิลด์ใหม่ของตัวละครต้องรีเซ็ตที่นี่** ไม่งั้นค้างข้ามแมตช์
 
 ---
 

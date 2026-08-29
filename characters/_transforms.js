@@ -6,8 +6,25 @@
 //  afterReveal = เล่นหลังเปิดไพ่ (ท่าไม้ตาย) | ntd/beat เล่นตอน trigger (โดนโจมตี/เลือดต่ำ)
 //  voice = เสียงพากย์เล่นต่อเมื่อวีดีโอจบ | music = เพลงสกิลที่ค้างหลัง cutscene
 // ============================================================
+const connorImg = require("./conner").IMG; // คอนเนอร์ RK800: ใช้ path รูปชุดเดียวกับไฟล์ตัวละครกันค่าซ้ำสองที่
+
 module.exports = function buildTransforms(img) {
   return {
+    // ---------- คอนเนอร์ RK800 (patch 2.7 new) ----------
+    //  seconds วัดจาก mvhd จริงแล้วเผื่อเวลาตัดฉาก ~1 วินาที (เปิดตัว 6.94 · สอบปากคำ 10.89 · ปิดคดี 16.29
+    //  · ไล่ล่า 1/2/3 = 7.06/8.86/13.40 · จับกุมสำเร็จ 6.00 · หนีรอด 9.45 · ป้องกันตัว 17.00)
+    //  วีดีโอชุด "ไล่ล่า" และ "การป้องกันตัว" เรียกผ่าน queueCutscene ตรงๆ จึงเล่นทุกครั้งที่ทำงาน
+    //  ส่วนเปิดตัว/สอบปากคำ/ปิดคดี เรียกผ่าน triggerCutscene = เล่นเต็มครั้งแรกครั้งเดียวต่อเกม
+    //  เพลงไล่ล่า (conner_theme) ไม่ผูกกับคัตซีน — มาจาก CHAR_HOOKS.conner.activeMusic() ตลอดช่วงไล่ล่า
+    connorIntro:       { img: connorImg.base,   video: "/characters/connor/conner_openning.mp4",        title: "CONNOR RK800", label: "เริ่มปฏิบัติการ",   seconds: 8,  music: null, afterReveal: false },
+    connorInterrogate: { img: connorImg.skill2, video: "/characters/connor/skill2/connor_skill2.mp4",   title: "ข่มขวัญ/จับกุม", label: "ใช้สกิลรอง",       seconds: 12, music: null, afterReveal: false },
+    connorCloseCase:   { img: connorImg.skill3, video: "/characters/connor/skill3/connor_skill3.mp4",   title: "จัดการปิดคดี",   label: "ปล่อยท่าไม้ตาย",   seconds: 17, music: null, afterReveal: false },
+    connorArrest1:     { img: connorImg.skill2, video: "/characters/connor/arrest/connor_arrest_1.mp4", title: "เริ่มการไล่ล่า", label: "จับกุมขั้นเด็ดขาด", seconds: 8,  music: null, afterReveal: false },
+    connorArrest2:     { img: connorImg.skill2, video: "/characters/connor/arrest/connor_arrest_2.mp4", title: "ไล่ล่า 1/3",     label: "จับกุมขั้นเด็ดขาด", seconds: 10, music: null, afterReveal: false },
+    connorArrest3:     { img: connorImg.skill2, video: "/characters/connor/arrest/connor_arrest_3.mp4", title: "ไล่ล่า 2/3",     label: "จับกุมขั้นเด็ดขาด", seconds: 14, music: null, afterReveal: false },
+    connorArrestTrue:  { img: connorImg.skill2, video: "/characters/connor/arrest/connor_arrest_true.mp4",  title: "จับกุมสำเร็จ", label: "ปิดคดี",        seconds: 7,  music: null, afterReveal: false },
+    connorArrestFalse: { img: connorImg.skill2, video: "/characters/connor/arrest/connor_arrest_false.mp4", title: "เป้าหมายหนีรอด", label: "คดีล่ม",      seconds: 10, music: null, afterReveal: false },
+    connorSelfDefense: { img: connorImg.base,   video: "/characters/connor/connor_passive4.mp4",        title: "การป้องกันตัว",  label: "สกิลติดตัวทำงาน",  seconds: 18, music: null, afterReveal: false },
     // Escanor: วิดีโอเต็มจอของแต่ละเหตุการณ์เล่นได้ครั้งเดียวต่อแมตช์/ต่อผู้เล่นผ่าน triggerCutscene
     // seconds วัดจาก mvhd จริงและเผื่อเวลาตัดฉาก ~1 วินาที เพื่อไม่ให้วิดีโอถูกตัดก่อนจบ
     escanorMorning: { img: "/characters/escanor/ร่าง เช้า Profile.png", video: "/characters/escanor/ร่าง เช้า Animation.mp4", title: "ESCANOR", label: "เข้าสู่ร่าง Morning", seconds: 19, music: null, afterReveal: false },

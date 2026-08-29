@@ -34,6 +34,7 @@ export default function App() {
   const [introPlayers, setIntroPlayers] = useState([]);
   const prevGameStateRef = useRef(null);
   const [roster, setRoster] = useState([]);
+  const [takenChars, setTakenChars] = useState([]); // ตัวละคร unique ที่มีคนเลือกไปแล้ว (คอนเนอร์ RK800)
   const [taken, setTaken] = useState([]);
   const [name, setName] = useState("");
   const [position, setPosition] = useState(null);
@@ -87,6 +88,12 @@ export default function App() {
     };
     const onRoster = (r) => setRoster(r);
     const onPositions = (t) => setTaken(t);
+    const onTakenChars = (list) => setTakenChars(Array.isArray(list) ? list : []);
+    // ตัวละครที่เลือกได้คนเดียวต่อเกมถูกคนอื่นชิงไปก่อน (กดพร้อมกันเป๊ะ) -> กลับไปเลือกใหม่
+    const onCharTaken = ({ name } = {}) => {
+      alert(`${name || "ตัวละครนี้"} ถูกผู้เล่นอื่นเลือกไปแล้ว (เลือกได้ 1 คนต่อเกม) — เลือกตัวใหม่นะ`);
+      setStage("character");
+    };
     const onJoined = ({ sessionToken } = {}) => {
       saveSessionToken(sessionToken);
       navLockRef.current = false;
@@ -128,6 +135,8 @@ export default function App() {
     socket.on("state", onState);
     socket.on("roster", onRoster);
     socket.on("positions", onPositions);
+    socket.on("takenChars", onTakenChars);
+    socket.on("characterTaken", onCharTaken);
     socket.on("joined", onJoined);
     socket.on('connect', onConnect);
     socket.on('reconnected', onReconnected);
@@ -142,6 +151,8 @@ export default function App() {
       socket.off("state", onState);
       socket.off("roster", onRoster);
       socket.off("positions", onPositions);
+      socket.off("takenChars", onTakenChars);
+      socket.off("characterTaken", onCharTaken);
       socket.off("joined", onJoined);
       socket.off('connect', onConnect);
       socket.off('reconnected', onReconnected);
@@ -256,6 +267,7 @@ export default function App() {
     screen = (
       <CharacterSelect
         roster={roster}
+        takenChars={takenChars}
         position={position}
         name={name}
         onConfirm={confirmCharacter}

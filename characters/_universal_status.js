@@ -84,7 +84,9 @@ function coolReduction(p, isNormalAttack) {
 const BASIC_DEBUFF_CLEAR = ["discord", "sleep", "stun", "nodraw", "noskill", "weak", "fragile", "spellburden", "oblada", "hburn", "hbleed", "phenexBanUlt", "nanayaSeal", "miyakoSeal", "invert", "nohealing", "manaSeal", "chaa",
   // ผู้สังหารเมจ: ตราล่าเวท/ดูดซับเวท ถูกลบล้างได้ด้วย "ต้านทานสถานะผิดปกติ"
   //  (mageslayerMarkedId ฝั่งผู้ร่ายถูก reconcile ให้เองที่ tickWitchMark ท้ายเทิร์น — ดู characters/mageslayer.js)
-  "mageslayerMark", "manaLeech"];
+  "mageslayerMark", "manaLeech",
+  // คอนเนอร์ RK800: "ผู้ต้องหา" เป็นเครื่องหมายล้วนๆ (ทำให้คอนเนอร์ตีแรงขึ้น +2) ต้านสถานะผิดปกติล้างได้
+  "accused"];
 // ดีบัฟที่ยังไม่เกิดผลทันที (ยามฟ้าสาง / เส้นชีวิต): โดนล้าง = ลดลงทีละ 1 หน่วย ไม่หายทั้งหมด
 const SOFT_DEBUFF_STEP = ["dawn", "deathline"];
 

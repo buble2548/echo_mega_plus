@@ -322,6 +322,17 @@ body {
 .field-fx-byleth-ex     { background: radial-gradient(circle, transparent 58%, rgba(192, 57, 43, 0.45) 100%); }
 .field-fx-byleth-end    { background: radial-gradient(circle, transparent 58%, rgba(59, 130, 196, 0.45) 100%); }
 
+/* ---------- ออร่าขอบจอระหว่างการไล่ล่า (คอนเนอร์ RK800 — สกิลติดตัว 2 จับกุมขั้นเด็ดขาด) ----------
+   กลไกเดียวกับ field-fx-beatbark แต่แดงเข้มกว่าและเต้นเร็วกว่า เพื่อให้อ่านออกว่าเป็นโหมดกดดัน */
+.field-fx-connor-chase {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  background: radial-gradient(circle, transparent 48%, rgba(200, 20, 20, 0.55) 100%);
+  animation: fieldFxPulse 1.1s ease-in-out infinite;
+}
+
 /* ---------- ระเบิดตอนเปลี่ยนร่าง (แดง=ราชัน / เขียว=Beat Mode) ---------- */
 @keyframes xfxBurst {
   0% { transform: translate(-50%, -50%) scale(0.15); opacity: 0; }

@@ -79,7 +79,7 @@ function SkillTile({ label, skill }) {
   );
 }
 
-export default function CharacterSelect({ roster, position, name, onConfirm, onBack }) {
+export default function CharacterSelect({ roster, position, name, takenChars = [], onConfirm, onBack }) {
   const [picked, setPicked] = useState(null);
   const [tab, setTab] = useState("all"); // แท็บกรองความยาก: "all" | difficulty key
   // ชิกิ (patch 2.0.6): เลือกท่าไม้ตายที่จะใช้ได้ — "deatheye" (ฉันมองเห็นมันแล้ว) | "wither" (ความตายที่โรยรา)
@@ -101,8 +101,10 @@ export default function CharacterSelect({ roster, position, name, onConfirm, onB
   const visibleRoster = tab === "all" ? orderedRoster : orderedRoster.filter((c) => (c.difficulty || "easy") === tab);
   const selGroup = sel ? DIFFICULTY_GROUPS.find((g) => g.key === (sel.difficulty || "easy")) : null;
 
+  // ตัวละคร unique (คอนเนอร์ RK800): เลือกได้แค่ 1 คนต่อเกม — มีคนจองแล้วก็กดไม่ได้
+  const isTaken = (c) => !!c && !!c.unique && takenChars.includes(c.id);
   const pick = (id) => { clickSound(); setPicked(id); };
-  const confirm = () => { clickSound(); if (picked && !sel?.locked) onConfirm(picked, picked === "shiki" ? { shikiUlt } : undefined); };
+  const confirm = () => { clickSound(); if (picked && !sel?.locked && !isTaken(sel)) onConfirm(picked, picked === "shiki" ? { shikiUlt } : undefined); };
   const back = () => { clickSound(); onBack(); };
 
   return (
@@ -169,13 +171,15 @@ export default function CharacterSelect({ roster, position, name, onConfirm, onB
               {visibleRoster.map((c, i) => {
                 const g = DIFFICULTY_GROUPS.find((gr) => gr.key === (c.difficulty || "easy"));
                 const active = c.id === picked;
+                const taken = isTaken(c);
                 return (
                   <button
                     key={c.id}
-                    onClick={() => pick(c.id)}
-                    className="p-rise p-scan-hover relative transition hover:-translate-y-1"
+                    onClick={() => { if (!taken) pick(c.id); }}
+                    disabled={taken}
+                    className={`p-rise p-scan-hover relative transition ${taken ? "opacity-40 cursor-not-allowed" : "hover:-translate-y-1"}`}
                     style={{ animationDelay: `${Math.min(i, 14) * 0.03}s` }}
-                    title={c.locked ? "ยังไม่ปลดล็อก" : c.name}
+                    title={c.locked ? "ยังไม่ปลดล็อก" : taken ? `${c.name} — มีผู้เล่นอื่นเลือกไปแล้ว (เลือกได้ 1 คนต่อเกม)` : c.name}
                   >
                     <div
                       className="relative aspect-square border-2 rounded-md overflow-hidden"
@@ -183,6 +187,11 @@ export default function CharacterSelect({ roster, position, name, onConfirm, onB
                     >
                       <CharImage c={c} className="w-full h-full" rounded="" emojiSize="2.6rem" />
                       <div className="absolute inset-x-0 bottom-0 h-1.5" style={{ background: g?.color || "#9B4F96" }} />
+                      {taken && (
+                        <div className="absolute inset-0 grid place-items-center bg-black/60 text-[10px] font-black text-center leading-tight px-1">
+                          ถูกเลือกแล้ว
+                        </div>
+                      )}
                     </div>
                     <div className="mt-1 font-bold text-xs sm:text-sm truncate">{c.name}</div>
                   </button>
@@ -239,6 +248,10 @@ export default function CharacterSelect({ roster, position, name, onConfirm, onB
                     {/* นานายะ ชิกิ (patch 2.1.9): สกิลติดตัว 2 หัวใจฆาตกร / สกิลติดตัว 3 พักผ่อนสักครู่ */}
                     {sel.id === "nanaya" && sel.passive2 && <SkillTile label="สกิลติดตัว 2" skill={sel.passive2} />}
                     {sel.id === "nanaya" && sel.passive3 && <SkillTile label="สกิลติดตัว 3" skill={sel.passive3} />}
+                    {/* คอนเนอร์ RK800 (patch 2.7): สกิลติดตัว 2-4 จับกุมขั้นเด็ดขาด / ปัญญาประดิษฐ์ / การป้องกันตัว */}
+                    {sel.id === "conner" && sel.passive2 && <SkillTile label="สกิลติดตัว 2" skill={sel.passive2} />}
+                    {sel.id === "conner" && sel.passive3 && <SkillTile label="สกิลติดตัว 3" skill={sel.passive3} />}
+                    {sel.id === "conner" && sel.passive4 && <SkillTile label="สกิลติดตัว 4" skill={sel.passive4} />}
                     <SkillTile label={sel.basicNight ? "สกิลพื้นฐาน (กลางวัน)" : "สกิลพื้นฐาน"} skill={sel.basic} />
                     {sel.basicNight && <SkillTile label="สกิลพื้นฐาน (กลางคืน)" skill={sel.basicNight} />}
                     {sel.id === "hisakawa_sister" && sel.basic2 && <SkillTile label="สกิลพื้นฐาน 2 (เมื่อแฝดล้ม)" skill={sel.basic2} />}

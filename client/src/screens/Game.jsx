@@ -56,7 +56,10 @@ function isTargetable(p, iAmAttacker, c) {
   // ดาบต้องสาป (ไบเลธ แบบฟาดทันที): เลือกตัวเอง/เพื่อนร่วมทีมไม่ได้ — เดิมกดเพื่อนได้ ดาเมจถูกเกตทีมกันทิ้ง
   //  แต่ความรู้ 4 หน่วยถูกหักไปฟรี (ฝั่ง server กันซ้ำที่ prepareStrikeTarget แล้ว)
   const bylethStrikeTarget = c.bylethStrikeSel && !self && !friendly;
-  return (normalAttackTarget || !!c.anataSel || c.dawnSel || c.appleSel || c.bbSel || c.shSel || c.skSel || c.doomSel || c.saObSel || escanorSkillTarget || c.ignisSel || c.ignisImpactSel || c.bgSel || !!c.bardPending || c.nanayaSel || c.tpSel || c.kaiCreateSel || c.kaiPunishSel || c.msMarkSel || c.msRuptureSel || c.psSealSel || bylethStrikeTarget || gunTarget) && p.alive;
+  // คอนเนอร์ RK800: สกิลรองเลือกใครก็ได้ที่ไม่ใช่ตัวเอง/เพื่อนร่วมทีม — ท่าไม้ตายเลือกได้เฉพาะระดับ "อาชญากร"
+  //  (ฝั่ง server กันซ้ำที่ CHAR_HOOKS.conner.prepareTarget อีกชั้น ตรงนี้แค่กันกดพลาด)
+  const connorTarget = !!c.connorSel && !self && !friendly && (c.connorSel !== "ultimate" || p.connorLevel === "criminal");
+  return (normalAttackTarget || !!c.anataSel || c.dawnSel || c.appleSel || c.bbSel || c.shSel || c.skSel || c.doomSel || c.saObSel || escanorSkillTarget || c.ignisSel || c.ignisImpactSel || c.bgSel || !!c.bardPending || c.nanayaSel || c.tpSel || c.kaiCreateSel || c.kaiPunishSel || c.msMarkSel || c.msRuptureSel || c.psSealSel || bylethStrikeTarget || connorTarget || gunTarget) && p.alive;
 }
 // แตะ/คลิกการ์ดคู่ต่อสู้แล้วต้องทำอะไร — ไล่ตามโหมดเลือกเป้าหมายที่เปิดอยู่ ไม่มีเลยก็โจมตีปกติ
 function resolveAttackPick(id, c) {
@@ -78,6 +81,7 @@ function resolveAttackPick(id, c) {
   if (c.kaiCreateSel) return c.pickKaiCreate(id);
   if (c.kaiPunishSel) return c.pickKaiPunish(id);
   if (c.bylethStrikeSel) return c.pickBylethStrike(id);
+  if (c.connorSel) return c.pickConnor(id);
   if (c.msMarkSel) return c.pickMsMark(id);
   if (c.msRuptureSel) return c.pickMsRupture(id);
   if (c.psSealSel) return c.pickPsSeal(id);
@@ -714,6 +718,7 @@ function ModalMounts({
   hakunoCmdOpen, onUseHakunoCmd, onCloseHakunoCmd,
   appleOpen, onPickAppleItem, onCloseApple,
   tohnoOpen, onPickTohnoLevel, onCloseTohno,
+  connorArrestAsk, onAnswerConnorArrest,
   contractOffer, onAnswerContract,
   locaOffer, onAnswerLoca,
   renewAsk, onAnswerRenew,
@@ -734,6 +739,7 @@ function ModalMounts({
       {hakunoCmdOpen && me && <HakunoCommandModal me={me} onUse={onUseHakunoCmd} onClose={onCloseHakunoCmd} />}
       {appleOpen && me && <AppleItemModal me={me} onPick={onPickAppleItem} onClose={onCloseApple} />}
       {tohnoOpen && me && <TohnoLevelModal me={me} onPick={onPickTohnoLevel} onClose={onCloseTohno} />}
+      {connorArrestAsk && me?.alive && <ConnorArrestModal ask={connorArrestAsk} onAnswer={onAnswerConnorArrest} />}
       {contractOffer && me?.alive && <ContractOfferModal offer={contractOffer} onAnswer={onAnswerContract} />}
       {locaOffer && me?.alive && <LocaOfferModal offer={locaOffer} onAnswer={onAnswerLoca} />}
       {renewAsk && me?.alive && <ContractRenewModal ask={renewAsk} points={me.skillPoints} onAnswer={onAnswerRenew} />}
@@ -949,6 +955,49 @@ function LifeBar({ p, sm, className = "" }) {
 }
 
 // แถวพลังชีวิต + หลอดสกิล
+// ---------- คอนเนอร์ RK800: มิเตอร์ "ความเครียด" 0-10 (โผล่เฉพาะตอนมีคอนเนอร์อยู่ในแมตช์) ----------
+//  เป็น UI ล้วน ไม่ใช่สถานะ — ล้าง/ต้านไม่ได้ สีเปลี่ยนตามระดับ ผู้ต้องสงสัย -> ผู้กระทำความผิด -> อาชญากร
+const CONNOR_LEVEL_UI = {
+  suspect:  { name: "ผู้ต้องสงสัย", icon: "🔎", bar: "#9AA5B1" },
+  offender: { name: "ผู้กระทำความผิด", icon: "⚠️", bar: "#E5B33B" },
+  criminal: { name: "อาชญากร", icon: "🚨", bar: "#C0392B" },
+};
+function ConnorStressBar({ p }) {
+  if (p.connorStress == null) return null;
+  const lv = CONNOR_LEVEL_UI[p.connorLevel] || CONNOR_LEVEL_UI.suspect;
+  const max = p.connorStressMax || 10;
+  const pct = Math.round((p.connorStress / max) * 100);
+  return (
+    <div className="mt-1 w-full max-w-[120px]" title={`ความเครียด ${p.connorStress}/${max} — ${lv.name}`}>
+      <div className="flex items-center justify-between text-[9px] font-black leading-none mb-0.5">
+        <span style={{ color: lv.bar }}>{lv.icon} {lv.name}</span>
+        <span className="opacity-80">{p.connorStress}/{max}</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-white/12 overflow-hidden border border-black/30">
+        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: lv.bar, boxShadow: `0 0 6px ${lv.bar}` }} />
+      </div>
+      {p.connorEstDmg != null && (
+        <div className="text-[9px] font-black text-echo-cyan mt-0.5">🧠 ประเมินดาเมจ ~{p.connorEstDmg}</div>
+      )}
+    </div>
+  );
+}
+
+// ป้ายความเครียดแบบบรรทัดเดียวสำหรับ "แผงตัวเอง" (การ์ดผู้เล่นอื่นใช้ ConnorStressBar แทน)
+function ConnorStressBadge({ me }) {
+  if (!me || me.connorStress == null) return null;
+  const lv = CONNOR_LEVEL_UI[me.connorLevel] || CONNOR_LEVEL_UI.suspect;
+  return (
+    <span
+      className="text-[11px] font-black px-1.5 py-0.5 rounded-md border border-black/25 shadow whitespace-nowrap"
+      style={{ background: lv.bar, color: "#111" }}
+      title={`ความเครียด ${me.connorStress}/${me.connorStressMax || 10} — ${lv.name} (คอนเนอร์ RK800: เป็น UI ล้วน ล้าง/ต้านไม่ได้)`}
+    >
+      {lv.icon} {me.connorStress}/{me.connorStressMax || 10} {lv.name}
+    </span>
+  );
+}
+
 function Stats({ p, center, hideLife = false }) {
   return (
     <div className={center ? "flex flex-col items-center gap-1" : ""}>
@@ -971,6 +1020,7 @@ function Stats({ p, center, hideLife = false }) {
           ))}
         </div>
       )}
+      <ConnorStressBar p={p} />
     </div>
   );
 }
@@ -983,6 +1033,7 @@ const STATUS_INFO = {
   monster:   { icon: "🛡️", label: "MonsterLive", cls: "bg-echo-armor", desc: "MonsterLive: เพดานเกราะ +2 — เกราะลดลงเท่าไหร่ฟื้นเลือดเท่านั้น และความเสียหายที่ได้รับจากการโจมตีลดลง 1 หน่วย (ใช้สกิลรอง Ultlive Ultraman Ginga ไม่ได้)" },
   ginga:     { icon: "✨", label: "Ginga", cls: "bg-echo-gold text-gray-900", desc: "ร่าง Ultraman Ginga: โจมตี +1 และตีหมู่ทุกคน (เหลือคู่ต่อสู้คนเดียว +1 เพิ่ม) — ระหว่างนี้สกิลพื้นฐานเปลี่ยนเป็น UPG!" },
   gingastrium: { icon: "🔥", label: "Ginga Strium", cls: "bg-echo-hp", desc: "ร่าง Ginga Strium: โจมตี +1 (เหลือคู่ต่อสู้คนเดียว +1 เพิ่ม) ติดลุกไหม้ให้เป้าหมายที่โดนโจมตี — ระหว่างนี้สกิลรองเปลี่ยนเป็นลำแสงสโตเรียม" },
+  accused:   { icon: "⛓️", label: "ผู้ต้องหา", cls: "bg-echo-hp", desc: "ผู้ต้องหา (คอนเนอร์ RK800): เป็นเครื่องหมายล้วนๆ ไม่มีผลอื่นในตัวเอง — แต่คอนเนอร์โจมตีปกติใส่คนที่ติดสถานะนี้แรงขึ้น +2 หน่วย · ต้านสถานะผิดปกติล้างได้" },
   hbleed:    { icon: "🩸", label: "เลือดไหล", cls: "bg-echo-hp", desc: "เลือดไหล: เสียพลังชีวิต 1 หน่วยทุกเทิร์น (ลดเกราะก่อน ลดลงทีละหน่วยหลังสร้างความเสียหาย) สะสมได้ไม่เกิน 6 หน่วย และระหว่างที่ยังติดอยู่ การฟื้นพลังชีวิตจะเหลือครึ่งเดียว (ฟื้นทีละ 1 หน่วยไม่ถูกลด) — ต้านได้ด้วยต้านสถานะผิดปกติ" },
   hburn:     { icon: "🔥", label: "ลุกไหม้", cls: "bg-echo-hp", desc: "ลุกไหม้: เสียพลังชีวิต 1 หน่วยทุกเทิร์น (ลดเกราะก่อน ลดลงทีละหน่วยหลังสร้างความเสียหาย) สะสมได้ไม่เกิน 6 หน่วย" },
   storium:   { icon: "🌟", label: "สโตเรียม", cls: "bg-echo-magenta", desc: "ลำแสงสโตเรียม: การโจมตีครั้งถัดไปกลายเป็นตีหมู่ — เป้าหมายที่เลือกรับดาเมจปกติ(สูงสุด 4)+ลุกไหม้ที่เหลือ ผู้เล่นอื่นรับดาเมจเท่าลุกไหม้ของตัวเอง" },
@@ -1745,7 +1796,7 @@ function OtherPlayer({ p, phase, slot, targetable, onAttack, picked, onInspect, 
           {p.busted ? "แตก!" : `${p.score} แต้ม`}
         </div>
       )}
-      <StatusChips p={p} compact max={6} />
+      {!p.hisakawa && <StatusChips p={p} compact max={6} />}
     </div>
   );
 }
@@ -1801,7 +1852,7 @@ function MobileOpponent({ p, phase, targetable, onAttack, picked, onInspect, hos
         <TeamBadge teamId={p.teamId} />
         {/* เลือด + เกราะ อยู่บรรทัดเดียวแนวนอนเสมอ */}
         {p.hisakawa ? <TwinVitals p={p} compact /> : <LifeBar p={p} sm className="mt-0.5" />}
-        <StatusChips p={p} left compact max={4} />
+        {!p.hisakawa && <StatusChips p={p} left compact max={4} />}
       </div>
       {targetable && (
         <span className="p-target-badge shrink-0 text-[10px] px-2 py-0.5 rounded-full text-white whitespace-nowrap">
@@ -2153,6 +2204,49 @@ function TohnoLevelModal({ me, onPick, onClose }) {
 }
 // ---------- สนใจใช้บริการเราไหม (เจ้าแห่งเน็ตบ้าน): ข้อเสนอสัญญา — เป้าหมายเลือกตอบรับ/ปฏิเสธ ----------
 //  ไม่ตอบก่อนเปิดไพ่ = ถือว่าปฏิเสธ (โดนค่าปรับตามปกติ)
+// ---------- คอนเนอร์ RK800: HUD สกอร์ดวลระหว่างการไล่ล่า (ทุกคนเห็นเหมือนกัน) ----------
+function ConnorChaseHud({ chase }) {
+  return (
+    <div className="fixed top-2 left-1/2 -translate-x-1/2 z-40 pointer-events-none text-hard">
+      <div className="bg-black/70 border-2 border-echo-hp rounded-2xl px-4 py-1.5 text-center shadow-2xl">
+        <div className="text-[11px] font-bold opacity-80 tracking-wider">🚨 จับกุมขั้นเด็ดขาด — ไล่ล่า {chase.round}/{chase.rounds}</div>
+        <div className="text-lg font-black">
+          <span className="text-echo-cyan">{chase.by}</span>
+          <span className="mx-2 text-echo-gold">{chase.mine} : {chase.theirs}</span>
+          <span className="text-echo-hp">{chase.target}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- คอนเนอร์ RK800: คำขาดจับกุม — เป้าหมายระดับอาชญากรเลือกยอมจำนนหรือขัดขืน ----------
+//  ไม่ตอบก่อนเปิดไพ่ = ถือว่า "ขัดขืน" (ฝั่ง server ตัดสินให้ที่ resolveRound)
+function ConnorArrestModal({ ask, onAnswer }) {
+  return (
+    <div className="fixed inset-0 z-40 bg-black/70 grid place-items-center p-4">
+      <div className="bg-echo-navy rounded-2xl p-5 max-w-md w-full shadow-2xl border-2" style={{ borderColor: ask.color }}>
+        <div className="flex items-center gap-3 mb-3">
+          <img src={ask.img} alt="" className="w-20 h-14 object-cover rounded-xl shrink-0" />
+          <div>
+            <div className="text-lg font-black text-echo-hp">🚨 จับกุมขั้นเด็ดขาด</div>
+            <div className="text-sm opacity-80"><span className="font-bold" style={{ color: ask.color }}>{ask.from}</span> ประกาศจับกุมคุณในฐานะ "อาชญากร"</div>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 text-sm">
+          <div className="rounded-xl bg-white/5 border border-white/10 px-3 py-2">🙇 <b>ยอมจำนน</b> — ความเครียดรีเซ็ตเป็น 0 แต่ติดสตั้น 3 เทิร์น และสถานะ "ผู้ต้องหา" 5 เทิร์น</div>
+          <div className="rounded-xl bg-white/5 border border-white/10 px-3 py-2">🏃 <b>ขัดขืน</b> — เริ่มการไล่ล่า 3 เทิร์น (ไม่มีเฟสโจมตี ผู้เล่นคนอื่นถูกแช่) วัดกันว่าใครแต้มสูงกว่า — ชนะ (แต้มรวมมากกว่าคอนเนอร์ หรือเสมอ) = หนีรอด ความเครียดเป็น 0 และคอนเนอร์ติดสตั้น 3 เทิร์น · แพ้ = ความเครียดเป็น 0 สตั้น 3 เทิร์น เสียเลือด 3 หน่วย และติด "ผู้ต้องหา" 5 เทิร์น</div>
+          <div className="text-xs opacity-70">ไม่ตอบก่อนเปิดไพ่ = ถือว่าขัดขืน</div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          <Button variant="ghost" className="py-3" onClick={() => { clickSound(); onAnswer(true); }}>🙇 ยอมจำนน</Button>
+          <Button variant="gold" className="py-3" onClick={() => { clickSound(); onAnswer(false); }}>🏃 ขัดขืน</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ContractOfferModal({ offer, onAnswer }) {
   return (
     <div className="fixed inset-0 z-40 bg-black/70 grid place-items-center p-4">
@@ -2687,6 +2781,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
   const [bylethInfoOpen, setBylethInfoOpen] = useState(false);     // ไบเลธ: หน้าต่างอ่านผลของหลักสูตรที่เปิดอยู่ (ทุกคนเปิดได้)
   const [bylethSwordOpen, setBylethSwordOpen] = useState(false);   // ไบเลธ: หน้าต่างเลือกแบบของ "ดาบต้องสาป"
   const [bylethCourseOpen, setBylethCourseOpen] = useState(false);  // ไบเลธ: หน้าต่างเลือกหลักสูตรของท่าไม้ตาย
+  const [connorSel, setConnorSel] = useState(null);                 // คอนเนอร์: โหมดเลือกเป้าหมาย ("secondary" | "ultimate" | null)
   const [bylethStrikeSel, setBylethStrikeSel] = useState(false);    // ไบเลธ: โหมดเลือกเป้าหมายฟาดดาบ (เลือกตัวเองไม่ได้)
   const [msMarkSel, setMsMarkSel] = useState(false);         // ผู้สังหารเมจ: โหมดเลือกเป้าหมาย Witch Mark (เลือกตัวเองไม่ได้)
   const [msRuptureSel, setMsRuptureSel] = useState(false);   // ผู้สังหารเมจ: โหมดเลือกเป้าหมาย Mana Rupture (เลือกตัวเองไม่ได้)
@@ -2867,6 +2962,13 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
   const kaiRivalId = isKai && ((me?.statuses?.kaiRival1 || 0) > 0 || (me?.statuses?.kaiRival2 || 0) > 0) ? me?.kaiRivalId : null;
   // ---------- ทาคุมิ ฟุจิวาระ ----------
   const isTakumi = ch?.id === "takumi";
+  // คู่แฝดฮิซากาว่า: สกิลพื้นฐาน 1 คือ "ทางหนี" — สตั้น/หลับ/ห้ามใช้สกิล/MOON*CELL และโควตาสกิลของเทิร์น
+  //  ปิดปุ่มนี้ไม่ได้ (ฝั่งเซิร์ฟเวอร์เปิดทางไว้ตรงกันใน useSkill)
+  const isHisakawa = ch?.id === "hisakawa_sister";
+  // สลับตัวได้เทิร์นละ 1 ครั้ง — กดไปแล้วปุ่มต้องเป็น disable ให้เห็นชัดว่าเปลี่ยนกลับไม่ได้
+  //  (ตอนมีแฝดล้ม ช่องนี้กลายเป็นสกิลชุบซึ่งไม่ติดลิมิตนี้ จึงเช็คว่าแฝดยังครบทั้งคู่ด้วย)
+  const hisakawaSwitchLocked = !!(isHisakawa && me?.hisakawa?.switchedThisRound &&
+    (me.hisakawa.twins || []).every((t) => t.alive));
   const isTrigger = ch?.id === "ultraman_trigger";
   const triggerCircleLocked = isTrigger && !(me?.statuses?.triggerCircle > 0);
   const triggerMultiLocked = isTrigger && (me?.statuses?.triggerMulti > 0);
@@ -2980,6 +3082,8 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
     // นานายะ ชิกิ: สกิลพื้นฐาน (อันนี้ของนายรึเปล่า) เข้าโหมดเลือกเป้าหมายก่อนส่งไป server
     if (tier === "basic" && ch?.id === "nanaya") { setNanayaSel(true); setSkillOpen(false); return; }
     // อาจารย์ ไบเลธ: สกิลรองเปิดหน้าต่างเลือกแบบ (ฟาดทันที/เสริมดาบ) · ท่าไม้ตายเปิดหน้าต่างเลือกหลักสูตร
+    // คอนเนอร์ RK800: สกิลรอง/ท่าไม้ตายเข้าโหมดเลือกเป้าหมายก่อนส่งไป server
+    if ((tier === "secondary" || tier === "ultimate") && ch?.id === "conner") { setConnorSel(tier); setSkillOpen(false); return; }
     if (tier === "secondary" && ch?.id === "byleth") { setBylethSwordOpen(true); setSkillOpen(false); return; }
     if (tier === "ultimate" && ch?.id === "byleth") { setBylethCourseOpen(true); setSkillOpen(false); return; }
     // เจ้าแห่งเน็ตบ้าน: ท่าไม้ตายเข้าโหมดเลือกเป้าหมายยื่นข้อเสนอสัญญา
@@ -3095,6 +3199,11 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
     setBylethSwordOpen(false);
     if (mode === "strike") { setBylethStrikeSel(true); return; } // แบบที่ 1 ต้องเลือกเป้าหมายก่อน
     socket.emit("useSkill", { tier: "secondary", item: "buff" });
+  };
+  // เลือกเป้าหมาย ข่มขวัญ/จับกุม หรือ จัดการปิดคดี (คอนเนอร์) -> ส่งไป server ทันที
+  const pickConnor = (id) => {
+    socket.emit("useSkill", { tier: connorSel, targets: [id] });
+    setConnorSel(null);
   };
   const pickBylethStrike = (id) => {
     socket.emit("useSkill", { tier: "secondary", item: "strike", targets: [id] });
@@ -3263,6 +3372,9 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
     if (msRuptureSel && (phase !== "PLAYING" || me?.skillUsed || done)) setMsRuptureSel(false);
   }, [msRuptureSel, phase, me?.skillUsed, done]);
   useEffect(() => {
+    if (connorSel && (phase !== "PLAYING" || done)) setConnorSel(null);
+  }, [connorSel, phase, done]);
+  useEffect(() => {
     if (appleOpen && (phase !== "PLAYING" || done)) setAppleOpen(false);
   }, [appleOpen, phase, done]);
   useEffect(() => {
@@ -3310,6 +3422,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
     anataSel, dawnSel, appleSel, bbSel, shSel, skSel, doomSel, saObSel, escanorSel, ignisSel, ignisImpactSel, bgSel, bardPending, nanayaSel, tpSel,
     kaiCreateSel, kaiPunishSel, msMarkSel, msRuptureSel, psSealSel, pickPsSeal, gunSel, pickGunTarget,
     bylethStrikeSel, pickBylethStrike,
+    connorSel, pickConnor,
     pickAnata, pickDawn, pickGive, pickBb, pickSh, pickSk, pickDoom, pickSaOb, pickEscanor, pickIgnis, pickIgnisImpact, pickBg, pickBard, pickNanaya, pickTp,
     pickKaiCreate, pickKaiPunish, pickMsMark, pickMsRupture,
     kaiRivalId,
@@ -3473,6 +3586,12 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
           <button onClick={() => { clickSound(); setBylethStrikeSel(false); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
         </div>
       )}
+      {connorSel && (
+          <div className="shrink-0 text-center mt-1.5 text-hard">
+            <span className="text-lg font-black text-echo-hp animate-pulse">{connorSel === "ultimate" ? "⚖️ เลือกเป้าหมาย “จัดการปิดคดี” (เฉพาะระดับอาชญากร)" : "🚔 เลือกเป้าหมาย “ข่มขวัญ/จับกุม”"}</span>
+            <button onClick={() => { clickSound(); setConnorSel(null); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
+          </div>
+        )}
       {msMarkSel && (
           <div className="shrink-0 text-center mt-1.5 text-hard">
             <span className="text-lg font-black text-echo-hp animate-pulse">🩸 แตะเลือกเป้าหมาย Witch Mark</span>
@@ -3558,12 +3677,13 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
                   ป้ายที่โผล่ตอนกดสกิล (ไบเลธ) จะดันหลอดสกิลที่ ml-auto ล้นออกนอกกล่อง */}
               <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mt-2 min-w-0">
                 {me.hisakawa ? <TwinVitals p={me} compact /> : <LifeBar p={me} />}
-                <StatusChips p={me} left />
+                {!me.hisakawa && <StatusChips p={me} left />}
                 <DoomChargeBadge me={me} ch={ch} />
                 <TakutoStarBadge me={me} ch={ch} />
                 <TakumiGearBadge me={me} ch={ch} />
                 <EijiDodgeBadge me={me} ch={ch} />
                 <BylethKnowledgeBadge me={me} ch={ch} />
+                <ConnorStressBadge me={me} />
                 <span className="ml-auto flex items-center gap-1.5">
                   <span className="flex gap-1 p-1 rounded-lg bg-black/25">
                     {Array.from({ length: me.maxSkill }, (_, i) => (
@@ -3585,7 +3705,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
               {/* ช่องสกิล 3 อัน — ทรงพัด: ช่องกลาง (สกิลรอง) ยกสูงกว่าอีก 2 ช่อง */}
               <div className="grid grid-cols-3 gap-2 mt-3 items-end">
                 <div className="translate-y-1.5">
-                  <SkillSlot label="สกิลพื้นฐาน" tier="basic" skill={ch?.basic} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoHealPending || hakunoSecondaryPending || beatBasicLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || witchMarkCooldown || (me.skillUsed && !gambleRepeat && !isByleth && !isHaruka && !isApple && !isBard && !isTohno && !isHakuno && !isDoomguy && !isKai && !isTakumi) || harukaBasicLocked || bylethBasicLocked || bylethBudgetLocked || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || cassiusLocked || veilLocked || ktBasicLocked || (isHakuno && me.hakunoGenderSwitched) || doomBasicLocked || takutoBasicPending || tepeuCookLocked || tepeuPonderLocked || batStealthLocked || psBladeLocked} onUse={requestSkillUse} cooldown={witchMarkCd} ammo={isGambler ? me.gamblerUses : undefined} cost={isGambler && goldenOn ? halfCost(ch?.basic) : undefined} />
+                  <SkillSlot label="สกิลพื้นฐาน" tier="basic" skill={ch?.basic} points={me.skillPoints} disabled={!me.alive || phase !== "PLAYING" || (!isHisakawa && (done || noSkill || moonCellOn)) || hisakawaSwitchLocked || miyakoHealPending || hakunoSecondaryPending || beatBasicLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || witchMarkCooldown || (me.skillUsed && !gambleRepeat && !isByleth && !isHaruka && !isApple && !isBard && !isTohno && !isHakuno && !isDoomguy && !isKai && !isTakumi && !isHisakawa) || harukaBasicLocked || bylethBasicLocked || bylethBudgetLocked || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || cassiusLocked || veilLocked || ktBasicLocked || (isHakuno && me.hakunoGenderSwitched) || doomBasicLocked || takutoBasicPending || tepeuCookLocked || tepeuPonderLocked || batStealthLocked || psBladeLocked} onUse={requestSkillUse} cooldown={witchMarkCd} ammo={isGambler ? me.gamblerUses : undefined} cost={isGambler && goldenOn ? halfCost(ch?.basic) : undefined} />
                 </div>
                 <div className="-translate-y-2">
                   <SkillSlot label="สกิลรอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || (me.skillUsed && !isByleth && !isBard && !isDoomguy && !isKai && !isTakumi) || bylethSecLocked || bylethBudgetLocked || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked || batKarmaLocked || psSealLocked || harukaSecLocked || burdenCooldown} onUse={requestSkillUse} cooldown={burdenCd} ammo={isApple ? me.appleGiveUses : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : undefined} />
@@ -3732,6 +3852,9 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
         <FlyingCardsLayer flights={cardFlights} onDone={removeCardFlight} />
         {state.yunaFieldFx === "beatbark" && <div className="field-fx-beatbark" />}
         {state.bylethFieldFx && <div className={`field-fx-byleth-${state.bylethFieldFx}`} />}
+        {/* คอนเนอร์ RK800: ออร่าขอบจอแดงดุดัน + สกอร์ดวลระหว่างการไล่ล่า (เกตเดียวกับผลจริงของโหมดไล่ล่า) */}
+        {state.connorFieldFx === "chase" && <div className="field-fx-connor-chase" />}
+        {state.connorChase && <ConnorChaseHud chase={state.connorChase} />}
         {bylethSwordOpen && me && <BylethSwordModal me={me} onPick={pickBylethSword} onClose={() => setBylethSwordOpen(false)} />}
         {bylethCourseOpen && me && <BylethCourseModal me={me} onPick={pickBylethCourse} onClose={() => setBylethCourseOpen(false)} />}
         {bylethInfoOpen && <BylethCourseInfoModal course={state.bylethFieldFx} onClose={() => setBylethInfoOpen(false)} />}
@@ -3766,6 +3889,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
           hakunoCmdOpen={hakunoCmdOpen} onUseHakunoCmd={useHakunoCmd} onCloseHakunoCmd={() => setHakunoCmdOpen(false)}
           appleOpen={appleOpen} onPickAppleItem={pickAppleItem} onCloseApple={() => setAppleOpen(false)}
           tohnoOpen={tohnoOpen} onPickTohnoLevel={pickTohnoLevel} onCloseTohno={() => setTohnoOpen(false)}
+          connorArrestAsk={state.connorArrestAsk} onAnswerConnorArrest={(submit) => socket.emit("connorArrestAnswer", { submit })}
           contractOffer={state.contractOffer} onAnswerContract={(a) => socket.emit("contractAnswer", { accept: a, fromId: state.contractOffer?.fromId })}
           locaOffer={state.locaOffer} onAnswerLoca={(a) => socket.emit("locaAnswer", { accept: a, fromId: state.locaOffer?.fromId })}
           renewAsk={state.renewAsk} onAnswerRenew={(a) => socket.emit("contractAnswer", { accept: a })}
@@ -3963,6 +4087,12 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
       )}
 
       {/* โหมดเลือกเป้าหมาย Witch Mark / Mana Rupture (ผู้สังหารเมจ) — เลือกได้เฉพาะคนอื่น */}
+      {connorSel && (
+        <div className="absolute top-[22%] left-1/2 -translate-x-1/2 z-40 text-center text-hard whitespace-nowrap">
+          <span className="text-xl font-black text-echo-hp animate-pulse bg-black/60 rounded-full px-5 py-1.5">{connorSel === "ultimate" ? "⚖️ เลือกเป้าหมาย “จัดการปิดคดี” (เฉพาะระดับอาชญากร)" : "🚔 เลือกเป้าหมาย “ข่มขวัญ/จับกุม”"}</span>
+          <button onClick={() => { clickSound(); setConnorSel(null); }} className="ml-2 text-sm font-bold bg-black/60 rounded-full px-3 py-1 border border-white/30">ยกเลิก</button>
+        </div>
+      )}
       {msMarkSel && (
         <div className="absolute top-[22%] left-1/2 -translate-x-1/2 z-40 text-center text-hard whitespace-nowrap">
           <span className="text-xl font-black text-echo-hp animate-pulse bg-black/60 rounded-full px-5 py-1.5">🩸 คลิกเลือกเป้าหมาย Witch Mark</span>
@@ -4022,6 +4152,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
                   <TakumiGearBadge me={me} ch={ch} />
                   <EijiDodgeBadge me={me} ch={ch} />
                   <BylethKnowledgeBadge me={me} ch={ch} />
+                <ConnorStressBadge me={me} />
                 </div>
                 {isHakuno && <HakunoCommandButton me={me} usable={hakunoCmdUsable} onOpen={() => setHakunoCmdOpen(true)} className="w-14 h-11 shrink-0 mt-1" />}
                 {isEiji && <EijiOrdinalButton me={me} usable={eijiOrdinalUsable} onPress={useEijiOrdinal} className="w-14 h-11 shrink-0 mt-1" />}
@@ -4050,7 +4181,8 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
                   className="p-status-click flex items-start mt-2 -ml-1 px-1 py-0.5 max-w-[11rem] sm:max-w-[15rem] max-h-[54px] overflow-hidden"
                   title="แตะเพื่อดูรายละเอียดสถานะ+เวลาคงเหลือ"
                 >
-                  {meStatuses.length > 0 ? <StatusChips p={me} left /> : <span className="text-xs opacity-60 text-hard whitespace-nowrap">ไม่มีสถานะ</span>}
+                  {me.hisakawa ? <span className="text-xs opacity-60 text-hard whitespace-nowrap">แตะดูสถานะรวม</span>
+                    : meStatuses.length > 0 ? <StatusChips p={me} left /> : <span className="text-xs opacity-60 text-hard whitespace-nowrap">ไม่มีสถานะ</span>}
                 </button>
               </div>
             </div>
@@ -4132,7 +4264,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
               <div className="flex flex-col items-center gap-1.5">
                 <div className="flex items-end gap-2 sm:gap-3">
                   <div className="w-40 sm:w-48">
-                    <SkillSlot size="lg" label="พื้นฐาน" tier="basic" skill={ch?.basic} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoHealPending || hakunoSecondaryPending || beatBasicLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || witchMarkCooldown || (me.skillUsed && !gambleRepeat && !isByleth && !isHaruka && !isApple && !isBard && !isTohno && !isHakuno && !isDoomguy && !isKai && !isTakumi) || harukaBasicLocked || bylethBasicLocked || bylethBudgetLocked || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || cassiusLocked || veilLocked || ktBasicLocked || (isHakuno && me.hakunoGenderSwitched) || doomBasicLocked || takutoBasicPending || tepeuCookLocked || tepeuPonderLocked || batStealthLocked || psBladeLocked} onUse={requestSkillUse} cooldown={witchMarkCd} ammo={isGambler ? me.gamblerUses : undefined} cost={isGambler && goldenOn ? halfCost(ch?.basic) : undefined} />
+                    <SkillSlot size="lg" label="พื้นฐาน" tier="basic" skill={ch?.basic} points={me.skillPoints} disabled={!me.alive || phase !== "PLAYING" || (!isHisakawa && (done || noSkill || moonCellOn)) || hisakawaSwitchLocked || miyakoHealPending || hakunoSecondaryPending || beatBasicLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || witchMarkCooldown || (me.skillUsed && !gambleRepeat && !isByleth && !isHaruka && !isApple && !isBard && !isTohno && !isHakuno && !isDoomguy && !isKai && !isTakumi && !isHisakawa) || harukaBasicLocked || bylethBasicLocked || bylethBudgetLocked || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || cassiusLocked || veilLocked || ktBasicLocked || (isHakuno && me.hakunoGenderSwitched) || doomBasicLocked || takutoBasicPending || tepeuCookLocked || tepeuPonderLocked || batStealthLocked || psBladeLocked} onUse={requestSkillUse} cooldown={witchMarkCd} ammo={isGambler ? me.gamblerUses : undefined} cost={isGambler && goldenOn ? halfCost(ch?.basic) : undefined} />
                   </div>
                   <div className="w-40 sm:w-48">
                     <SkillSlot size="lg" label="รอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || (me.skillUsed && !isByleth && !isBard && !isDoomguy && !isKai && !isTakumi) || bylethSecLocked || bylethBudgetLocked || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked || batKarmaLocked || psSealLocked || harukaSecLocked || burdenCooldown} onUse={requestSkillUse} cooldown={burdenCd} ammo={isApple ? me.appleGiveUses : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : undefined} />
@@ -4221,6 +4353,9 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
       <FlyingCardsLayer flights={cardFlights} onDone={removeCardFlight} />
       {state.yunaFieldFx === "beatbark" && <div className="field-fx-beatbark" />}
       {state.bylethFieldFx && <div className={`field-fx-byleth-${state.bylethFieldFx}`} />}
+        {/* คอนเนอร์ RK800: ออร่าขอบจอแดงดุดัน + สกอร์ดวลระหว่างการไล่ล่า (เกตเดียวกับผลจริงของโหมดไล่ล่า) */}
+        {state.connorFieldFx === "chase" && <div className="field-fx-connor-chase" />}
+        {state.connorChase && <ConnorChaseHud chase={state.connorChase} />}
       {bylethSwordOpen && me && <BylethSwordModal me={me} onPick={pickBylethSword} onClose={() => setBylethSwordOpen(false)} />}
       {bylethCourseOpen && me && <BylethCourseModal me={me} onPick={pickBylethCourse} onClose={() => setBylethCourseOpen(false)} />}
       {bylethInfoOpen && <BylethCourseInfoModal course={state.bylethFieldFx} onClose={() => setBylethInfoOpen(false)} />}
@@ -4258,7 +4393,8 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
         hakunoCmdOpen={hakunoCmdOpen} onUseHakunoCmd={useHakunoCmd} onCloseHakunoCmd={() => setHakunoCmdOpen(false)}
         appleOpen={appleOpen} onPickAppleItem={pickAppleItem} onCloseApple={() => setAppleOpen(false)}
         tohnoOpen={tohnoOpen} onPickTohnoLevel={pickTohnoLevel} onCloseTohno={() => setTohnoOpen(false)}
-        contractOffer={state.contractOffer} onAnswerContract={(a) => socket.emit("contractAnswer", { accept: a, fromId: state.contractOffer?.fromId })}
+        connorArrestAsk={state.connorArrestAsk} onAnswerConnorArrest={(submit) => socket.emit("connorArrestAnswer", { submit })}
+          contractOffer={state.contractOffer} onAnswerContract={(a) => socket.emit("contractAnswer", { accept: a, fromId: state.contractOffer?.fromId })}
         locaOffer={state.locaOffer} onAnswerLoca={(a) => socket.emit("locaAnswer", { accept: a, fromId: state.locaOffer?.fromId })}
         renewAsk={state.renewAsk} onAnswerRenew={(a) => socket.emit("contractAnswer", { accept: a })}
         allyChoices={state.allyChoices} onPickAlly={(id) => socket.emit("riddheAlly", { targetId: id })} onDeclineAlly={() => socket.emit("riddheAlly", {})}
