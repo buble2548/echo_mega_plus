@@ -1236,17 +1236,17 @@ body {
 }
 .p-panel::before { display: none; }
 
+/* มุมซ้ายบน ไม่ใช่กลางบน — ช่องการ์ดผู้เล่นแถวบนสุดอยู่ที่ top 4-9% กลางจอ ถ้าวางกลางจะทับกันเสมอ */
 .bd-top {
   position: absolute;
-  top: 0.9rem;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 0.8rem;
+  left: 0.9rem;
   display: flex;
   align-items: center;
-  gap: 1.5rem;
-  padding: 0.5rem 1.8rem 0.55rem;
+  gap: 0.85rem;
+  padding: 0.4rem 1rem 0.45rem;
   overflow: hidden;
-  clip-path: polygon(18px 0, calc(100% - 18px) 0, 100% 100%, 0 100%);
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 100%, 0 100%);
   background: linear-gradient(100deg, rgba(46, 17, 69, 0.92), rgba(10, 6, 17, 0.94));
   border-bottom: 1px solid rgba(232, 191, 90, 0.55);
 }
@@ -1265,8 +1265,8 @@ body {
   position: relative;
   display: grid;
   place-items: center;
-  width: 3rem;
-  height: 3rem;
+  width: 2.7rem;
+  height: 2.7rem;
 }
 .bd-timer svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .bd-timer-ring { fill: none; stroke: rgba(185, 95, 196, 0.35); stroke-width: 2; }
@@ -1330,3 +1330,60 @@ body {
   line-height: 1.35rem;
   text-align: center;
 }
+
+.dc {
+  --rot: 1;
+  position: fixed;
+  inset: 0;
+  z-index: 43;
+  overflow: hidden;
+  pointer-events: none;
+}
+.dc-wash {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 62% at 50% 50%, rgba(109, 47, 131, 0.5), transparent 70%),
+    radial-gradient(ellipse 120% 40% at 50% 50%, rgba(232, 196, 239, 0.14), transparent 70%),
+    rgba(6, 3, 10, 0.46);
+  animation: acWash 2s ease both;
+}
+.dc-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 56px;
+  height: 78px;
+  margin: -39px 0 0 -28px;
+  border-radius: 9px;
+  background: linear-gradient(150deg, #7b3a90 0%, #2e1145 58%, #0c0614 100%);
+  border: 1px solid rgba(232, 196, 239, 0.55);
+  box-shadow: 0 12px 26px -10px rgba(0, 0, 0, 0.95), 0 0 20px -4px rgba(185, 95, 196, 0.85);
+  animation: dcCard cubic-bezier(0.25, 0.7, 0.35, 1) both;
+}
+.dc-card::after {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border-radius: 5px;
+  border: 1px solid rgba(232, 196, 239, 0.28);
+}
+@keyframes dcCard {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg) scale(0.25); opacity: 0; }
+  14% { opacity: 1; }
+  78% { opacity: 1; }
+  100% { transform: translate3d(var(--dx, 30vw), var(--dy, -18vh), 0) rotate(var(--dr, 420deg)) scale(1.05); opacity: 0; }
+}
+.dc-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 24vmin;
+  height: 24vmin;
+  margin: -12vmin 0 0 -12vmin;
+  border-radius: 50%;
+  border: 3px solid #e8c4ef;
+  box-shadow: 0 0 70px 16px rgba(185, 95, 196, 0.6), inset 0 0 50px 10px rgba(232, 196, 239, 0.28);
+  animation: acRing 2s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.dc-text { animation: acText 2s cubic-bezier(0.16, 1, 0.3, 1) both; }

@@ -265,6 +265,52 @@ function AttackSkillCard({ s, i }) {
   );
 }
 
+function DrawCall() {
+  const cards = Array.from({ length: 11 }, (_, i) => {
+    const a = (i / 11) * Math.PI * 2 + 0.4;
+    const d = 30 + (i % 4) * 9;
+    return {
+      dx: `${(Math.cos(a) * d).toFixed(1)}vw`,
+      dy: `${(Math.sin(a) * d * 0.82).toFixed(1)}vh`,
+      dr: `${(i % 2 ? 1 : -1) * (320 + (i % 5) * 90)}deg`,
+      dur: 1.35 + (i % 4) * 0.16,
+      delay: (i % 6) * 0.045,
+    };
+  });
+  return (
+    <div className="dc">
+      <div className="dc-wash" />
+      <span className="dc-ring" />
+      {cards.map((c, i) => (
+        <span
+          key={i}
+          className="dc-card"
+          style={{
+            "--dx": c.dx,
+            "--dy": c.dy,
+            "--dr": c.dr,
+            animationDuration: `${c.dur}s`,
+            animationDelay: `${c.delay}s`,
+          }}
+        />
+      ))}
+      <div className="absolute inset-0 grid place-items-center">
+        <div
+          className="dc-text av-title av-title-thai text-8xl"
+          style={{
+            background: "linear-gradient(180deg,#fff 0%,#e8c4ef 40%,#b95fc4 70%,#3b1454 100%)",
+            WebkitBackgroundClip: "text",
+            backgroundClip: "text",
+            color: "transparent",
+          }}
+        >
+          เริ่มจั่วการ์ด
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AttackCall() {
   const sparks = Array.from({ length: 16 }, (_, i) => {
     const a = (i / 16) * Math.PI * 2 + 0.25;
@@ -825,7 +871,6 @@ function ModalMounts({
 }
 
 // ชื่อเฟส (โชว์อนิเมชันตอนเปลี่ยนเฟส)
-const PHASE_NAMES = { PLAYING: "🎴 สุ่มการ์ด" };
 
 // สถานะที่ผูกกับท่าไม้ตายของแต่ละตัวละคร — ใช้เช็คว่ากำลังมีผลอยู่ไหม (กดซ้ำไม่ได้จนกว่าจะหมดเวลา)
 //  หมายเหตุ: โคโตเนะไม่อยู่ในตารางนี้ — สถานะ kready คือ "ร่าง [พร้อมลุย]" ที่ต้องยังอยู่ตอนกดท่าไม้ตายในร่าง
@@ -3424,6 +3469,8 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
   const [bagOpen, setBagOpen] = useState(false);     // ร้านค้ามายา (patch 2.2 full): เปิดดูคลังของตัวเอง
   const [shopOpen, setShopOpen] = useState(false);
   const [attackCall, setAttackCall] = useState(false);
+  const [drawCall, setDrawCall] = useState(false);
+  const prevPhaseRef = useRef(null);
   const [heraldSeq, setHeraldSeq] = useState(0);
   const [shopHerald, setShopHerald] = useState(false);   // ร้านค้ามายา: เปิดหน้าร้านค้า
   const [deckOpen, setDeckOpen] = useState(false);   // สมุดการ์ดกองกลาง: กดที่กองการ์ดกลางเพื่อดู
@@ -3463,6 +3510,17 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
   useEffect(() => {
     if (phase !== "TRANSITION") return;
     playSfx("change_cutscene");
+  }, [phase, state.roundNumber]);
+  // เข้าช่วงจั่วการ์ด -> ฉากประกาศ "เริ่มจั่วการ์ด"
+  //  ถ้าเพิ่งผ่านแบนเนอร์เปลี่ยนเทิร์นมา ไม่เล่นเสียงซ้ำ (แบนเนอร์ประกาศเสียงไปแล้ว)
+  useEffect(() => {
+    const prev = prevPhaseRef.current;
+    prevPhaseRef.current = phase;
+    if (phase !== "PLAYING") return undefined;
+    if (prev !== "TRANSITION") playSfx("change_cutscene");
+    setDrawCall(true);
+    const t = setTimeout(() => setDrawCall(false), 2000);
+    return () => clearTimeout(t);
   }, [phase, state.roundNumber]);
   // ร้านค้ามายา (patch 2.2 full): เด้งหน้าร้านค้าอัตโนมัติครั้งเดียวทุกครั้งที่มีสินค้าชุดใหม่ (รอบร้านค้าเปลี่ยน)
   useEffect(() => {
@@ -4664,11 +4722,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
         )}
 
         {/* ---------- อนิเมชันเปลี่ยนเฟส ---------- */}
-        {PHASE_NAMES[phase] && (
-          <div key={`${phase}-${state.roundNumber}`} className="phase-intro fixed top-[38%] left-1/2 z-40 pointer-events-none">
-            <div className="text-3xl font-black bg-black/70 rounded-full px-6 py-2.5 whitespace-nowrap text-white text-hard border-2 border-white/20">{PHASE_NAMES[phase]}</div>
-          </div>
-        )}
+        {drawCall && <DrawCall />}
 
         {/* ---------- overlay ที่ใช้ร่วมกับจอคอม ---------- */}
         <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} timeLeft={state.timeLeft} flash={flash} notice={notice} cycleFx={cycleFx} overloadForce={state.overloadForce} bylethCourse={state.bylethFieldFx} onOpenBylethCourse={() => setBylethInfoOpen(true)} />
@@ -5184,11 +5238,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
       )}
 
       {/* ---------- อนิเมชันเปลี่ยนเฟส (กลางจอ) ---------- */}
-      {PHASE_NAMES[phase] && (
-        <div key={`${phase}-${state.roundNumber}`} className="phase-intro absolute top-[38%] left-1/2 z-40 pointer-events-none">
-          <div className="text-4xl sm:text-5xl font-black bg-black/70 rounded-full px-8 py-3 whitespace-nowrap text-white text-hard border-2 border-white/20">{PHASE_NAMES[phase]}</div>
-        </div>
-      )}
+      {drawCall && <DrawCall />}
 
       {/* ---------- overlay ที่ใช้ร่วมกับมือถือ ---------- */}
       <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} timeLeft={state.timeLeft} flash={flash} notice={notice} cycleFx={cycleFx} overloadForce={state.overloadForce} bylethCourse={state.bylethFieldFx} onOpenBylethCourse={() => setBylethInfoOpen(true)} />
