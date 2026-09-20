@@ -3468,9 +3468,12 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
   const [statusViewId, setStatusViewId] = useState(null); // ดูสถานะผู้เล่นคนอื่น (แตะการ์ดตอนไม่ได้เลือกเป้า)
   const [bagOpen, setBagOpen] = useState(false);     // ร้านค้ามายา (patch 2.2 full): เปิดดูคลังของตัวเอง
   const [shopOpen, setShopOpen] = useState(false);
-  const [attackCall, setAttackCall] = useState(false);
-  const [drawCall, setDrawCall] = useState(false);
+  // นับครั้งการแสดง ไม่ใช่ true/false — ค่าต้องเปลี่ยนทุกครั้งที่เข้าช่วง ไม่งั้น React ไม่ remount
+  // แล้วอนิเมชันจะเล่นแค่ครั้งแรกครั้งเดียวตลอดทั้งแมตช์
+  const [attackCall, setAttackCall] = useState(0);
+  const [drawCall, setDrawCall] = useState(0);
   const prevPhaseRef = useRef(null);
+  const callTimers = useRef({ atk: null, draw: null });
   const [heraldSeq, setHeraldSeq] = useState(0);
   const [shopHerald, setShopHerald] = useState(false);   // ร้านค้ามายา: เปิดหน้าร้านค้า
   const [deckOpen, setDeckOpen] = useState(false);   // สมุดการ์ดกองกลาง: กดที่กองการ์ดกลางเพื่อดู
@@ -3500,11 +3503,12 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
   }, [phase, actualWinner, state.roundNumber]);
   // เข้าช่วงโจมตี -> ฉากประกาศ "เริ่มโจมตีได้" + เสียงเปลี่ยนช่วง (ไม่บังการกดเลือกเป้า)
   useEffect(() => {
-    if (phase !== "ATTACK") return undefined;
+    if (phase !== "ATTACK") return;
     playSfx("change_cutscene");
-    setAttackCall(true);
-    const t = setTimeout(() => setAttackCall(false), 2200);
-    return () => clearTimeout(t);
+    setAttackCall((n) => n + 1);
+    // ตัวตั้งเวลาปิดต้องอยู่นอก cleanup ของ effect — ผู้เล่นเลือกเป้าเร็วกว่าฉากจบได้เสมอ
+    clearTimeout(callTimers.current.atk);
+    callTimers.current.atk = setTimeout(() => setAttackCall(0), 2200);
   }, [phase, state.roundNumber]);
   // ฉากบอกจำนวนเทิร์น -> เสียงเปลี่ยนช่วงเดียวกัน
   useEffect(() => {
@@ -3516,12 +3520,16 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
   useEffect(() => {
     const prev = prevPhaseRef.current;
     prevPhaseRef.current = phase;
-    if (phase !== "PLAYING") return undefined;
+    if (phase !== "PLAYING") return;
     if (prev !== "TRANSITION") playSfx("change_cutscene");
-    setDrawCall(true);
-    const t = setTimeout(() => setDrawCall(false), 2000);
-    return () => clearTimeout(t);
+    setDrawCall((n) => n + 1);
+    clearTimeout(callTimers.current.draw);
+    callTimers.current.draw = setTimeout(() => setDrawCall(0), 2000);
   }, [phase, state.roundNumber]);
+  useEffect(() => () => {
+    clearTimeout(callTimers.current.atk);
+    clearTimeout(callTimers.current.draw);
+  }, []);
   // ร้านค้ามายา (patch 2.2 full): เด้งหน้าร้านค้าอัตโนมัติครั้งเดียวทุกครั้งที่มีสินค้าชุดใหม่ (รอบร้านค้าเปลี่ยน)
   useEffect(() => {
     const seq = state.shop?.[0]?.id?.split("_")[1];
@@ -4722,7 +4730,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
         )}
 
         {/* ---------- อนิเมชันเปลี่ยนเฟส ---------- */}
-        {drawCall && <DrawCall />}
+        {drawCall > 0 && <DrawCall key={drawCall} />}
 
         {/* ---------- overlay ที่ใช้ร่วมกับจอคอม ---------- */}
         <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} timeLeft={state.timeLeft} flash={flash} notice={notice} cycleFx={cycleFx} overloadForce={state.overloadForce} bylethCourse={state.bylethFieldFx} onOpenBylethCourse={() => setBylethInfoOpen(true)} />
@@ -4739,7 +4747,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
         {/* ---------- แบนเนอร์รอบถัดไป ---------- */}
         {phase === "TRANSITION" && <RoundBanner round={state.roundNumber + 1} />}
 
-        {attackCall && <AttackCall />}
+        {attackCall > 0 && <AttackCall key={attackCall} />}
 
         {shopHerald && <ShopHerald />}
 
@@ -5238,7 +5246,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
       )}
 
       {/* ---------- อนิเมชันเปลี่ยนเฟส (กลางจอ) ---------- */}
-      {drawCall && <DrawCall />}
+      {drawCall > 0 && <DrawCall key={drawCall} />}
 
       {/* ---------- overlay ที่ใช้ร่วมกับมือถือ ---------- */}
       <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} timeLeft={state.timeLeft} flash={flash} notice={notice} cycleFx={cycleFx} overloadForce={state.overloadForce} bylethCourse={state.bylethFieldFx} onOpenBylethCourse={() => setBylethInfoOpen(true)} />
@@ -5255,7 +5263,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
       {/* ---------- แบนเนอร์รอบถัดไป ---------- */}
       {phase === "TRANSITION" && <RoundBanner round={state.roundNumber + 1} />}
 
-      {attackCall && <AttackCall />}
+      {attackCall > 0 && <AttackCall key={attackCall} />}
 
       {shopHerald && <ShopHerald />}
 
