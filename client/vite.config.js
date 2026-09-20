@@ -10,6 +10,10 @@ export default defineConfig({
     proxy: {
       "/socket.io": { target: "http://localhost:3000", ws: true },
     },
+    // ไฟล์ใน public/ เป็นสื่อล้วน (เพลง/วีดีโอ/รูป) เสิร์ฟตรงอยู่แล้ว ไม่ต้องเฝ้าดู
+    // ถ้าเฝ้า แล้วมีการคัดลอกไฟล์ใหญ่เข้ามาระหว่าง dev server รันอยู่ Windows จะล็อกไฟล์
+    // จน watcher โยน EBUSY แล้ว dev server ตายทั้งตัว
+    watch: { ignored: ["**/public/**"] },
   },
   build: { outDir: "dist", emptyOutDir: true },
 });

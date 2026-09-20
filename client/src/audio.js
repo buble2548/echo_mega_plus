@@ -7,10 +7,12 @@
 // ============================================================
 
 const FILES = {
-  main_home: "/theme_song/main_home.mp3",
-  card_prepare_turn: "/theme_song/card_prepare_turn.mp3",
-  new_morning: "/theme_song/new_morning.mp3", // เพลงช่วงกลางวัน (patch พิเศษ)
-  new_night: "/theme_song/new_night.mp3",     // เพลงช่วงกลางคืน (patch พิเศษ)
+  main_home: "/theme_song/main_home_4.0.mp3",
+  new_morning: "/theme_song/day_4.0.mp3",    // เพลงช่วงกลางวัน
+  new_night: "/theme_song/night_4.0.mp3",    // เพลงช่วงกลางคืน
+  battle_phase: "/theme_song/battle_phase.mp3", // เพลงเฉพาะช่วงโจมตี — เริ่มใหม่ทุกครั้งที่เข้าช่วง
+  buy_something: "/effect_sound/buy_something.mp3",
+  change_cutscene: "/effect_sound/change_cutscene.mp3",
   overload_force: "/overload_force/overload_force_connect.m4a",
   muimi: "/overload_force/overload_force_theme.mp3",
   muimi_normal_hit: "/characters/muimi/mumi_normal_hit.mp3",
@@ -144,7 +146,7 @@ const FILES = {
   sc_glitch: "/mooncell/sond_effect/cut_glit.mp3",
   sc_noti: "/mooncell/sond_effect/noti.mp3",
   sc_noti2: "/mooncell/sond_effect/noti2.mp3",
-  action_button: "/effect_sound/action_button.wav",
+  action_button: "/effect_sound/click.mp3",
   trun_change: "/effect_sound/trun_change.wav",
   attack: "/effect_sound/attack.wav",
 };
@@ -269,7 +271,7 @@ export function suspendMusic() {
 }
 
 // seq: identity ของการเปิดเพลงสกิล — เปิดท่าใหม่/คนใหม่ทับเพลงเดิม = seq ใหม่ -> เริ่มจากต้น
-// เพลงทั่วไป (main_home / card_prepare_turn) ไม่ส่ง seq -> เล่นต่อจากจุดเดิม (เฉพาะในแมตช์)
+// เพลงทั่วไป (main_home) ไม่ส่ง seq -> เล่นต่อจากจุดเดิม (เฉพาะในแมตช์)
 export function playMusic(name, seq) {
   if (!FILES[name]) return;
   const a = getMusic(name);

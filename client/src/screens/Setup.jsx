@@ -1,208 +1,262 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { socket } from "../socket";
-import { clickSound } from "../audio";
 import { POSITIONS, POSITION_COLORS } from "../data/positions";
+import { AvScene, Medallion, SealButton, AvButton, Crest, Crystals, AvRule } from "../components/avalon";
+import ColorForge, { hexToHsv, hsvToHex } from "../components/ColorForge";
+import { PATCH_NAME, PATCH_VERSION, AUTHOR } from "../data/patch";
 
-const P_DISPLAY = "var(--font-p-display)";
+const LEVEL = 2;
+const N = POSITIONS.length;
 
-// หน้าที่ 2: ตั้งชื่อ + เลือกตำแหน่ง P1-P6
-// เลย์เอาต์ใหม่: แบ่งจอเป็น 2 ฝั่ง — ซ้าย = โลโก้/แฟลเวอร์เท็กซ์ (คงที่),
-// ขวา = ช่องกรอกชื่อ + การ์ดที่นั่งเอียง 3 มิติแบบเมนูตัวละคร Persona
-//  taken = ตำแหน่งที่คนอื่นจอง/เข้าเล่นแล้ว (server ส่งมาแบบไม่รวมของเราเอง)
-export default function Setup({ taken, initialName = "", initialPos = null, onNext }) {
+function arcPlace(i) {
+  const t = N > 1 ? i / (N - 1) : 0.5;
+  return {
+    left: `${8 + t * 76}%`,
+    bottom: `${Math.sin(t * Math.PI) * 13}vh`,
+    rotate: (t - 0.5) * 18,
+  };
+}
+
+export default function Setup({ taken, initialName = "", initialPos = null, initialColor = null, onNext }) {
   const [name, setName] = useState(initialName);
   const [pos, setPos] = useState(initialPos);
+  const [hsv, setHsv] = useState(() => hexToHsv(initialColor || POSITION_COLORS[initialPos] || "#9B4F96"));
+  const [step, setStep] = useState(initialPos ? "name" : "seat");
+  const [leaving, setLeaving] = useState(false);
+  const stepTimer = useRef(null);
+  const inputRef = useRef(null);
+
+  const hex = hsvToHex(hsv.h, hsv.s, hsv.v);
 
   useEffect(() => {
     if (pos && taken.includes(pos)) {
       setPos(null);
-      alert("ตำแหน่งนี้เพิ่งถูกคนอื่นเลือกไป ลองเลือกใหม่นะ");
+      setStep("seat");
+      setLeaving(false);
+      alert("ที่นั่งนี้เพิ่งถูกคนอื่นเลือกไป ลองเลือกใหม่นะ");
     }
   }, [taken, pos]);
 
+  useEffect(() => {
+    if (step !== "name") return undefined;
+    const t = setTimeout(() => inputRef.current?.focus(), 420);
+    return () => clearTimeout(t);
+  }, [step]);
+
+  useEffect(() => () => clearTimeout(stepTimer.current), []);
+
+  const advance = (next, delay) => {
+    setLeaving(true);
+    clearTimeout(stepTimer.current);
+    stepTimer.current = setTimeout(() => {
+      setStep(next);
+      setLeaving(false);
+    }, delay);
+  };
+
   const pick = (n) => {
-    clickSound();
+    if (leaving) return;
     setPos(n);
+    setHsv(hexToHsv(POSITION_COLORS[n] || "#9B4F96"));
     socket.emit("reserve", { position: n });
+    advance("color", 600);
   };
 
   const submit = () => {
-    clickSound();
-    if (!name.trim()) return alert("กรุณาตั้งชื่อก่อนนะ");
-    if (!pos) return alert("เลือกตำแหน่งผู้เล่นก่อนนะ");
-    onNext(name.trim(), pos);
+    if (!name.trim()) return alert("กรุณาใส่ชื่อก่อนนะ");
+    if (!pos) return alert("เลือกที่นั่งก่อนนะ");
+    onNext(name.trim(), pos, hex);
   };
 
-  const ready = name.trim() && pos;
+  const ready = !!(name.trim() && pos);
 
   return (
-    <div className="p-bg relative min-h-screen overflow-hidden flex flex-col lg:flex-row">
-      {/* อนุภาคลอยประดับฉาก */}
-      {[10, 24, 38, 52, 66, 80, 92].map((l, i) => (
-        <span
-          key={l}
-          className="p-particle"
-          style={{ left: `${l}%`, animationDuration: `${9 + (i % 4) * 3}s`, animationDelay: `${i * 1.4}s` }}
-        />
-      ))}
+    <AvScene level={LEVEL} seed={23} className="h-screen w-screen overflow-hidden">
+      <span
+        className="av-numeral absolute select-none z-0"
+        style={{
+          right: "5vw",
+          top: "8vh",
+          fontSize: "42vh",
+          opacity: step === "seat" ? 0.22 : 1,
+          WebkitTextStroke: step === "seat" ? undefined : `3px ${hex}66`,
+          transition: "opacity .6s ease",
+        }}
+      >
+        {pos ? `0${pos}` : "00"}
+      </span>
 
-      {/* ---------- ฝั่งซ้าย: แผงโลโก้ "พังทะลุ" เข้ามาในฝั่งขวา แบบกระจกแตกเรืองแสง ---------- */}
-      <div className="relative z-10 shrink-0 w-full lg:w-[34%] h-40 lg:h-auto">
-        <div
-          className="p-intrusion absolute inset-0"
-          style={{
-            background: "linear-gradient(155deg,var(--color-p-accent-deep),var(--color-p-black) 65%)",
-          }}
-        />
-        <div className="relative h-full flex flex-col justify-center px-6 lg:px-10 py-6">
-          <span className="p-logo-wrap self-start">
-            <span className="p-logo-glow" />
-            <img
-              src="/image/logo_current.webp"
-              alt="ECHO"
-              className="p-logo-img h-20 sm:h-24 lg:h-32 w-auto"
-            />
-          </span>
-          <div
-            className="mt-3 h-1 w-16"
-            style={{ background: "linear-gradient(90deg,var(--color-p-accent-bright),transparent)" }}
-          />
-          <p
-            className="hidden lg:block mt-5 text-white/70 text-sm leading-relaxed max-w-xs"
-            style={{ fontFamily: P_DISPLAY }}
-          >
-            By Phujim@ru
-            <br />
-            เวอร์ชัน 3.0 beta
-          </p>
+      <div className="av-content absolute top-8 left-10 flex items-center gap-5 z-30">
+        <span className="av-logo-seal">
+          <img src="/image/logo_current.webp" alt="ECHO" className="h-7 w-auto" />
+        </span>
+        <div>
+          <div className="av-label av-label-en" style={{ fontSize: "0.58rem" }}>{PATCH_NAME}</div>
+          <div className="av-heading text-xs" style={{ color: "rgba(232,196,239,.45)" }}>
+            เวอร์ชัน {PATCH_VERSION} · {AUTHOR}
+          </div>
         </div>
       </div>
 
-      {/* ---------- เศษกระจกเรืองแสงที่ "กระเด็น" ข้ามแนวเขตเข้ามาฝั่งขวา (จอกว้างเท่านั้น)
-          ขนาด/ตำแหน่งไม่สมมาตรตามระดับความลึกของรอยแหว่งแต่ละช่วง ---------- */}
-      <span
-        className="p-shard hidden lg:block"
-        style={{ left: "19vw", top: "10%", width: 12, height: 12, clipPath: "polygon(50% 0,100% 50%,50% 100%,0 50%)", transform: "rotate(-18deg)", animationDelay: "0s" }}
-      />
-      <span
-        className="p-shard hidden lg:block"
-        style={{ left: "31vw", top: "16%", width: 9, height: 9, clipPath: "polygon(50% 0,100% 100%,0 100%)", transform: "rotate(30deg)", animationDelay: "0.3s" }}
-      />
-      <span
-        className="p-shard hidden lg:block"
-        style={{ left: "14vw", top: "40%", width: 34, height: 34, clipPath: "polygon(50% 0,100% 100%,0 100%)", transform: "rotate(22deg)", animationDelay: "0.6s" }}
-      />
-      <span
-        className="p-shard hidden lg:block"
-        style={{ left: "22vw", top: "45%", width: 16, height: 16, clipPath: "polygon(50% 0,100% 50%,50% 100%,0 50%)", transform: "rotate(-8deg)", animationDelay: "1.1s" }}
-      />
-      <span
-        className="p-shard hidden lg:block"
-        style={{ left: "33vw", top: "58%", width: 8, height: 8, clipPath: "polygon(50% 0,100% 100%,0 100%)", transform: "rotate(-35deg)", animationDelay: "1.5s" }}
-      />
-      <span
-        className="p-shard hidden lg:block"
-        style={{ left: "17vw", top: "74%", width: 28, height: 28, clipPath: "polygon(50% 0,100% 50%,50% 100%,0 50%)", transform: "rotate(14deg)", animationDelay: "0.2s" }}
-      />
-      <span
-        className="p-shard hidden lg:block"
-        style={{ left: "28vw", top: "80%", width: 13, height: 13, clipPath: "polygon(50% 0,100% 100%,0 100%)", transform: "rotate(-22deg)", animationDelay: "1.8s" }}
-      />
-      <span
-        className="p-shard hidden lg:block"
-        style={{ left: "12vw", top: "93%", width: 20, height: 20, clipPath: "polygon(50% 0,100% 100%,0 100%)", transform: "rotate(6deg)", animationDelay: "0.9s" }}
-      />
-
-      {/* ---------- ฝั่งขวา: ชื่อ + การ์ดที่นั่ง ---------- */}
-      <div className="p-scroll relative z-10 flex-1 flex flex-col gap-8 px-5 sm:px-10 py-8 lg:py-14 overflow-y-auto">
-        <div className="p-rise">
-          <div className="p-chip text-sm text-white/70 mb-2">
-            <span>กรุณาตั้งชื่อก่อนนะจ๊ะ</span>
+      {step === "seat" && (
+        <>
+          <div className="av-content absolute inset-x-0 flex flex-col items-center gap-3 z-10" style={{ top: "22vh" }}>
+            <h1 className="av-rise av-title av-title-thai text-5xl av-ink">เลือกที่นั่งของคุณ</h1>
+            <AvRule className="av-rise w-[26rem]" />
           </div>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={12}
-            placeholder="กรอกชื่อของคุณ"
-            className="bg-transparent border-b-2 border-white/25 focus:border-[var(--color-p-accent-bright)] text-3xl sm:text-4xl text-white placeholder-white/25 outline-none py-2 w-full max-w-md font-bold transition-colors"
-            style={{ fontFamily: P_DISPLAY }}
-          />
-        </div>
 
-        <div className="p-rise" style={{ animationDelay: "0.08s" }}>
-          <div className="p-chip text-sm text-white/70 mb-4">
-            <span>เลือกตำแหน่งที่ต้องการ</span>
-          </div>
-          <div className="flex flex-wrap gap-4 sm:gap-5">
+          <div className="av-content absolute inset-x-0 z-10" style={{ top: "34vh", height: "30vh" }}>
             {POSITIONS.map((n, i) => {
+              const place = arcPlace(i);
               const selected = pos === n;
               const lockedByOther = taken.includes(n) && !selected;
+              const inner = leaving ? (selected ? "av-seat-chosen" : "av-seat-scatter") : "av-rise av-seq";
               return (
-                <button
+                <div
                   key={n}
-                  disabled={lockedByOther}
-                  onClick={() => pick(n)}
-                  className={`p-rise p-scan-hover group relative w-24 sm:w-28 rounded-lg pt-4 pb-3 px-2 border-2 text-center transition-all duration-200 ${
-                    lockedByOther
-                      ? "opacity-30 grayscale cursor-not-allowed border-white/10 bg-white/5"
-                      : "border-white/15 bg-white/5 hover:-translate-y-2 hover:border-white/40"
-                  } ${selected ? "-translate-y-2 border-white/70" : ""}`}
+                  className="av-arc-item"
                   style={{
-                    animationDelay: `${0.12 + i * 0.05}s`,
-                    boxShadow: selected ? `0 14px 30px -8px ${POSITION_COLORS[n]}aa` : undefined,
-                    transform: selected ? "translateY(-8px) rotateX(6deg)" : undefined,
-                    transformStyle: "preserve-3d",
+                    left: place.left,
+                    bottom: place.bottom,
+                    "--i": i + 1,
+                    transform: `translateX(-50%) rotate(${place.rotate}deg)`,
                   }}
                 >
-                  <div
-                    className="mx-auto w-3 h-3 rounded-full mb-2"
-                    style={{ background: POSITION_COLORS[n], boxShadow: `0 0 10px 2px ${POSITION_COLORS[n]}99` }}
-                  />
-                  <div
-                    className="text-2xl sm:text-3xl font-black text-white"
-                    style={{ fontFamily: P_DISPLAY }}
-                  >
-                    P{n}
-                  </div>
-                  <div
-                    className={`mt-1 text-[11px] font-bold uppercase tracking-wide ${
-                      selected ? "" : lockedByOther ? "text-white/35" : "text-white/55"
-                    }`}
-                    style={selected ? { color: "var(--color-p-accent-bright)" } : undefined}
-                  >
-                    {selected ? "เลือกแล้ว" : lockedByOther ? "ถูกจอง" : "ว่าง"}
-                  </div>
-                  {selected && (
-                    <div
-                      className="absolute -top-1 -right-1 w-5 h-5 grid place-items-center rounded-full text-[10px] font-black text-black"
-                      style={{ background: "var(--color-p-accent-bright)" }}
+                  <div className={`relative flex flex-col items-center gap-3 ${inner}`}>
+                    <Medallion on={selected} disabled={lockedByOther} size={104} onClick={() => pick(n)}>
+                      {selected && <Crystals level={5} seed={n} />}
+                      <span
+                        className="relative block w-3.5 h-3.5 mb-9 rounded-full"
+                        style={{
+                          background: "#fff",
+                          boxShadow: selected
+                            ? "0 0 20px 7px rgba(255,233,168,.9)"
+                            : "0 0 16px 5px rgba(255,255,255,.7)",
+                        }}
+                      />
+                      <span
+                        className="absolute inset-x-0 text-3xl"
+                        style={{
+                          top: "50%",
+                          fontFamily: "var(--font-av-display)",
+                          fontWeight: 900,
+                          color: selected ? "var(--av-gold-lit)" : "#fff",
+                        }}
+                      >
+                        P{n}
+                      </span>
+                    </Medallion>
+                    <span
+                      className="av-heading text-xs"
+                      style={{
+                        color: selected
+                          ? "var(--av-gold-lit)"
+                          : lockedByOther
+                          ? "rgba(239,230,245,.28)"
+                          : "rgba(232,196,239,.6)",
+                        letterSpacing: "0.08em",
+                      }}
                     >
-                      ✓
-                    </div>
-                  )}
-                </button>
+                      {selected ? "เลือกแล้ว" : lockedByOther ? "ถูกจอง" : "ว่าง"}
+                    </span>
+                  </div>
+                </div>
               );
             })}
           </div>
-        </div>
-      </div>
+        </>
+      )}
 
-      {/* ---------- ปุ่มยืนยัน มุมขวาล่าง ---------- */}
-      <button
-        onClick={submit}
-        disabled={!ready}
-        className={`fixed bottom-0 right-0 w-56 h-24 sm:h-28 group z-20 transition-all duration-300 ${
-          ready ? "translate-x-0 opacity-100" : "translate-x-full opacity-0 pointer-events-none"
-        }`}
-      >
-        <div className="p-slash-btn absolute inset-0 transition group-hover:brightness-110" />
-        <span
-          className="absolute bottom-5 sm:bottom-6 right-6 sm:right-7 text-xl sm:text-2xl font-black text-white uppercase italic"
-          style={{ fontFamily: P_DISPLAY }}
-        >
-          ยืนยัน →
-        </span>
-      </button>
-    </div>
+      {step === "color" && (
+        <>
+          <div className={`av-content absolute inset-0 flex flex-col items-center justify-center gap-7 z-10 px-10 ${leaving ? "av-step-out" : ""}`}>
+            <h1 className="av-rise av-title av-title-thai text-5xl av-ink">เลือกสีประจำตัว</h1>
+
+            <div className="av-plaque av-plaque-in flex items-center gap-10" style={{ width: "min(50rem, 80vw)" }}>
+              <div className="flex flex-col items-center gap-3 shrink-0">
+                <div className="av-seal-drop relative">
+                  <Crest color={hex} className="text-2xl" style={{ width: "7rem", height: "7rem", transition: "background .18s linear" }}>
+                    P{pos}
+                  </Crest>
+                  <Crystals level={4} seed={pos || 1} />
+                </div>
+                <span
+                  className="av-heading text-sm px-4 py-1 rounded-full"
+                  style={{ background: "rgba(6,4,12,.6)", border: `1px solid ${hex}`, color: hex }}
+                >
+                  {name.trim() || "ชื่อของคุณ"}
+                </span>
+                <span className="av-label" style={{ fontSize: "0.68rem", letterSpacing: "0.22em" }}>{hex}</span>
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <ColorForge hsv={hsv} onChange={setHsv} />
+              </div>
+            </div>
+
+            <AvButton variant="ghost" className="py-2 px-6 text-sm" onClick={() => setStep("seat")}>
+              ← เลือกที่นั่งใหม่
+            </AvButton>
+          </div>
+
+          <div className="av-content fixed bottom-10 right-12 z-30">
+            <SealButton ready label="ถัดไป" onClick={() => advance("name", 420)} />
+          </div>
+        </>
+      )}
+
+      {step === "name" && (
+        <>
+          <div className="av-content absolute inset-0 flex flex-col items-center justify-center gap-8 z-10 px-10">
+            <h1 className="av-rise av-title av-title-thai text-5xl av-ink">ลงนามของคุณ</h1>
+
+            <div className="av-plaque av-plaque-in flex items-center gap-8" style={{ width: "min(48rem, 78vw)" }}>
+              <div className="av-seal-drop relative shrink-0">
+                <Crest color={hex} className="text-2xl" style={{ width: "6rem", height: "6rem" }}>
+                  P{pos}
+                </Crest>
+                <Crystals level={4} seed={pos || 1} />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="av-label mb-1">กรุณาใส่ชื่อ</div>
+                <div className="av-input-wrap">
+                  <input
+                    ref={inputRef}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && ready) submit(); }}
+                    maxLength={12}
+                    placeholder="ชื่อของคุณ"
+                    className="av-input"
+                    style={{ color: hex }}
+                  />
+                  <div className="av-input-line" />
+                </div>
+                <div className="flex items-center justify-between mt-2">
+                  <span className="av-heading text-xs" style={{ color: "rgba(239,230,245,.4)" }}>
+                    ยาวได้ไม่เกิน 12 ตัวอักษร
+                  </span>
+                  <span
+                    className="av-heading text-xs"
+                    style={{ color: name.length >= 12 ? "var(--av-gold-lit)" : "rgba(239,230,245,.4)" }}
+                  >
+                    {name.length} / 12
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <AvButton variant="ghost" className="py-2 px-6 text-sm" onClick={() => setStep("color")}>
+              ← เปลี่ยนสีประจำตัว
+            </AvButton>
+          </div>
+
+          <div className="av-content fixed bottom-10 right-12 z-30">
+            <SealButton ready={ready} label="ลงนาม" onClick={submit} />
+          </div>
+        </>
+      )}
+    </AvScene>
   );
 }

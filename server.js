@@ -22,6 +22,16 @@ const { Server } = require("socket.io");
 const path = require("path");
 const fs = require("fs");
 const { CHARACTERS, CHAR_BY_ID, POSITION_COLORS, publicRoster } = require("./characters");
+
+// สีประจำตัว: ผู้เล่นปรับเองได้ตอนตั้งค่าก่อนเข้าเกม — ไม่ได้ตั้งไว้ก็ใช้สีประจำตำแหน่งเดิม
+const CUSTOM_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+function normalizeColor(c) {
+  return typeof c === "string" && CUSTOM_COLOR_RE.test(c) ? c.toUpperCase() : null;
+}
+function colorOf(p) {
+  if (!p) return "#9B4F96";
+  return p.customColor || POSITION_COLORS[p.position] || "#9B4F96";
+}
 // ไฟล์มัดรวมสคริปต์ตัวละครที่แยกออกมาจากไฟล์นี้ (โฟลเดอร์ characters/ — คนละอันกับ characters.js ด้านบน)
 const CHAR_HOOKS = require("./characters/index");
 // ระบบสถานะ universal (buff/debuff กลาง) — ดู characters/_universal_status.js
@@ -307,7 +317,7 @@ function bardCompose(p, live) {
     }
     p.bardPending = { pattern, name: song.name, need: song.need, allowSelf: !!song.allowSelf };
     lastLog.push(`🎼 ${p.name} ประพันธ์เพลง ${song.name} สำเร็จ — กำลังเลือกเป้าหมาย (ไม่เลือกก่อนเปิดไพ่ = สุ่มเป้าหมาย)`);
-    io.emit("skillFlash", { name: `🎼 ${song.name} — กำลังเลือกเป้าหมาย`, img: song.song === "crimson" ? BARD_CRIMSON_IMG : BARD_JADE_IMG, by: p.name, color: POSITION_COLORS[p.position] || "#9B4F96" });
+    io.emit("skillFlash", { name: `🎼 ${song.name} — กำลังเลือกเป้าหมาย`, img: song.song === "crimson" ? BARD_CRIMSON_IMG : BARD_JADE_IMG, by: p.name, color: colorOf(p) });
     return;
   }
   bardPerform(p, pattern, [], live);
@@ -324,7 +334,7 @@ function bardPerform(p, pattern, targets, live) {
   addSkill(p, 1); // บรรเลงทำนองสำเร็จ ได้รับพลังงาน +1
   // เสียงบรรเลง: สาย Crimson = 01 / สาย Jade = 02
   io.emit("bardSfx", { kind: "perform", sound: isCrimson ? 1 : 2 });
-  io.emit("skillFlash", { name: `🎼 บรรเลงทำนอง — ${song.name}`, img: isCrimson ? BARD_CRIMSON_IMG : BARD_JADE_IMG, by: p.name, color: POSITION_COLORS[p.position] || "#9B4F96" });
+  io.emit("skillFlash", { name: `🎼 บรรเลงทำนอง — ${song.name}`, img: isCrimson ? BARD_CRIMSON_IMG : BARD_JADE_IMG, by: p.name, color: colorOf(p) });
   lastLog.push(`🎼 ${p.name} บรรเลงทำนอง ${song.name}! พลังงาน +1 (โลหิต ${p.bloodSection || 0}/${BARD_SECTION_MAX} · วิญญาณ ${p.soulSection || 0}/${BARD_SECTION_MAX})`);
   // มิติมายาบรรเลงวิญญาณ (patch 2.0.6): ทุกครั้งที่เกิดการบรรเลงทำนอง
   //  — คีตกวีทำดาเมจ 1 แบบสุ่มกับผู้เล่น 2 คน จนกว่ามิติจะสิ้นสุด
@@ -1867,7 +1877,7 @@ function skillByStatus(p, status) {
   for (const tier of ["basic", "secondary", "secondary2", "secondaryNight", "ultimate", "ultimate2", "ultimateNight"]) {
     const s = ch[tier];
     if (s && s.effect && !Array.isArray(s.effect) && s.effect.type === "status" && s.effect.status === status) {
-      return { name: s.name, img: s.img || null, by: p.name, color: POSITION_COLORS[p.position] || "#888" };
+      return { name: s.name, img: s.img || null, by: p.name, color: colorOf(p) };
     }
   }
   return null;
@@ -1891,7 +1901,7 @@ function shikiCancelUltimate(slayer, victim, skillName, skillImg) {
         playerId: victim.id, name: victim.name,
         img: skillImg || displayImg(victim), // ภาพสกิลท่าไม้ตายที่โดนยกเลิก
         img2: displayImg(victim),            // ภาพเจ้าของท่าที่โดน
-        color: POSITION_COLORS[slayer.position] || "#9B4F96",
+        color: colorOf(slayer),
         video: t.video, title: t.title, label: `ถูก ${slayer.name} ยกเลิกท่าไม้ตาย`,
       },
     });
@@ -1900,7 +1910,7 @@ function shikiCancelUltimate(slayer, victim, skillName, skillImg) {
   // เคยโดนยกเลิกแล้ว: แจ้งเตือนเล็กๆ ว่าชิกิยกเลิกท่าไม้ตายของใคร ไม่หยุดเกม
   io.emit("transformNotice", {
     playerId: victim.id, name: slayer.name,
-    img: skillImg || SHIKI_PROFILE_IMG, color: POSITION_COLORS[slayer.position] || "#9B4F96",
+    img: skillImg || SHIKI_PROFILE_IMG, color: colorOf(slayer),
     title: t.title, label: `ยกเลิกท่าไม้ตาย ${skillName} ของ ${victim.name}`,
   });
   return false;
@@ -2153,14 +2163,14 @@ function buildStateFor(viewerId) {
       if (from && from.alive) {
         connorArrestAsk = {
           fromId: from.id, from: from.name,
-          color: POSITION_COLORS[from.position] || "#C0392B",
+          color: colorOf(from),
           img: CHAR_HOOKS.conner.IMG.skill2,
         };
       }
     }
     // Locacaca fruit (ซาโตรุ patch 2.0.8.2): ข้อเสนอผลไม้ที่รอผู้ชม state คนนี้ตอบ
     const locaFrom = Object.values(players).find((o) => o.alive && o.locaOffer === viewerId);
-    if (locaFrom) locaOffer = { fromId: locaFrom.id, from: locaFrom.name, steal: CHAR_HOOKS.satoru.LOCA_STEAL, color: POSITION_COLORS[locaFrom.position] || "#9B4F96", img: "/characters/satoru/locaca.png" };
+    if (locaFrom) locaOffer = { fromId: locaFrom.id, from: locaFrom.name, steal: CHAR_HOOKS.satoru.LOCA_STEAL, color: colorOf(locaFrom), img: "/characters/satoru/locaca.png" };
   }
   // ริต้า เบอร์นัล: ขอแค่ได้พบกันอีก — เลือกเป้าหมายปลดปล่อยความเจ็บปวด (ใช้ได้แม้ตกรอบไปแล้ว/ทุกเฟส)
   let phenexReleaseAsk = null;
@@ -2168,7 +2178,7 @@ function buildStateFor(viewerId) {
     const options = viewer.phenexReleaseAsk.options
       .map((id) => players[id])
       .filter((o) => o && o.alive)
-      .map((o) => ({ id: o.id, name: o.name, color: POSITION_COLORS[o.position] || "#9B4F96", img: displayImg(o) }));
+      .map((o) => ({ id: o.id, name: o.name, color: colorOf(o), img: displayImg(o) }));
     if (options.length) phenexReleaseAsk = { pain: viewer.phenexReleaseAsk.pain, options };
   }
   // แบทแมน: นายลืมของน่ะ — เลือกเป้าหมายส่งต่อความเสียหายที่รับไว้ (ทุกเฟส เหมือนของริต้า เบอร์นัล)
@@ -2177,7 +2187,7 @@ function buildStateFor(viewerId) {
     const options = viewer.batKarmaAsk.options
       .map((id) => players[id])
       .filter((o) => o && o.alive)
-      .map((o) => ({ id: o.id, name: o.name, color: POSITION_COLORS[o.position] || "#9B4F96", img: displayImg(o) }));
+      .map((o) => ({ id: o.id, name: o.name, color: colorOf(o), img: displayImg(o) }));
     if (options.length) batKarmaAsk = { dmg: viewer.batKarmaAsk.dmg, options };
   }
   // สมุดการ์ดกองกลาง: การ์ดทั้ง 43 ใบตามลำดับคงที่ + ใบไหนถูกจั่วไปแล้วในรอบนี้ (centralDeck สับใหม่ทุกรอบ — สมุดนี้จึงนับเฉพาะรอบปัจจุบัน)
@@ -2383,7 +2393,7 @@ function buildStateFor(viewerId) {
         // Matrix ระดับ 1: ผู้ชมคนนี้เห็นจำนวนไพ่ในมือของคนนี้แบบเรียลไทม์
         scMatrixLevel: Seraph.active() && viewer ? Seraph.matrixLevelOn(viewer, p) : undefined,
         position: p.position,
-        color: POSITION_COLORS[p.position] || "#888",
+        color: colorOf(p),
         teamId: p.teamId || null,
         teamConfirmed: !!p.teamConfirmed,
         modeVote: p.modeVote || null,
@@ -2644,7 +2654,7 @@ function queueCutscene(p, key, onlyFor) {
     seconds: t.seconds,
     info: {
       playerId: p.id, name: p.name,
-      img: t.img, color: POSITION_COLORS[p.position] || "#9B4F96",
+      img: t.img, color: colorOf(p),
       video: t.video, title: t.title, label: t.label, voice: t.voice || null,
       noIntro: !!t.noIntro, // true = ตัดการ์ดเปิดตัว 950ms ทิ้ง เข้าวีดีโอทันที (คลิปสั้นมาก)
       onlyFor: Array.isArray(onlyFor) && onlyFor.length ? [...onlyFor] : null,
@@ -2658,7 +2668,7 @@ function notifyTransform(p, key) {
   if (!t) return;
   io.emit("transformNotice", {
     playerId: p.id, name: p.name,
-    img: t.img, color: POSITION_COLORS[p.position] || "#9B4F96",
+    img: t.img, color: colorOf(p),
     title: t.title, label: t.label,
   });
 }
@@ -3387,7 +3397,7 @@ function nanayaToggleEye(id) {
   if (!CHAR_HOOKS.nanaya.toggleEye(engine, p)) return;
   io.emit("skillFlash", {
     name: `Mystic eye of death perception — ${p.nanayaEyeOn ? "เปิดใช้งาน" : "ปิดใช้งาน"}`,
-    img: "/characters/nanaya/nanaya.png", by: p.name, color: POSITION_COLORS[p.position] || "#9B4F96",
+    img: "/characters/nanaya/nanaya.png", by: p.name, color: colorOf(p),
   });
   broadcastState();
 }
@@ -3401,7 +3411,7 @@ function eijiOrdinalScale(id) {
   io.emit("skillFlash", {
     name: `กลโกง Ordinal Scale — เร่งความเร็ว ${CHAR_HOOKS.eiji.ordinalStacks(p)}/${CHAR_HOOKS.eiji.ORDINAL_MAX} (หลบหลีก ${CHAR_HOOKS.eiji.dodgeChance(p)}%)`,
     img: CHAR_HOOKS.eiji.IMG.passive3,
-    by: p.name, color: POSITION_COLORS[p.position] || "#9B4F96",
+    by: p.name, color: colorOf(p),
   });
   broadcastState();
 }
@@ -3465,7 +3475,7 @@ function useSkill(id, tier, targets, item) {
     io.emit("skillFlash", {
       name: `${note === "R" ? "Crimson ❤️" : "Jade 💚"} — โน้ตช่องที่ ${p.bardNotes.length}/3${dimOn ? " (มิติมายาบรรเลง)" : ""}${free ? " (พรสวรรค์ ไม่เสียพลังงาน)" : ""}`,
       img: note === "R" ? BARD_CRIMSON_IMG : BARD_JADE_IMG,
-      by: p.name, color: POSITION_COLORS[p.position] || "#9B4F96",
+      by: p.name, color: colorOf(p),
     });
     lastLog.push(`🎼 ${p.name} เติมโน้ต${note === "R" ? "ทำนองแห่งโลหิต ❤️" : "ทำนองแห่งวิญญาณ 💚"} (ช่องที่ ${p.bardNotes.length}/3)${free ? " — ไม่เสียพลังงาน" : ""}`);
     if (p.bardNotes.length >= 3) bardCompose(p, true);
@@ -4055,7 +4065,7 @@ function useSkill(id, tier, targets, item) {
   // ---------- DoomGuy (patch 2.2 full, characters/doomguy.js) ----------
   if (isDoomSwap) CHAR_HOOKS.doomguy.applyQuickSwap(engine, p);
   if (isDoomWeapon) {
-    io.emit("skillFlash", { name: `🔫 ${doomW.name}`, img: doomW.img, by: p.name, color: POSITION_COLORS[p.position] || "#888", doomWeapon: p.doomWeapon }); // เสียงสกิลอาวุธ (เฉพาะฝั่ง client แปลว่าเสียงตามอาวุธ)
+    io.emit("skillFlash", { name: `🔫 ${doomW.name}`, img: doomW.img, by: p.name, color: colorOf(p), doomWeapon: p.doomWeapon }); // เสียงสกิลอาวุธ (เฉพาะฝั่ง client แปลว่าเสียงตามอาวุธ)
     CHAR_HOOKS.doomguy.applyWeaponEffect(engine, p, doomW, doomTarget);
   }
   // ---------- สึงาชิ ทาคุโตะ (patch 2.2 new, characters/takuto.js) ----------
@@ -4141,7 +4151,7 @@ function useSkill(id, tier, targets, item) {
     const flashSound = (isTepeuCook || isTepeuPonder) ? "tepeu_skill1_2" : isHisakawaSkill ? CHAR_HOOKS.hisakawa_sister.skillVoice(p, tier, skill) : null;
     // อิสึกะ ชิโด "ฝากด้วยนะตัวฉัน": สกิลเงียบ — ห้ามมีแบนเนอร์ให้ใครเห็นว่าเขากดอะไรไป
     if (!CHAR_HOOKS.shido.silentSkill(p, tier)) {
-      io.emit("skillFlash", { name: skill.name + flashSuffix, img: flashImg, by: p.name, color: POSITION_COLORS[p.position] || "#9B4F96", sound: flashSound });
+      io.emit("skillFlash", { name: skill.name + flashSuffix, img: flashImg, by: p.name, color: colorOf(p), sound: flashSound });
     }
   }
   // จำสกิลที่ใช้ในรอบ (ท่าไม้ตายมี cutscene ของตัวเอง / สกิลหลังเปิดไพ่ไปโชว์ตอนโจมตี)
@@ -4198,10 +4208,10 @@ function resolveLoca(s, t, accept, timeout) {
     t.skillPoints -= pay;
     if (pay > 0) addSkill(s, pay);
     lastLog.push(`🍑 ${t.name} รับผลโลกากากาจาก ${s.name} — ฟื้นเลือดจนเต็ม +${heal} แลกกับ Max HP ลดถาวร 1 (เหลือ ${maxHpOf(t)}) และจ่ายแต้มสกิล ${pay} ให้ ${s.name}`);
-    io.emit("skillFlash", { name: `Locacaca fruit — ${t.name} รับผลไม้!`, img: "/characters/satoru/locaca.png", by: s.name, color: POSITION_COLORS[s.position] || "#9B4F96" });
+    io.emit("skillFlash", { name: `Locacaca fruit — ${t.name} รับผลไม้!`, img: "/characters/satoru/locaca.png", by: s.name, color: colorOf(s) });
   } else {
     lastLog.push(`🍑 ${t.name} ${timeout ? "ไม่ตอบ" : "ปฏิเสธ"}ผลโลกากากาของ ${s.name} — ไม่มีอะไรเกิดขึ้น`);
-    io.emit("skillFlash", { name: `Locacaca fruit — ${t.name} ปฏิเสธ`, img: "/characters/satoru/locaca.png", by: s.name, color: POSITION_COLORS[s.position] || "#9B4F96" });
+    io.emit("skillFlash", { name: `Locacaca fruit — ${t.name} ปฏิเสธ`, img: "/characters/satoru/locaca.png", by: s.name, color: colorOf(s) });
   }
 }
 function answerLoca(id, accept, fromId = null) {
@@ -4258,7 +4268,7 @@ function kaiOverhaul(id) {
     if (player.kaiMarksBy && !Object.keys(player.kaiMarksBy).length) delete player.kaiMarksBy;
   }
   p.transformAt = ++transformCounter;
-  io.emit("skillFlash", { name: "Overhaul", img: displayImg(p), by: p.name, color: POSITION_COLORS[p.position] || "#9B4F96" });
+  io.emit("skillFlash", { name: "Overhaul", img: displayImg(p), by: p.name, color: colorOf(p) });
   broadcastState();
   checkAllLocked();
 }
@@ -5080,12 +5090,12 @@ function doAttack(byId, targetId) {
       lastLog.push(`💨 หลบหลีก! ${target.name} หลบการโจมตีของ ${attacker.name} ได้ (${evadePct}%) — เหลือหลบหลีกอีก ${target.statuses.evade || 0} ครั้ง`);
       lastAttack = {
         id: ++attackSeq,
-        byName: attacker.name, byImg: displayImg(attacker), byColor: POSITION_COLORS[attacker.position] || "#888",
+        byName: attacker.name, byImg: displayImg(attacker), byColor: colorOf(attacker),
         byDoomWeapon: attacker.characterId === "doomguy" ? attacker.doomWeapon : undefined, // DoomGuy: อาวุธที่ใช้ยิงตอนนี้ (เสียงยิงฝั่ง client)
         byAttackSound: attackSoundOf(attacker), // เสียงโจมตีปกติเฉพาะตัว (ผู้สังหารเมจ / ฮารุกะระหว่างโอเมก้า)
-        targetName: target.name, targetImg: displayImg(target), targetColor: POSITION_COLORS[target.position] || "#888",
+        targetName: target.name, targetImg: displayImg(target), targetColor: colorOf(target),
         dmg: 0, dodge: true, fxMs: ATTACKFX_TIME * 1000,
-        skills: [{ name: `หลบหลีก (${evadePct}%)`, img: BARD_CRIMSON_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888", side: "def" }],
+        skills: [{ name: `หลบหลีก (${evadePct}%)`, img: BARD_CRIMSON_IMG, by: target.name, color: colorOf(target), side: "def" }],
       };
       gameState = "ATTACKING";
       startPhaseTimer(ATTACKFX_TIME, () => runCutsceneQueue(endTurn));
@@ -5137,11 +5147,11 @@ function doAttack(byId, targetId) {
       else lastLog.push(`👁️✨💀 เนตรมณะ — ${attacker.name} มองทะลุความตายของ ${target.name} — แต่ ${target.name} เกิดใหม่หนีความตายไปได้!`);
       lastAttack = {
         id: ++attackSeq,
-        byName: attacker.name, byImg: displayImg(attacker), byColor: POSITION_COLORS[attacker.position] || "#888",
+        byName: attacker.name, byImg: displayImg(attacker), byColor: colorOf(attacker),
         byDoomWeapon: attacker.characterId === "doomguy" ? attacker.doomWeapon : undefined,
-        targetName: target.name, targetImg: displayImg(target), targetColor: POSITION_COLORS[target.position] || "#888",
+        targetName: target.name, targetImg: displayImg(target), targetColor: colorOf(target),
         dmg: 0, kill: !target.alive,
-        skills: [{ name: "เนตรมณะ — สังหารทันที", img: PSHIKI_ULT_IMG, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888", side: "atk" }],
+        skills: [{ name: "เนตรมณะ — สังหารทันที", img: PSHIKI_ULT_IMG, by: attacker.name, color: colorOf(attacker), side: "atk" }],
       };
       runCutsceneQueue(() => {
         gameState = "ATTACKING";
@@ -5187,12 +5197,12 @@ function doAttack(byId, targetId) {
       target.wasAttacked = true;
       lastAttack = {
         id: ++attackSeq,
-        byName: attacker.name, byImg: displayImg(attacker), byColor: POSITION_COLORS[attacker.position] || "#888",
+        byName: attacker.name, byImg: displayImg(attacker), byColor: colorOf(attacker),
         byDoomWeapon: attacker.characterId === "doomguy" ? attacker.doomWeapon : undefined, // DoomGuy: อาวุธที่ใช้ยิงตอนนี้ (เสียงยิงฝั่ง client)
         byAttackSound: attackSoundOf(attacker), // เสียงโจมตีปกติเฉพาะตัว (ผู้สังหารเมจ / ฮารุกะระหว่างโอเมก้า)
-        targetName: target.name, targetImg: displayImg(target), targetColor: POSITION_COLORS[target.position] || "#888",
+        targetName: target.name, targetImg: displayImg(target), targetColor: colorOf(target),
         dmg: 0, dodge: true, fxMs: ATTACKFX_TIME * 1000,
-        skills: [{ name: "อย่าได้ไล่ตามหัวหน้า (การโจมตีถูกลบล้าง)", img: SATORU_PROFILE_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888", side: "def" }],
+        skills: [{ name: "อย่าได้ไล่ตามหัวหน้า (การโจมตีถูกลบล้าง)", img: SATORU_PROFILE_IMG, by: target.name, color: colorOf(target), side: "def" }],
       };
       runCutsceneQueue(() => { // วีดีโอ Wonder of U (ถ้าเพิ่งสวนกลับ) เล่นก่อนจบเทิร์น
         gameState = "ATTACKING";
@@ -5319,7 +5329,7 @@ function doAttack(byId, targetId) {
   if (attackerBeat || phenexPurgeAtk || doomPierceAtk) dealDirect(target, dmg, true); // กันตายทะลุเกราะ / อย่าอยู่เลย แกน่ะ!: ทะลุเกราะเข้าเลือดจริง
   else dealMixed(target, dmg, true);               // กฎปกติ: ลดเกราะก่อน ถ้าไม่มีเกราะจึงเข้าเลือดจริง
   CHAR_HOOKS.escanor.onNormalAttackReceived(engine, attacker, target, escanorFormBeforeHit);
-  // คาเยนน์ (characters/cayenne.js): เปราะบาง 30% (เกพาร์ด — มีผลตั้งแต่ครั้งถัดไป) · ปืนพกฟื้นเลือด
+  // คาเยนน์ (characters/cayenne.js): เปราะบาง 50% (เกพาร์ด — มีผลตั้งแต่ครั้งถัดไป) · ปืนพกฟื้นเลือด
   const cayAttackFx = CHAR_HOOKS.cayenne.afterMainHit(engine, attacker, target, cayBarrage);
   // ไดจิ (characters/daichi.js): เกราะโกโมร่า 50% ได้ตีเพิ่ม 1 ครั้ง · เกราะเอเลคิง 30% สตั้นเป้าหมายเทิร์นหน้า
   const daichiAttackFx = CHAR_HOOKS.daichi.afterMainHit(engine, attacker, target);
@@ -5477,84 +5487,84 @@ function doAttack(byId, targetId) {
   for (const fx of hisakawaAttackFx || []) addFx(fx, fx.side || "atk");
   for (const fx of ignisAttackFx || []) addFx(fx, fx.side || "atk");
   if (ginga) addFx(skillByStatus(attacker, "ginga"), "atk");
-  if (gingastriumAtk) addFx({ name: `Ginga Strium${lastStanding ? " +1 (คู่ต่อสู้คนเดียว)" : ""}`, img: HIKARU_STRIUM_IMG, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (veilAtk) addFx({ name: "ม่านแห่งราตรี +1", img: "/characters/oberon/oberon_skill1.jpg", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
+  if (gingastriumAtk) addFx({ name: `Ginga Strium${lastStanding ? " +1 (คู่ต่อสู้คนเดียว)" : ""}`, img: HIKARU_STRIUM_IMG, by: attacker.name, color: colorOf(attacker) }, "atk");
+  if (veilAtk) addFx({ name: "ม่านแห่งราตรี +1", img: "/characters/oberon/oberon_skill1.jpg", by: attacker.name, color: colorOf(attacker) }, "atk");
   // empower เป็นบัฟกลาง — คีตกวี (Rejuvenation) และผู้สังหารเมจ (Fury ขั้น 3) ใช้ร่วมกัน จึงเลือกภาพตามผู้ถือบัฟ
-  if (empowerAtk) addFx({ name: "เสริมพลัง +1", img: attacker.characterId === "bard" ? BARD_CRIMSON_IMG : displayImg(attacker), by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (oberonZero < 0 && !veilAtk) addFx({ name: "การหลับไหลอันไม่สิ้นสุด (พลังโจมตี 0)", img: displayImg(attacker), by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (dawnApplied) addFx({ name: "การหลับไหลอันไม่สิ้นสุด (ยามฟ้าสาง +1)", img: displayImg(attacker), by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (appleAtk > 0) addFx({ name: `เอาไปสิ +${appleAtk} (บัฟมอบของ)`, img: "/characters/appleguy/appleguy_skill2.jpg", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (kotoneLove) addFx({ name: `รัก รักที่สุดเลย +${kotoneLoveDmg} (กระปุกออมสิน)`, img: "/characters/kotone/rework/KotonePFP.png", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (shieldBefore > target.shield) addFx({ name: "โล่ป้องกัน (กันความเสียหาย)", img: null, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
+  if (empowerAtk) addFx({ name: "เสริมพลัง +1", img: attacker.characterId === "bard" ? BARD_CRIMSON_IMG : displayImg(attacker), by: attacker.name, color: colorOf(attacker) }, "atk");
+  if (oberonZero < 0 && !veilAtk) addFx({ name: "การหลับไหลอันไม่สิ้นสุด (พลังโจมตี 0)", img: displayImg(attacker), by: attacker.name, color: colorOf(attacker) }, "atk");
+  if (dawnApplied) addFx({ name: "การหลับไหลอันไม่สิ้นสุด (ยามฟ้าสาง +1)", img: displayImg(attacker), by: attacker.name, color: colorOf(attacker) }, "atk");
+  if (appleAtk > 0) addFx({ name: `เอาไปสิ +${appleAtk} (บัฟมอบของ)`, img: "/characters/appleguy/appleguy_skill2.jpg", by: attacker.name, color: colorOf(attacker) }, "atk");
+  if (kotoneLove) addFx({ name: `รัก รักที่สุดเลย +${kotoneLoveDmg} (กระปุกออมสิน)`, img: "/characters/kotone/rework/KotonePFP.png", by: attacker.name, color: colorOf(attacker) }, "atk");
+  if (shieldBefore > target.shield) addFx({ name: "โล่ป้องกัน (กันความเสียหาย)", img: null, by: target.name, color: colorOf(target) }, "def");
   if ((target.statuses.absorb || 0) > 0 && armorLost > 0) addFx(skillByStatus(target, "absorb"), "def");
   // maybeBeatSave เหลือเจ้าของเดียวคือทาคุโตะ (ฉันยัง...มองเห็นอยู่!!!)
-  if (beatSaveFired) addFx({ name: "ฉันยัง...มองเห็นอยู่!!! (กันตาย)", img: displayImg(target), by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
+  if (beatSaveFired) addFx({ name: "ฉันยัง...มองเห็นอยู่!!! (กันตาย)", img: displayImg(target), by: target.name, color: colorOf(target) }, "def");
   // เรียวกิ ชิกิ
-  if (knifeAtk) addFx({ name: `มีดพก (ฟื้นเลือด +${knifeHeal})`, img: "/characters/shiki/shiki_skill1.webp", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (deathlineReset) addFx({ name: "เนตรมารแห่งความมรณะ (เส้นชีวิตถูกรีเซ็ต)", img: SHIKI_DEATH_IMG, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
+  if (knifeAtk) addFx({ name: `มีดพก (ฟื้นเลือด +${knifeHeal})`, img: "/characters/shiki/shiki_skill1.webp", by: attacker.name, color: colorOf(attacker) }, "atk");
+  if (deathlineReset) addFx({ name: "เนตรมารแห่งความมรณะ (เส้นชีวิตถูกรีเซ็ต)", img: SHIKI_DEATH_IMG, by: attacker.name, color: colorOf(attacker) }, "atk");
   // Bard: คุ้มครอง / ขัดแย้ง / เชื่อมผล
-  if (guardAmt > 0) addFx({ name: `คุ้มครอง (ความเสียหายลด ${guardAmt})`, img: BARD_CRIMSON_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
-  if (bardDiscord) addFx({ name: "Discord — ขัดแย้ง (+1 ดาเมจ)", img: BARD_JADE_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "atk");
-  if (linkedHit) addFx({ name: `เชื่อมผล (${linkedHit.name} -${buddyHpBefore - linkedHit.hp})`, img: BARD_JADE_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
+  if (guardAmt > 0) addFx({ name: `คุ้มครอง (ความเสียหายลด ${guardAmt})`, img: BARD_CRIMSON_IMG, by: target.name, color: colorOf(target) }, "def");
+  if (bardDiscord) addFx({ name: "Discord — ขัดแย้ง (+1 ดาเมจ)", img: BARD_JADE_IMG, by: target.name, color: colorOf(target) }, "atk");
+  if (linkedHit) addFx({ name: `เชื่อมผล (${linkedHit.name} -${buddyHpBefore - linkedHit.hp})`, img: BARD_JADE_IMG, by: target.name, color: colorOf(target) }, "def");
   // โอกูริ แคป (Rework)
-  if (oguriGoldAtk > 0) addFx({ name: `ยุคทอง +${oguriGoldAtk}`, img: displayImg(attacker), by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (victoryAtk) addFx({ name: `The Beat of Victory +${OGURI_ULT_ATK_BONUS} (เป้าหมายติดเกินเยียวยา+ชะงัก)`, img: TRANSFORMS.victorybeat.img, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (fullBelly) addFx({ name: "เต็มอิ่ม (ดาเมจ -1)", img: displayImg(target), by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
+  if (oguriGoldAtk > 0) addFx({ name: `ยุคทอง +${oguriGoldAtk}`, img: displayImg(attacker), by: attacker.name, color: colorOf(attacker) }, "atk");
+  if (victoryAtk) addFx({ name: `The Beat of Victory +${OGURI_ULT_ATK_BONUS} (เป้าหมายติดเกินเยียวยา+ชะงัก)`, img: TRANSFORMS.victorybeat.img, by: attacker.name, color: colorOf(attacker) }, "atk");
+  if (fullBelly) addFx({ name: "เต็มอิ่ม (ดาเมจ -1)", img: displayImg(target), by: target.name, color: colorOf(target) }, "def");
   // การ์ดแดงครบ 3 ใบตอนเปิดไพ่ (ระบบกองการ์ดกลาง)
-  if (cardAtkBonus > 0) addFx({ name: `การ์ดแดงครบ 3 ใบ +${cardAtkBonus}`, img: displayImg(attacker), by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
+  if (cardAtkBonus > 0) addFx({ name: `การ์ดแดงครบ 3 ใบ +${cardAtkBonus}`, img: displayImg(attacker), by: attacker.name, color: colorOf(attacker) }, "atk");
   // สถานะพื้นฐาน patch 2.0.8
-  if (mightAtk > 0) addFx({ name: `เสริมพลัง +${mightAtk}`, img: displayImg(attacker), by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (weakAtk > 0) addFx({ name: `อ่อนแอ -${weakAtk}`, img: displayImg(attacker), by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
+  if (mightAtk > 0) addFx({ name: `เสริมพลัง +${mightAtk}`, img: displayImg(attacker), by: attacker.name, color: colorOf(attacker) }, "atk");
+  if (weakAtk > 0) addFx({ name: `อ่อนแอ -${weakAtk}`, img: displayImg(attacker), by: attacker.name, color: colorOf(attacker) }, "atk");
   // ยูนะ
   if (yunaLongingAtk > 0) addFx({ name: `Longing (ยูนะ) +${yunaLongingAtk}`, img: YUNA_IMG, by: attacker.name, color: YUNA_COLOR }, "atk");
   if (yunaBeatBark) addFx({ name: "Break Beat Bark! (ยูนะ) +1", img: YUNA_IMG, by: attacker.name, color: YUNA_COLOR }, "atk");
-  if (fragileAmt > 0) addFx({ name: `เปราะบาง (+${fragileAmt} ดาเมจ)`, img: displayImg(target), by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
+  if (fragileAmt > 0) addFx({ name: `เปราะบาง (+${fragileAmt} ดาเมจ)`, img: displayImg(target), by: target.name, color: colorOf(target) }, "def");
   if (yunaDeleteAmt > 0) addFx({ name: `Delete (ยูนะ) +${yunaDeleteAmt}`, img: YUNA_IMG, by: target.name, color: YUNA_COLOR }, "def");
   if (yunaSmileAmt > 0) addFx({ name: `Smile for You (ยูนะ) -${yunaSmileAmt}`, img: YUNA_IMG, by: target.name, color: YUNA_COLOR }, "def");
-  if (shikiWither && witherLines > 0) addFx({ name: `ความตายที่โรยรา — เส้นชีวิตแปรเป็นดาเมจ (สูงสุดรวม ${SHIKI_WITHER_ATK_CAP})`, img: SHIKI_WITHER_IMG, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (triggerCircleAtk) addFx({ name: "Circle Arms — แสงสว่าง +2 / ฟื้นชีวิต +2", img: "/characters/ultraman_trigger/skill1/trigger_skill1.webp", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
+  if (shikiWither && witherLines > 0) addFx({ name: `ความตายที่โรยรา — เส้นชีวิตแปรเป็นดาเมจ (สูงสุดรวม ${SHIKI_WITHER_ATK_CAP})`, img: SHIKI_WITHER_IMG, by: attacker.name, color: colorOf(attacker) }, "atk");
+  if (triggerCircleAtk) addFx({ name: "Circle Arms — แสงสว่าง +2 / ฟื้นชีวิต +2", img: "/characters/ultraman_trigger/skill1/trigger_skill1.webp", by: attacker.name, color: colorOf(attacker) }, "atk");
   if (triggerMultiAtk) {
     const multiText = triggerMultiLowHpPenalty ? "Multi Sword Finish: HP ต่ำกว่า 5 ดาเมจเหลือ 2" : triggerMultiHighestHp ? "Multi Sword Finish +1 / แสงสว่างเพิ่ม +2" : "Multi Sword Finish / แสงสว่างเพิ่ม +2";
-    addFx({ name: multiText, img: "/characters/ultraman_trigger/skill2/trigger_skill2.png", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
+    addFx({ name: multiText, img: "/characters/ultraman_trigger/skill2/trigger_skill2.png", by: attacker.name, color: colorOf(attacker) }, "atk");
   }
-  if (triggerZeperionAtk) addFx({ name: `ลำแสง Zeperion +${triggerLightBonus} จากแสงสว่าง`, img: "/characters/ultraman_trigger/skill3/trigger_skill3.jpg", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (triggerDarkAtk) addFx({ name: `ความมืดที่ย้อมอนาคต +${triggerDarkAtk}`, img: "/characters/ignis/trigger_dark.jpg", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (phenexTaunted) addFx({ name: "ไม่อยากให้ใครต้องเจ็บปวด (ล่อเป้ามาที่ตัวเอง)", img: PHENEX_NTD_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
-  if (batTaunted) addFx({ name: "เข้ามาเลย (ล่อเป้ามาที่ตัวเอง)", img: BAT_SKILL3_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
-  if (batReflectDmg > 0) addFx({ name: `เข้ามาเลย — ความเสียหายเกิดกับผู้โจมตีด้วย -${batReflectDmg}`, img: BAT_SKILL3_IMG, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
+  if (triggerZeperionAtk) addFx({ name: `ลำแสง Zeperion +${triggerLightBonus} จากแสงสว่าง`, img: "/characters/ultraman_trigger/skill3/trigger_skill3.jpg", by: attacker.name, color: colorOf(attacker) }, "atk");
+  if (triggerDarkAtk) addFx({ name: `ความมืดที่ย้อมอนาคต +${triggerDarkAtk}`, img: "/characters/ignis/trigger_dark.jpg", by: attacker.name, color: colorOf(attacker) }, "atk");
+  if (phenexTaunted) addFx({ name: "ไม่อยากให้ใครต้องเจ็บปวด (ล่อเป้ามาที่ตัวเอง)", img: PHENEX_NTD_IMG, by: target.name, color: colorOf(target) }, "def");
+  if (batTaunted) addFx({ name: "เข้ามาเลย (ล่อเป้ามาที่ตัวเอง)", img: BAT_SKILL3_IMG, by: target.name, color: colorOf(target) }, "def");
+  if (batReflectDmg > 0) addFx({ name: `เข้ามาเลย — ความเสียหายเกิดกับผู้โจมตีด้วย -${batReflectDmg}`, img: BAT_SKILL3_IMG, by: target.name, color: colorOf(target) }, "def");
   // ---------- มิซึซาว่า ฮารุกะ (characters/haruka.js) ----------
-  if (harukaPunishFx.punishStacks > 0) addFx({ name: `จงไปสู่สุขติ — ระเบิดเลือดไหล +${harukaPunishFx.punishStacks}`, img: CHAR_HOOKS.haruka.IMG.skill2, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (ippoUpperFx) addFx({ name: ippoUpperFx.kind === "decay" ? "Uper Cut — ผุพัง 3 เทิร์น" : "Uper Cut — สตั้นเทิร์นหน้า", img: CHAR_HOOKS.ippo.IMG.skill2, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (lumiAtkFx) for (const name of lumiAtkFx) addFx({ name, img: displayImg(attacker), by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (lumiBurst) addFx({ name: "luminous — ทุกคนตีครบแล้ว!", img: CHAR_HOOKS.producer_lumi.IMG.luminous, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
-  if (supJudgeDefFx) addFx({ name: `${supJudgeDefFx.kind === "mercy" ? "ความเมตตา" : "คำพิพากษา"} ${supJudgeDefFx.n}/${CHAR_HOOKS.the_supplicant.JUDGE_NEED}`, img: CHAR_HOOKS.the_supplicant.IMG.skill3, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
-  if (supJudgeAtkFx) addFx({ name: `${supJudgeAtkFx.kind === "mercy" ? "ความเมตตา" : "คำพิพากษา"} ${supJudgeAtkFx.n}/${CHAR_HOOKS.the_supplicant.JUDGE_NEED}`, img: CHAR_HOOKS.the_supplicant.IMG.skill3, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (batGunFired) addFx({ name: `ปืนติดรถ +${CHAR_HOOKS.bat_ben.GUN_BONUS}`, img: CHAR_HOOKS.bat_ben.IMG_GUN, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (yuiCounterFx) addFx({ name: `เยอรมันซูเพล็ก — ทุ่มสวนกลับ -${yuiCounterFx.dmg}`, img: CHAR_HOOKS.yui.IMG.skill2, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
-  if (danCounterFx) addFx({ name: `นายทำให้ฉันผิดหวัง — สวนกลับศิษย์ -${danCounterFx.dmg}`, img: CHAR_HOOKS.dan.IMG.skill2, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
-  if (connerCounterFired) addFx({ name: "การป้องกันตัว — สวนกลับผู้โจมตีทั้งสองคน", img: CHAR_HOOKS.conner.IMG.base, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
-  if (harukaBleedApplied > 0) addFx({ name: `โอเมก้า — เลือดไหล +${harukaBleedApplied}`, img: CHAR_HOOKS.haruka.IMG.ult, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
-  if (muimiTowerAtk > 0) addFx({ name: `ดาบสะบั้น — พลังโจมตี +${muimiTowerAtk}`, img: CHAR_HOOKS.muimi.IMG.skill3, by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
+  if (harukaPunishFx.punishStacks > 0) addFx({ name: `จงไปสู่สุขติ — ระเบิดเลือดไหล +${harukaPunishFx.punishStacks}`, img: CHAR_HOOKS.haruka.IMG.skill2, by: attacker.name, color: colorOf(attacker) }, "atk");
+  if (ippoUpperFx) addFx({ name: ippoUpperFx.kind === "decay" ? "Uper Cut — ผุพัง 3 เทิร์น" : "Uper Cut — สตั้นเทิร์นหน้า", img: CHAR_HOOKS.ippo.IMG.skill2, by: attacker.name, color: colorOf(attacker) }, "atk");
+  if (lumiAtkFx) for (const name of lumiAtkFx) addFx({ name, img: displayImg(attacker), by: attacker.name, color: colorOf(attacker) }, "atk");
+  if (lumiBurst) addFx({ name: "luminous — ทุกคนตีครบแล้ว!", img: CHAR_HOOKS.producer_lumi.IMG.luminous, by: target.name, color: colorOf(target) }, "def");
+  if (supJudgeDefFx) addFx({ name: `${supJudgeDefFx.kind === "mercy" ? "ความเมตตา" : "คำพิพากษา"} ${supJudgeDefFx.n}/${CHAR_HOOKS.the_supplicant.JUDGE_NEED}`, img: CHAR_HOOKS.the_supplicant.IMG.skill3, by: target.name, color: colorOf(target) }, "def");
+  if (supJudgeAtkFx) addFx({ name: `${supJudgeAtkFx.kind === "mercy" ? "ความเมตตา" : "คำพิพากษา"} ${supJudgeAtkFx.n}/${CHAR_HOOKS.the_supplicant.JUDGE_NEED}`, img: CHAR_HOOKS.the_supplicant.IMG.skill3, by: attacker.name, color: colorOf(attacker) }, "atk");
+  if (batGunFired) addFx({ name: `ปืนติดรถ +${CHAR_HOOKS.bat_ben.GUN_BONUS}`, img: CHAR_HOOKS.bat_ben.IMG_GUN, by: attacker.name, color: colorOf(attacker) }, "atk");
+  if (yuiCounterFx) addFx({ name: `เยอรมันซูเพล็ก — ทุ่มสวนกลับ -${yuiCounterFx.dmg}`, img: CHAR_HOOKS.yui.IMG.skill2, by: target.name, color: colorOf(target) }, "def");
+  if (danCounterFx) addFx({ name: `นายทำให้ฉันผิดหวัง — สวนกลับศิษย์ -${danCounterFx.dmg}`, img: CHAR_HOOKS.dan.IMG.skill2, by: target.name, color: colorOf(target) }, "def");
+  if (connerCounterFired) addFx({ name: "การป้องกันตัว — สวนกลับผู้โจมตีทั้งสองคน", img: CHAR_HOOKS.conner.IMG.base, by: target.name, color: colorOf(target) }, "def");
+  if (harukaBleedApplied > 0) addFx({ name: `โอเมก้า — เลือดไหล +${harukaBleedApplied}`, img: CHAR_HOOKS.haruka.IMG.ult, by: attacker.name, color: colorOf(attacker) }, "atk");
+  if (muimiTowerAtk > 0) addFx({ name: `ดาบสะบั้น — พลังโจมตี +${muimiTowerAtk}`, img: CHAR_HOOKS.muimi.IMG.skill3, by: attacker.name, color: colorOf(attacker) }, "atk");
   if (muimiAttackFx) addFx({
     name: muimiAttackFx.mode === "tower"
       ? `ดาบสะบั้น — ฟื้นพลังชีวิต +${muimiAttackFx.hp}${muimiAttackFx.extended ? " · ยืดเวลา +1 เทิร์น" : ""}`
       : `ดาบเก่าๆ — ฟื้นพลังชีวิต +${muimiAttackFx.hp} · แต้มสกิล +${muimiAttackFx.sp}`,
     img: muimiAttackFx.mode === "tower" ? CHAR_HOOKS.muimi.IMG.skill3 : CHAR_HOOKS.muimi.IMG.skill2,
-    by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888",
+    by: attacker.name, color: colorOf(attacker),
   }, "atk");
-  if (harukaCounterFx) addFx({ name: `อมาซอน — สวนกลับ -${harukaCounterFx.dmg}${harukaCounterFx.bled > 0 ? ` + เลือดไหล ${harukaCounterFx.bled}` : ""}${harukaCounterFx.stunned ? " + สตั้นเทิร์นหน้า" : ""}`, img: CHAR_HOOKS.haruka.IMG.base, by: target.name, color: POSITION_COLORS[target.position] || "#888" }, "def");
+  if (harukaCounterFx) addFx({ name: `อมาซอน — สวนกลับ -${harukaCounterFx.dmg}${harukaCounterFx.bled > 0 ? ` + เลือดไหล ${harukaCounterFx.bled}` : ""}${harukaCounterFx.stunned ? " + สตั้นเทิร์นหน้า" : ""}`, img: CHAR_HOOKS.haruka.IMG.base, by: target.name, color: colorOf(target) }, "def");
   for (const fx of CHAR_HOOKS.cayenne.attackFx(engine, attacker, cayAttackFx)) addFx(fx, fx.side);
   for (const fx of CHAR_HOOKS.daichi.attackFx(engine, attacker, daichiAttackFx)) addFx(fx, fx.side);
   addFx(CHAR_HOOKS.cayenne.delayFx(engine, target, cayPendingBefore), "def");
-  if (pshikiBladeHeal > 0) addFx({ name: `อืม ฉันเข้าใจแล้ว (ฟื้นเลือด +${pshikiBladeHeal})`, img: "/characters/princess_shiki/p_shiki_skill1.jpg", by: attacker.name, color: POSITION_COLORS[attacker.position] || "#888" }, "atk");
+  if (pshikiBladeHeal > 0) addFx({ name: `อืม ฉันเข้าใจแล้ว (ฟื้นเลือด +${pshikiBladeHeal})`, img: "/characters/princess_shiki/p_shiki_skill1.jpg", by: attacker.name, color: colorOf(attacker) }, "atk");
 
   // อนิเมชันบอกว่าใครตีใคร
   lastAttack = {
     id: ++attackSeq,
-    byName: attacker.name, byImg: displayImg(attacker), byColor: POSITION_COLORS[attacker.position] || "#888",
+    byName: attacker.name, byImg: displayImg(attacker), byColor: colorOf(attacker),
         byDoomWeapon: attacker.characterId === "doomguy" ? attacker.doomWeapon : undefined, // DoomGuy: อาวุธที่ใช้ยิงตอนนี้ (เสียงยิงฝั่ง client)
         byAttackSound: attackSoundOf(attacker), // เสียงโจมตีปกติเฉพาะตัว (ผู้สังหารเมจ / ฮารุกะระหว่างโอเมก้า)
-    targetName: target.name, targetImg: displayImg(target), targetColor: POSITION_COLORS[target.position] || "#888",
+    targetName: target.name, targetImg: displayImg(target), targetColor: colorOf(target),
     dmg, aoe: ginga || storiumAtk, revenge: false, skills: fxSkills,
     fxMs: (fxSkills.length ? ATTACKFX_TIME + 2 : ATTACKFX_TIME) * 1000,
   };
@@ -6067,7 +6077,7 @@ io.on('connection', (socket) => {
     broadcastPositions();
   });
 
-  safeOn(socket, "join", ({ name, position, characterId, shikiUlt } = {}) => {
+  safeOn(socket, "join", ({ name, position, characterId, shikiUlt, color } = {}) => {
     if (!consumeEventQuota(socket, 'join', 3, 10_000) || playerIdFor(socket)) return;
     if (Object.keys(players).length >= MAX_PLAYERS) { socket.emit("full"); return; }
     if (gameState !== "LOBBY") { socket.emit("inProgress"); return; }
@@ -6093,6 +6103,7 @@ io.on('connection', (socket) => {
       ready: false, // ห้องรอ: ต้องกดพร้อมก่อนเกมถึงจะเริ่มได้ (ครบทุกคน = เริ่มอัตโนมัติ)
       teamId: null, teamConfirmed: false, modeVote: null,
       name: (name || "ผู้เล่น").toString().slice(0, 12),
+      customColor: normalizeColor(color),
       position: pos, characterId: ch.id, avatar: ch.avatar, img: ch.img,
       cards: [], locked: false, busted: false, result: null,
       hp: MAX_HP, armor: MAX_ARMOR, skillPoints: 0, alive: true, shield: 0,
@@ -6415,7 +6426,7 @@ const engine = {
   log(msg) { lastLog.push(msg); },
   // การ์ดสกิลเด้งบนกระดาน (ไม่หยุดเกม) — payload.sound = คีย์ใน client/src/audio.js ให้เล่นพร้อมการ์ด
   skillFlash(payload) { io.emit("skillFlash", payload); },
-  colorOf(p) { return POSITION_COLORS[p.position] || "#888"; },
+  colorOf(p) { return colorOf(p); },
   nextTransformCounter() { return ++transformCounter; },
   startMatch,
   endTurn,

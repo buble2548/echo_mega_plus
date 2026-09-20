@@ -1,14 +1,19 @@
 @import "tailwindcss";
 
+@import "./avalon.css" layer(components);
+@import "./avalon-ui.css" layer(components);
+@import "./avalon-screens.css" layer(components);
+@import "./arena.css" layer(components);
+
 /* ---------- ธีมสี ECHO (spec 7.1) ---------- */
 @theme {
   --color-echo-purple: #9b4f96;
   --color-echo-purpledark: #6e2c7a;
-  --color-echo-navy: #0b2d4a;
-  --color-echo-bg: #3a3a3c;
+  --color-echo-navy: #170c25;
+  --color-echo-bg: #0a0612;
   --color-echo-hp: #c0392b;
   --color-echo-armor: #3b82c4;
-  --color-echo-gold: #e5b33b;
+  --color-echo-gold: #e8bf5a;
   --color-echo-cyan: #22d3ee;
   --color-echo-magenta: #e83e8c;
 
@@ -1133,4 +1138,195 @@ body {
 }
 .p-hs-tab-shop {
   background: linear-gradient(160deg, rgba(192, 57, 43, 0.3), rgba(9, 9, 13, 0.95));
+}
+
+/* ===== BOARD AVALON ===== */
+
+.p-player-frame {
+  border-radius: 16px 16px 9px 9px;
+  outline: 2px solid var(--p-frame-color, #6d2f83);
+  outline-offset: 2px;
+  background: linear-gradient(165deg, rgba(31, 18, 47, 0.92), rgba(9, 5, 15, 0.96));
+}
+.p-player-frame.p-player-frame-live {
+  animation: pFrameBreathe 3.2s ease-in-out infinite;
+}
+@keyframes pFrameBreathe {
+  0%, 100% { outline-width: 2px; outline-offset: 2px; }
+  50% { outline-width: 3px; outline-offset: 3px; }
+}
+
+.p-name-tag {
+  font-family: var(--font-av-thai);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  clip-path: none;
+  border-left: none;
+  border-top: 1px solid var(--p-frame-color, #6d2f83);
+  border-radius: 0 0 9px 9px;
+  background: linear-gradient(100deg, rgba(10, 6, 18, 0.94), rgba(22, 13, 34, 0.9));
+}
+
+.p-target-ring {
+  inset: -16%;
+  border: 1px dashed rgba(255, 233, 168, 0.7);
+}
+.p-target-ring::before { border-color: rgba(232, 191, 90, 0.35); }
+.p-target-corner {
+  border-color: #ffe9a8;
+  filter: drop-shadow(0 0 7px rgba(255, 233, 168, 0.95));
+}
+.p-target-badge {
+  font-family: var(--font-av-thai);
+  border-radius: 999px;
+  color: #1f1604;
+  background: linear-gradient(120deg, #ffe9a8, #c9992f);
+  box-shadow: 0 4px 16px -2px rgba(232, 191, 90, 0.85);
+}
+
+.p-chip {
+  font-family: var(--font-av-thai);
+  transform: none;
+  border-radius: 999px;
+}
+.p-chip > * { transform: none; }
+
+.p-hs-action {
+  border-radius: 999px;
+  border: 1px solid rgba(185, 95, 196, 0.42);
+  background: linear-gradient(140deg, rgba(31, 17, 47, 0.95), rgba(9, 5, 15, 0.93));
+  box-shadow: inset 0 1px 0 rgba(232, 196, 239, 0.14);
+  transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), filter 0.16s ease, box-shadow 0.2s ease;
+}
+.p-hs-action-draw {
+  border-color: rgba(185, 95, 196, 0.8);
+  box-shadow: 0 0 22px -7px rgba(185, 95, 196, 0.95), inset 0 1px 0 rgba(232, 196, 239, 0.2);
+}
+.p-hs-action-reveal {
+  border-color: #e8bf5a;
+  box-shadow: 0 0 24px -7px rgba(232, 191, 90, 0.95), inset 0 1px 0 rgba(255, 233, 168, 0.26);
+}
+.p-hs-action:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.16); }
+
+.p-sp-cell {
+  border-radius: 2px;
+  clip-path: polygon(26% 0, 100% 0, 74% 100%, 0 100%);
+}
+
+.p-hs-tab-group {
+  border-radius: 16px;
+  border: 1px solid rgba(185, 95, 196, 0.35);
+  box-shadow: 0 14px 26px -10px rgba(0, 0, 0, 0.8);
+}
+.p-hs-tab-bag {
+  background: linear-gradient(140deg, rgba(109, 47, 131, 0.55), rgba(9, 5, 15, 0.95));
+  border-bottom: 1px solid rgba(185, 95, 196, 0.28);
+}
+.p-hs-tab-shop {
+  background: linear-gradient(140deg, rgba(94, 63, 8, 0.6), rgba(9, 5, 15, 0.95));
+}
+.p-hs-tab { font-family: var(--font-av-thai); }
+
+.p-status-click { border-radius: 12px; }
+
+.p-panel {
+  border-radius: 16px;
+  border: 1px solid rgba(185, 95, 196, 0.32);
+  background: linear-gradient(160deg, rgba(31, 18, 47, 0.95), rgba(10, 6, 17, 0.97));
+}
+.p-panel::before { display: none; }
+
+.bd-top {
+  position: absolute;
+  top: 0.9rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.5rem 1.8rem 0.55rem;
+  overflow: hidden;
+  clip-path: polygon(18px 0, calc(100% - 18px) 0, 100% 100%, 0 100%);
+  background: linear-gradient(100deg, rgba(46, 17, 69, 0.92), rgba(10, 6, 17, 0.94));
+  border-bottom: 1px solid rgba(232, 191, 90, 0.55);
+}
+.bd-top::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #ffe9a8, transparent);
+  box-shadow: 0 0 14px 1px rgba(232, 191, 90, 0.7);
+}
+
+.bd-timer {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+}
+.bd-timer svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.bd-timer-ring { fill: none; stroke: rgba(185, 95, 196, 0.35); stroke-width: 2; }
+.bd-timer-arc {
+  fill: none;
+  stroke: #ffe9a8;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  transition: stroke-dashoffset 0.9s linear, stroke 0.4s ease;
+}
+.bd-timer[data-low="true"] .bd-timer-arc { stroke: #ff6b78; }
+.bd-timer[data-low="true"] { animation: bdTick 1s ease-in-out infinite; }
+@keyframes bdTick {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.09); }
+}
+
+.bd-deck {
+  position: relative;
+  border-radius: 14px;
+}
+.bd-deck::before {
+  content: "";
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(232, 191, 90, 0.26), transparent 68%);
+  pointer-events: none;
+}
+
+.bd-skill {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 14px 14px 6px 6px;
+  background: linear-gradient(165deg, rgba(31, 18, 47, 0.95), rgba(9, 5, 15, 0.96));
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), filter 0.18s ease, box-shadow 0.22s ease;
+}
+.bd-skill[data-usable="true"]:hover { transform: translateY(-4px) scale(1.03); filter: brightness(1.1); }
+.bd-skill-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  z-index: 10;
+}
+.bd-skill-cost {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  z-index: 12;
+  min-width: 1.35rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  font-family: var(--font-av-display);
+  font-weight: 900;
+  font-size: 0.78rem;
+  line-height: 1.35rem;
+  text-align: center;
 }

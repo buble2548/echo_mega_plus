@@ -1,5 +1,5 @@
 // Shared music priorities for the regular board and Moon Cell.
-export function musicForState(state, { lowQ = false, scene = null, cycleSeq = 0 } = {}) {
+export function musicForState(state, { lowQ = false, scene = null, cycleSeq = 0, attackSeq = 0 } = {}) {
   const phase = state?.gameState;
   if (!phase || ["LOBBY", "TEAM_MODE", "TEAM_SETUP"].includes(phase)) return { name: "main_home" };
   const cs = phase === "CUTSCENE" ? state.cutscene : null;
@@ -15,6 +15,8 @@ export function musicForState(state, { lowQ = false, scene = null, cycleSeq = 0 
     return { name: phase === "SERAPH_PLACE" ? "sc_rest" : "sc_day" };
   }
   if (state?.skillMusic) return { name: state.skillMusic, seq: state.skillMusicSeq };
+  // ช่วงโจมตี: เพลงเฉพาะกิจทับเพลงกลางวัน/กลางคืน และเริ่มจากต้นทุกครั้งที่เข้าช่วง (attackSeq ขยับ)
+  if (phase === "ATTACK" || phase === "ATTACKING") return { name: "battle_phase", seq: attackSeq };
   if (["PLAYING", "SUMMARY", "ATTACK", "ATTACKING", "TRANSITION", "CUTSCENE"].includes(phase)) {
     return { name: state.cycle === "night" ? "new_night" : "new_morning", seq: cycleSeq };
   }

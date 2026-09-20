@@ -1,13 +1,11 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { clickSound } from "../audio";
 import { FALLBACK } from "../data/avatars";
 import { POSITION_COLORS } from "../data/positions";
+import { AvScene, Medallion, SealButton, AvButton, Crest, Crystals } from "../components/avalon";
 
-const PURPLE = "linear-gradient(135deg,#9b4f96,#7d3a78)";
-const P_DISPLAY = "var(--font-p-display)";
+const LEVEL = 3;
 
-// ---------- กลุ่มความยากในการเล่น (แบ่งหน้าเลือกตัวละคร) ----------
-//  order = ลำดับการแสดงในกลุ่ม — ตัวที่ไม่อยู่ในลิสต์จะต่อท้ายตามลำดับ roster
 const DIFFICULTY_GROUPS = [
   { key: "easy", label: "ง่าย", color: "#2E9E4B", order: ["hikaru", "mageslayer", "ignis", "daichi"] },
   { key: "medium", label: "กลาง", color: "#E5B33B", order: ["temari", "miyako", "bat_ben", "escanor", "hisakawa_sister", "ippo", "cayenne"] },
@@ -17,74 +15,50 @@ const DIFFICULTY_GROUPS = [
   { key: "impossible", label: "ทักษิณ จะโปรหาบิดาท่านหรือ?", color: "#450a0a", order: ["tohno", "nanaya", "princess_shiki"] },
   { key: "special", label: "พิเศษ", color: "#0e7490", order: ["ultraman_trigger", "yui", "shido", "brian", "producer_lumi"] },
 ];
-// ตัวละครในกลุ่มความยากนั้น เรียงตาม order ที่กำหนด
+
 function charsInGroup(roster, g) {
   const idx = (c) => { const i = g.order.indexOf(c.id); return i < 0 ? 999 : i; };
   return roster.filter((c) => !c.hidden && (c.difficulty || "easy") === g.key).sort((a, b) => idx(a) - idx(b));
 }
 
-// รูปตัวละคร (เต็มกรอบ) — ใช้ img ถ้ามี ไม่งั้นอีโมจิสำรอง
-function CharImage({ c, className, emojiSize = "3.5rem", rounded = "" }) {
+function CharArt({ c, className = "", emojiSize = "3rem", style }) {
   const [broken, setBroken] = useState(false);
+  if (c.img && !broken) {
+    return <img src={c.img} alt="" loading="lazy" decoding="async" className={className} style={style} onError={() => setBroken(true)} />;
+  }
   return (
-    <div className={`relative overflow-hidden ${rounded} ${className}`} style={{ background: PURPLE }}>
-      {c.img && !broken ? (
-        <img
-          src={c.img}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          className="absolute inset-0 w-full h-full object-cover"
-          onError={() => setBroken(true)}
-        />
-      ) : (
-        <span className="absolute inset-0 grid place-items-center" style={{ fontSize: emojiSize }}>
-          {FALLBACK[c.avatar] || "🙂"}
-        </span>
-      )}
-    </div>
+    <span className={`grid place-items-center ${className}`} style={{ fontSize: emojiSize, background: "linear-gradient(150deg, var(--av-purple), var(--av-royal))", ...style }}>
+      {FALLBACK[c.avatar] || "🙂"}
+    </span>
   );
 }
 
-// ช่องสกิล 1 อัน — แสดงข้อมูลเต็ม (ชื่อ + คำอธิบาย + แต้มที่ใช้)
-// คำอธิบายยาวเกินเพดาน (max-h) จะเลื่อนขึ้นลงดูในช่องตัวเองได้ ไม่ดันช่องอื่นจนอัดกัน
-function SkillTile({ label, skill }) {
+function SkillCard({ label, skill, i }) {
+  if (!skill) return null;
+  const drift = (i % 3) * 20;
   return (
-    <div className="p-panel rounded-lg px-4 py-3 shadow-lg text-white text-left flex flex-col min-h-0">
-      <div className="flex items-center justify-between gap-2 shrink-0">
-        <span className="text-base sm:text-lg font-bold uppercase tracking-wide" style={{ fontFamily: P_DISPLAY }}>
-          {label}
-        </span>
-        <span
-          className="text-xs shrink-0 px-2 py-0.5 font-bold rounded-full"
-          style={{ background: "var(--color-p-accent)" }}
-        >
-          {skill && skill.cost != null ? `ใช้ ${skill.cost} แต้ม` : "ไม่เสีย"}
+    <div className="av-skill-card av-slide-r av-seq" style={{ "--i": i, marginLeft: drift }}>
+      <div className="flex items-center justify-between gap-3">
+        <span className="av-label" style={{ fontSize: "0.72rem", color: "var(--av-lilac)", letterSpacing: "0.1em" }}>{label}</span>
+        <span className={`av-chip shrink-0 ${skill.cost != null ? "av-chip-gold" : ""}`}>
+          {skill.cost != null ? `${skill.cost} แต้ม` : "ไม่เสียแต้ม"}
         </span>
       </div>
-      {skill ? (
-        <>
-          <div
-            className="font-bold mt-1.5 shrink-0"
-            style={{ color: "var(--color-p-accent-bright)", fontFamily: P_DISPLAY }}
-          >
-            {skill.name}
-          </div>
-          <div className="p-scroll text-sm text-white/85 mt-0.5 leading-snug flex-1 min-h-0 max-h-36 overflow-y-auto pr-1">{skill.desc}</div>
-        </>
-      ) : (
-        <div className="text-sm text-white/50 mt-1">—</div>
-      )}
+      <div className="av-heading text-lg mt-1" style={{ color: "var(--av-gold-lit)" }}>{skill.name}</div>
+      <div className="text-sm mt-1 leading-snug" style={{ color: "rgba(239,230,245,.78)" }}>{skill.desc}</div>
     </div>
   );
 }
 
-export default function CharacterSelect({ roster, position, name, takenChars = [], onConfirm, onBack }) {
+export default function CharacterSelect({ roster, position, color: myColor, name, takenChars = [], onConfirm, onBack }) {
   const [picked, setPicked] = useState(null);
-  const [tab, setTab] = useState("all"); // แท็บกรองความยาก: "all" | difficulty key
-  // ชิกิ (patch 2.0.6): เลือกท่าไม้ตายที่จะใช้ได้ — "deatheye" (ฉันมองเห็นมันแล้ว) | "wither" (ความตายที่โรยรา)
+  const [tab, setTab] = useState("all");
   const [shikiUlt, setShikiUlt] = useState("deatheye");
-  const color = POSITION_COLORS[position] || "#9B4F96";
+  const [dockOpen, setDockOpen] = useState(true);
+  const ribbonRef = useRef(null);
+  const closeTimer = useRef(null);
+
+  const color = myColor || POSITION_COLORS[position] || "#9B4F96";
   const sel = roster.find((c) => c.id === picked);
 
   const grouped = useMemo(
@@ -101,216 +75,145 @@ export default function CharacterSelect({ roster, position, name, takenChars = [
   const visibleRoster = tab === "all" ? orderedRoster : orderedRoster.filter((c) => (c.difficulty || "easy") === tab);
   const selGroup = sel ? DIFFICULTY_GROUPS.find((g) => g.key === (sel.difficulty || "easy")) : null;
 
-  // ตัวละคร unique (คอนเนอร์ RK800): เลือกได้แค่ 1 คนต่อเกม — มีคนจองแล้วก็กดไม่ได้
   const isTaken = (c) => !!c && !!c.unique && takenChars.includes(c.id);
-  const pick = (id) => { clickSound(); setPicked(id); };
-  const confirm = () => { clickSound(); if (picked && !sel?.locked && !isTaken(sel)) onConfirm(picked, picked === "shiki" ? { shikiUlt } : undefined); };
-  const back = () => { clickSound(); onBack(); };
+
+  const pickChar = (id) => {
+    setPicked(id);
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => setDockOpen(false), 520);
+  };
+
+  const toggleDock = () => {
+    clickSound();
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setDockOpen((v) => !v);
+  };
+
+  const onRibbonWheel = useCallback((e) => {
+    const el = ribbonRef.current;
+    if (!el) return;
+    const delta = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+    if (!delta) return;
+    el.scrollLeft += delta;
+  }, []);
+
+  const confirm = () => { if (picked && !sel?.locked && !isTaken(sel)) onConfirm(picked, picked === "shiki" ? { shikiUlt } : undefined); };
+
+  const skills = [];
+  if (sel) {
+    const push = (label, s) => s && skills.push({ label, skill: s });
+    push("สกิลติดตัว", sel.passive);
+    if (sel.id === "hisakawa_sister") push("สกิลติดตัว 2", sel.passive2);
+    if (sel.id === "nanaya") { push("สกิลติดตัว 2", sel.passive2); push("สกิลติดตัว 3", sel.passive3); }
+    if (sel.id === "conner") { push("สกิลติดตัว 2", sel.passive2); push("สกิลติดตัว 3", sel.passive3); push("สกิลติดตัว 4", sel.passive4); }
+    if (sel.id === "cayenne") push("สกิลติดตัว 2", sel.passive2);
+    push(sel.basicNight ? "สกิลพื้นฐาน (กลางวัน)" : "สกิลพื้นฐาน", sel.basic);
+    if (sel.basicNight) push("สกิลพื้นฐาน (กลางคืน)", sel.basicNight);
+    if (sel.id === "hisakawa_sister") push("สกิลพื้นฐาน 2 (เมื่อแฝดล้ม)", sel.basic2);
+    push(sel.secondaryNight ? "สกิลรอง (กลางวัน)" : "สกิลรอง", sel.secondary);
+    if (sel.secondaryNight) push("สกิลรอง (กลางคืน)", sel.secondaryNight);
+    if (sel.id === "hisakawa_sister") push("สกิลรอง (ฮายาเตะ)", sel.secondary2);
+    if (!sel.ultimateSolar) push(sel.ultimateNight ? "ท่าไม้ตาย (กลางวัน)" : sel.id === "shiki" ? "ท่าไม้ตาย 1" : "ท่าไม้ตาย", sel.ultimate);
+    if (sel.id === "hisakawa_sister") { push("ท่าไม้ตาย 2 (ฮายาเตะ)", sel.ultimate2); push("ท่าไม้ตาย 3 (รวมพลัง)", sel.ultimate3); }
+    if (sel.id === "shiki") push("ท่าไม้ตาย 2", sel.ultimate2);
+    if (sel.ultimateNight) push("ท่าไม้ตาย (กลางคืน)", sel.ultimateNight);
+    if (sel.secondaryRevert) push("สกิลรอง (คืนร่าง)", sel.secondaryRevert);
+    if (sel.ultimateSolar) push("ท่าไม้ตาย (โซล่า)", sel.ultimateSolar);
+    if (sel.ultimateMars) push("ท่าไม้ตาย (มาร์)", sel.ultimateMars);
+    if (sel.ultimateLuna) push("ท่าไม้ตาย (ลูน่า)", sel.ultimateLuna);
+    if (sel.ultimateGodwing) push("ท่าไม้ตาย (ปีกแห่งสุริยัน)", sel.ultimateGodwing);
+  }
+
+  const bottomGap = dockOpen ? "15rem" : "5.5rem";
 
   return (
-    <div className="p-bg relative h-screen flex flex-col overflow-hidden">
-      {/* ---------- header สแลชม่วง (auto-height เพื่อไม่ให้เนื้อหาล้นกล่อง) ---------- */}
-      <div className="p-header-bar relative z-20 shrink-0">
-        <div className="relative flex items-center flex-wrap px-5 py-3 gap-3 sm:gap-4">
-          <span className="p-logo-wrap shrink-0">
-            <span className="p-logo-glow" />
-            <img src="/image/logo_current.webp" alt="ECHO" className="p-logo-img h-11 sm:h-14 w-auto" />
-          </span>
-          <h2
-            className="flex-1 text-center text-base sm:text-xl font-bold text-white uppercase tracking-wide min-w-[8rem]"
-            style={{ fontFamily: P_DISPLAY }}
-          >
-            เลือกตัวละคร
-          </h2>
-          <div className="flex items-center gap-3 shrink-0 pr-14 sm:pr-16">
-            <span className="text-white font-bold text-sm sm:text-lg max-w-[9rem] truncate" style={{ fontFamily: P_DISPLAY }}>
-              {name || "ชื่อผู้เล่น"}
-            </span>
-            <span
-              className="w-10 h-10 sm:w-12 sm:h-12 grid place-items-center text-white text-lg sm:text-xl font-black shadow-lg border-2 border-white/70 rounded-md shrink-0"
-              style={{ background: color, fontFamily: P_DISPLAY }}
-            >
-              P{position}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ---------- แท็บกรองความยาก ---------- */}
-      {roster.length > 0 && (
-        <div className="relative z-10 flex gap-5 sm:gap-7 px-5 sm:px-8 py-3 overflow-x-auto shrink-0 border-b border-white/10 bg-black/25">
-          <button
-            className="p-tab shrink-0 text-sm sm:text-base text-white/80"
-            data-active={tab === "all"}
-            onClick={() => { clickSound(); setTab("all"); }}
-          >
-            ทั้งหมด
-          </button>
-          {grouped.map((g) => (
-            <button
-              key={g.key}
-              className="p-tab shrink-0 text-sm sm:text-base text-white/80 whitespace-nowrap"
-              data-active={tab === g.key}
-              onClick={() => { clickSound(); setTab(g.key); }}
-              style={{ "--tab-accent": g.color }}
-            >
-              {g.label}
-            </button>
-          ))}
+    <AvScene level={LEVEL} seed={37} className="h-screen w-screen overflow-hidden">
+      {sel && (
+        <div key={sel.id} className="av-showcase-portrait av-slide-l">
+          <CharArt c={sel} className="w-full h-full object-cover" emojiSize="12rem" style={{ objectPosition: "50% 16%" }} />
         </div>
       )}
 
-      {roster.length === 0 ? (
-        <div className="relative z-10 flex-1 grid place-items-center opacity-70">กำลังโหลดตัวละคร...</div>
-      ) : (
-        /* ================= มุมมองแบบแยกจอถาวร: ซ้าย = รายชื่อ / ขวา = รายละเอียด ================= */
-        <div className="relative z-10 flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden">
-          {/* ---------- ซ้าย: กริดตัวละคร (เลื่อนได้อิสระ) ---------- */}
-          <div className="p-scroll w-full lg:w-[46%] xl:w-[40%] max-h-[38vh] lg:max-h-none lg:shrink-0 overflow-y-auto overscroll-contain p-4 sm:p-5 lg:border-r border-white/10">
-            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-3 gap-3 sm:gap-4">
-              {visibleRoster.map((c, i) => {
-                const g = DIFFICULTY_GROUPS.find((gr) => gr.key === (c.difficulty || "easy"));
-                const active = c.id === picked;
-                const taken = isTaken(c);
-                return (
-                  <button
-                    key={c.id}
-                    onClick={() => { if (!taken) pick(c.id); }}
-                    disabled={taken}
-                    className={`p-rise p-scan-hover relative transition ${taken ? "opacity-40 cursor-not-allowed" : "hover:-translate-y-1"}`}
-                    style={{ animationDelay: `${Math.min(i, 14) * 0.03}s` }}
-                    title={c.locked ? "ยังไม่ปลดล็อก" : taken ? `${c.name} — มีผู้เล่นอื่นเลือกไปแล้ว (เลือกได้ 1 คนต่อเกม)` : c.name}
-                  >
-                    <div
-                      className="relative aspect-square border-2 rounded-md overflow-hidden"
-                      style={{ borderColor: active ? "var(--color-p-accent-bright)" : "rgba(255,255,255,.12)", boxShadow: active ? "0 0 0 2px rgba(199,116,194,.35), 0 10px 24px -8px rgba(199,116,194,.6)" : undefined }}
-                    >
-                      <CharImage c={c} className="w-full h-full" rounded="" emojiSize="2.6rem" />
-                      <div className="absolute inset-x-0 bottom-0 h-1.5" style={{ background: g?.color || "#9B4F96" }} />
-                      {taken && (
-                        <div className="absolute inset-0 grid place-items-center bg-black/60 text-[10px] font-black text-center leading-tight px-1">
-                          ถูกเลือกแล้ว
-                        </div>
-                      )}
-                    </div>
-                    <div className="mt-1 font-bold text-xs sm:text-sm truncate">{c.name}</div>
-                  </button>
-                );
-              })}
+      <div className="av-content absolute top-6 left-9 flex items-center gap-4 z-30">
+        <span className="av-logo-seal">
+          <img src="/image/logo_current.webp" alt="ECHO" className="h-7 w-auto" />
+        </span>
+        <div className="av-label">เลือกตัวละคร</div>
+        <AvButton variant="ghost" className="py-1.5 px-5 text-sm ml-2" onClick={onBack}>
+          ← กลับ
+        </AvButton>
+      </div>
+
+      <div className="av-content absolute top-6 right-12 flex items-center gap-4 z-30 pr-16">
+        <span className="av-heading text-lg text-white av-ink max-w-[12rem] truncate">{name || "ผู้เล่น"}</span>
+        <Crest color={color} className="w-12 h-12 text-base">P{position}</Crest>
+      </div>
+
+      <div className="av-content absolute right-5 top-1/2 -translate-y-1/2 z-30 flex flex-col items-end gap-1">
+        <button className="av-rail" data-active={tab === "all"} onClick={() => { clickSound(); setTab("all"); }}>
+          ทั้งหมด
+        </button>
+        {grouped.map((g) => (
+          <button
+            key={g.key}
+            className="av-rail"
+            data-active={tab === g.key}
+            onClick={() => { clickSound(); setTab(g.key); }}
+            style={{ "--av-tab": g.color, maxWidth: "13rem", overflow: "hidden", textOverflow: "ellipsis" }}
+          >
+            {g.label}
+          </button>
+        ))}
+      </div>
+
+      {sel && (
+        <div key={`n${sel.id}`} className="av-showcase-name" style={{ bottom: `calc(${bottomGap} + 1rem)` }}>
+          <div className="av-slide-l">
+            <div className="flex items-center gap-3 mb-2">
+              {selGroup && (
+                <span className="av-chip" style={{ background: selGroup.color, borderColor: "rgba(255,255,255,.35)", color: "#fff" }}>
+                  {selGroup.label}
+                </span>
+              )}
+              {isTaken(sel) && <span className="av-chip av-chip-gold">ถูกเลือกไปแล้ว</span>}
             </div>
+            <div className="av-title av-title-thai text-[4rem] av-ink">{sel.name}</div>
+            <span className="av-crack block mt-1" style={{ position: "relative", width: "24vw", height: 2 }} />
           </div>
+        </div>
+      )}
 
-          {/* ---------- ขวา: แผงรายละเอียด (คงที่ ไม่ต้องสลับหน้า) ---------- */}
-          <div className="p-scroll flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 pb-32">
-            {!sel ? (
-              <div className="p-rise h-full min-h-[40vh] flex flex-col items-center justify-center text-center opacity-60 gap-3">
-                <div className="text-5xl">🎴</div>
-                <div style={{ fontFamily: P_DISPLAY }}>เลือกตัวละครจากรายชื่อด้านซ้ายเพื่อดูรายละเอียด</div>
-              </div>
-            ) : (
-              <div key={sel.id} className="p-rise flex flex-col md:flex-row gap-4 sm:gap-5">
-                {/* รูปตัวใหญ่ */}
-                <div className="relative shrink-0 mx-auto md:mx-0">
-                  <div
-                    className="absolute -inset-1.5 -z-10"
-                    style={{ background: "linear-gradient(140deg,var(--color-p-accent),var(--color-p-accent-deep))", clipPath: "polygon(6% 0,100% 4%,94% 100%,0 96%)" }}
-                  />
-                  <CharImage
-                    c={sel}
-                    className="w-40 h-52 sm:w-48 sm:h-64 -rotate-2 shadow-2xl border-2 border-black/60"
-                    rounded=""
-                    emojiSize="4.5rem"
-                  />
+      {sel && (
+        <div
+          key={`s${sel.id}`}
+          className="av-content av-scroll absolute overflow-y-auto overscroll-contain pr-3 z-10"
+          style={{ right: "17vw", top: "12vh", bottom: bottomGap, width: "30vw", transition: "bottom .55s cubic-bezier(.16,1,.3,1)" }}
+        >
+          <div className="flex flex-col gap-3">
+            {skills.map((s, i) => <SkillCard key={i} label={s.label} skill={s.skill} i={i} />)}
+
+            {sel.id === "shiki" && sel.ultimate2 && (
+              <div className="av-skill-card av-slide-r">
+                <div className="av-label mb-3">เลือกท่าไม้ตายที่จะใช้ในเกมนี้</div>
+                <div className="flex flex-col gap-2">
+                  {[
+                    { k: "deatheye", t: "ท่า 1 · ฉันมองเห็นมันแล้ว" },
+                    { k: "wither", t: "ท่า 2 · ความตายที่โรยรา" },
+                  ].map((o) => (
+                    <AvButton
+                      key={o.k}
+                      variant="ghost"
+                      className="text-sm py-2 justify-start"
+                      data-on={shikiUlt === o.k ? "true" : "false"}
+                      onClick={() => setShikiUlt(o.k)}
+                    >
+                      {o.t}{shikiUlt === o.k ? " ✓" : ""}
+                    </AvButton>
+                  ))}
                 </div>
-
-                {/* แผงสกิล */}
-                <div className="p-panel flex-1 min-w-0 rounded-xl p-4 sm:p-5 flex flex-col gap-3">
-                  <div
-                    className="relative bg-black/50 border-l-4 px-4 py-2.5 flex items-center flex-wrap gap-3"
-                    style={{ borderColor: "var(--color-p-accent)" }}
-                  >
-                    <span className="text-xl sm:text-2xl font-black text-white" style={{ fontFamily: P_DISPLAY }}>{sel.name}</span>
-                    {selGroup && (
-                      <span
-                        className="p-chip text-xs sm:text-sm px-3 py-1 text-white whitespace-nowrap border border-black/40 rounded-full"
-                        style={{ background: selGroup.color }}
-                      >
-                        <span>ความยาก · {selGroup.label}</span>
-                      </span>
-                    )}
-                  </div>
-                  {/* auto-rows-fr = ทุกช่องสูงเท่ากัน ช่องที่คำอธิบายยาวจะเลื่อนดูในตัวเอง */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 auto-rows-fr gap-3">
-                    <SkillTile label="สกิลติดตัว" skill={sel.passive} />
-                    {/* บานาจ ลิงก์ (patch 2.1.2): สกิลติดตัว 2 ฉันไม่อยากให้เราต้องมาสู้กัน */}
-                    {sel.id === "hisakawa_sister" && sel.passive2 && <SkillTile label="สกิลติดตัว 2" skill={sel.passive2} />}
-                    {/* นานายะ ชิกิ (patch 2.1.9): สกิลติดตัว 2 หัวใจฆาตกร / สกิลติดตัว 3 พักผ่อนสักครู่ */}
-                    {sel.id === "nanaya" && sel.passive2 && <SkillTile label="สกิลติดตัว 2" skill={sel.passive2} />}
-                    {sel.id === "nanaya" && sel.passive3 && <SkillTile label="สกิลติดตัว 3" skill={sel.passive3} />}
-                    {/* คอนเนอร์ RK800 (patch 2.7): สกิลติดตัว 2-4 จับกุมขั้นเด็ดขาด / ปัญญาประดิษฐ์ / การป้องกันตัว */}
-                    {sel.id === "conner" && sel.passive2 && <SkillTile label="สกิลติดตัว 2" skill={sel.passive2} />}
-                    {/* คาเยนน์ ซูซูชิโระ: สกิลติดตัว 2 ร่วมร่างสหายแห่งเทพ */}
-                    {sel.id === "cayenne" && sel.passive2 && <SkillTile label="สกิลติดตัว 2" skill={sel.passive2} />}
-                    {sel.id === "conner" && sel.passive3 && <SkillTile label="สกิลติดตัว 3" skill={sel.passive3} />}
-                    {sel.id === "conner" && sel.passive4 && <SkillTile label="สกิลติดตัว 4" skill={sel.passive4} />}
-                    <SkillTile label={sel.basicNight ? "สกิลพื้นฐาน (กลางวัน)" : "สกิลพื้นฐาน"} skill={sel.basic} />
-                    {sel.basicNight && <SkillTile label="สกิลพื้นฐาน (กลางคืน)" skill={sel.basicNight} />}
-                    {sel.id === "hisakawa_sister" && sel.basic2 && <SkillTile label="สกิลพื้นฐาน 2 (เมื่อแฝดล้ม)" skill={sel.basic2} />}
-                    {/* โอเบรอน/โคโตเนะ: สกิลสลับตามช่วงเวลากลางวัน/กลางคืน — โชว์ครบทุกท่า */}
-                    <SkillTile label={sel.secondaryNight ? "สกิลรอง (กลางวัน)" : "สกิลรอง"} skill={sel.secondary} />
-                    {sel.secondaryNight && <SkillTile label="สกิลรอง (กลางคืน)" skill={sel.secondaryNight} />}
-                    {/* บานาจ ลิงก์ (patch 2.1.2): สกิลรอง 2 Beam Magnum — แทนที่สกิลรอง 1 ระหว่างร่าง NewType Paradise */}
-                    {sel.id === "hisakawa_sister" && sel.secondary2 && <SkillTile label="สกิลรอง (ฮายาเตะ)" skill={sel.secondary2} />}
-                    {/* อควาเรียน: ไม่มีท่าไม้ตายกลาง — ใช้ 4 ท่าตามร่างด้านล่างแทน */}
-                    {!sel.ultimateSolar && (
-                      <SkillTile
-                        label={sel.ultimateNight ? "ท่าไม้ตาย (กลางวัน)" : sel.id === "shiki" ? "ท่าไม้ตาย 1" : "ท่าไม้ตาย"}
-                        skill={sel.ultimate}
-                      />
-                    )}
-                    {/* ริดดี้ (patch 2.0.9): ท่าไม้ตาย 2 — ใช้แทนท่า 1 ระหว่างเป็นพันธมิตรกับบานาจ */}
-                    {/* บานาจ ลิงก์ (patch 2.1.2): ท่าไม้ตาย 2 — ใช้แทนท่า 1 ระหว่างร่าง Paradise ที่มีริดดี้เป็นพันธมิตร */}
-                    {sel.id === "hisakawa_sister" && sel.ultimate2 && <SkillTile label="ท่าไม้ตาย 2 (ฮายาเตะ)" skill={sel.ultimate2} />}
-                    {sel.id === "hisakawa_sister" && sel.ultimate3 && <SkillTile label="ท่าไม้ตาย 3 (รวมพลัง)" skill={sel.ultimate3} />}
-                    {/* ชิกิ (patch 2.0.6): ท่าไม้ตาย 2 ความตายที่โรยรา — เลือกใช้ได้ 1 ท่าต่อเกม */}
-                    {sel.id === "shiki" && sel.ultimate2 && <SkillTile label="ท่าไม้ตาย 2" skill={sel.ultimate2} />}
-                    {sel.id === "shiki" && sel.ultimate2 && (
-                      <div className="col-span-1 sm:col-span-2 bg-black/40 border border-white/15 px-4 py-3 rounded-lg">
-                        <div className="font-bold mb-2" style={{ color: "var(--color-p-accent-bright)" }}>👁️ เลือกท่าไม้ตายที่จะใช้ในเกมนี้ (เลือกได้ 1 ท่า)</div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <button
-                            onClick={() => { clickSound(); setShikiUlt("deatheye"); }}
-                            className={`border-2 px-3 py-2 font-bold transition rounded-md ${
-                              shikiUlt === "deatheye" ? "bg-[var(--color-p-accent)]/20" : "border-white/20 bg-white/5 hover:bg-white/10"
-                            }`}
-                            style={shikiUlt === "deatheye" ? { borderColor: "var(--color-p-accent)", color: "var(--color-p-accent-bright)" } : undefined}
-                          >
-                            ท่า 1 · ฉันมองเห็นมันแล้ว{shikiUlt === "deatheye" ? " ✓" : ""}
-                          </button>
-                          <button
-                            onClick={() => { clickSound(); setShikiUlt("wither"); }}
-                            className={`border-2 px-3 py-2 font-bold transition rounded-md ${
-                              shikiUlt === "wither" ? "bg-[var(--color-p-accent)]/20" : "border-white/20 bg-white/5 hover:bg-white/10"
-                            }`}
-                            style={shikiUlt === "wither" ? { borderColor: "var(--color-p-accent)", color: "var(--color-p-accent-bright)" } : undefined}
-                          >
-                            ท่า 2 · ความตายที่โรยรา{shikiUlt === "wither" ? " ✓" : ""}
-                          </button>
-                        </div>
-                        <div className="text-xs opacity-75 mt-2 leading-snug">
-                          เลือกท่า 2: สกิลติดตัวจะมอบ "เส้นชีวิต" น้อยลงเหลือ 1 หน่วยต่อครั้ง (จาก 2) และให้ได้สูงสุด 3 หน่วย
-                          — ท่าไม้ตาย 2 จะแจกเส้นชีวิตเพิ่มได้อีกสูงสุด 3 หน่วยต่อคน (รวมสูงสุด 6 = โอกาสสังหาร 60%)
-                        </div>
-                      </div>
-                    )}
-                    {sel.ultimateNight && <SkillTile label="ท่าไม้ตาย (กลางคืน)" skill={sel.ultimateNight} />}
-                    {/* อควาเรียน: สกิลรอง "คืนร่าง" + ท่าไม้ตาย 4 แบบ (โซล่า/มาร์/ลูน่า/ปีกแห่งสุริยัน) */}
-                    {sel.secondaryRevert && <SkillTile label="สกิลรอง (คืนร่าง)" skill={sel.secondaryRevert} />}
-                    {sel.ultimateSolar && <SkillTile label="ท่าไม้ตาย (โซล่า)" skill={sel.ultimateSolar} />}
-                    {sel.ultimateMars && <SkillTile label="ท่าไม้ตาย (มาร์)" skill={sel.ultimateMars} />}
-                    {sel.ultimateLuna && <SkillTile label="ท่าไม้ตาย (ลูน่า)" skill={sel.ultimateLuna} />}
-                    {sel.ultimateGodwing && <SkillTile label="ท่าไม้ตาย (ปีกแห่งสุริยัน)" skill={sel.ultimateGodwing} />}
-                  </div>
+                <div className="text-xs mt-3 leading-snug" style={{ color: "rgba(239,230,245,.6)" }}>
+                  เลือกท่า 2: สกิลติดตัวจะมอบเส้นชีวิตน้อยลงเหลือ 1 หน่วยต่อครั้ง (จาก 2) และให้ได้สูงสุด 3 หน่วย
+                  — ท่าไม้ตาย 2 จะแจกเส้นชีวิตเพิ่มได้อีกสูงสุด 3 หน่วยต่อคน (รวมสูงสุด 6 = โอกาสสังหาร 60%)
                 </div>
               </div>
             )}
@@ -318,30 +221,66 @@ export default function CharacterSelect({ roster, position, name, takenChars = [
         </div>
       )}
 
-      {/* ---------- ปุ่มย้อนกลับ ลอย โปร่งแสง มุมซ้ายล่าง ---------- */}
-      <button
-        onClick={back}
-        className="p-float-back fixed z-30 bottom-5 left-5 px-5 py-2.5 font-bold transition rounded-full text-white/90"
-      >
-        ← กลับ
-      </button>
+      {!sel && (
+        <div className="av-content absolute inset-x-0 flex justify-center" style={{ top: "36vh" }}>
+          <div className="av-heading text-2xl av-breathe" style={{ color: "rgba(232,196,239,.45)" }}>
+            เลือกตัวละครจากแถบด้านล่าง
+          </div>
+        </div>
+      )}
 
-      {/* ตัวละครระบบ/บอสเปิดดูข้อมูลได้ แต่ไม่มีปุ่มยืนยันให้เลือกเล่น */}
-      {!sel?.locked && <button
-        onClick={confirm}
-        disabled={!sel || sel.locked}
-        className={`fixed bottom-0 right-0 w-56 h-24 sm:h-28 group z-20 transition-all duration-300 ${
-          sel ? "translate-x-0 opacity-100" : "translate-x-full opacity-0 pointer-events-none"
-        }`}
-      >
-        <div className="p-slash-btn absolute inset-0 transition group-hover:brightness-110" />
-        <span
-          className="absolute bottom-5 sm:bottom-6 right-6 sm:right-7 text-xl sm:text-2xl font-black text-white uppercase italic"
-          style={{ fontFamily: P_DISPLAY }}
+      <div className="av-dock" data-open={dockOpen ? "true" : "false"}>
+        <button className="av-dock-handle" onClick={toggleDock}>
+          {dockOpen ? "ซ่อนแถบตัวละคร ▼" : "เปลี่ยนตัวละคร ▲"}
+        </button>
+        <div ref={ribbonRef} className="av-ribbon av-scroll av-scroll-none" onWheel={onRibbonWheel}>
+          {visibleRoster.map((c, i) => {
+            const g = DIFFICULTY_GROUPS.find((gr) => gr.key === (c.difficulty || "easy"));
+            const active = c.id === picked;
+            const taken = isTaken(c);
+            return (
+              <div key={c.id} className="shrink-0 flex flex-col items-center gap-2 av-rise av-seq" style={{ "--i": Math.min(i, 18) }}>
+                <Medallion
+                  on={active}
+                  disabled={taken}
+                  size={active ? 102 : 86}
+                  onClick={() => pickChar(c.id)}
+                  title={c.locked ? "ยังไม่ปลดล็อก" : taken ? `${c.name} — มีผู้เล่นอื่นเลือกไปแล้ว` : c.name}
+                >
+                  <span className="absolute inset-[3px] rounded-full overflow-hidden">
+                    <CharArt c={c} className="w-full h-full object-cover" emojiSize="2rem" />
+                  </span>
+                  <span
+                    className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full"
+                    style={{ background: g?.color || "var(--av-purple)", boxShadow: `0 0 10px 2px ${g?.color || "#6d2f83"}` }}
+                  />
+                  {active && <Crystals level={5} seed={i + 1} />}
+                </Medallion>
+                <span
+                  className="av-heading text-xs max-w-[6.5rem] truncate text-center"
+                  style={{ color: active ? "var(--av-gold-lit)" : "rgba(239,230,245,.6)" }}
+                >
+                  {c.name}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {!sel?.locked && (
+        <div
+          className="fixed right-10 z-30"
+          style={{
+            bottom: "2.5rem",
+            opacity: dockOpen ? 0 : 1,
+            pointerEvents: dockOpen ? "none" : "auto",
+            transition: "opacity .4s ease",
+          }}
         >
-          ยืนยัน →
-        </span>
-      </button>}
-    </div>
+          <SealButton ready={!!sel && !sel.locked && !isTaken(sel)} label="เรียกขาน" onClick={confirm} />
+        </div>
+      )}
+    </AvScene>
   );
 }

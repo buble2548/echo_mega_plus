@@ -1,54 +1,125 @@
-import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-// ลำดับ "ความลึก" ของแต่ละหน้า ใช้เทียบว่ากดไปหน้าถัดไป (forward) หรือย้อนกลับ (back)
 export const SCREEN_ORDER = { splash: 0, setup: 1, character: 2, connecting: 2.5, lobby: 3, gameintro: 3.5, game: 4 };
 
-// ม่านเปลี่ยนฉาก: แถบเฉียง 3 สีกวาดปิดจอตอนสลับหน้า (ทิศทางสลับตาม forward/back)
-// สามทางเข้าใช้ (ทั้งหมดผ่าน ref):
-//  1) preTrigger(targetKey) — สลับหน้าทันที (local, ไม่ต้องรอ server): กวาดปิด-เปิดจบในตัวรอบเดียว
-//     ผู้เรียก (App) หน่วงเวลาสลับ state จริงไว้จนกว่าม่านจะปิดสนิทก่อน
-//  2) holdCover() / release() — ใช้ตอนต้องรอ server ตอบ (เช่น กดยืนยันตัวละคร -> รอ join ห้อง):
-//     ม่านกวาดปิดแล้ว "ค้างปิดสนิท" ไว้จนกว่า release() จะถูกเรียก (ไม่ทายเวลาล่วงหน้า)
-//  3) ตรวจจับเองอัตโนมัติเมื่อ screenKey เปลี่ยนโดยไม่มีใครสั่งล่วงหน้า (เผื่อกรณีอื่นๆ ที่ไม่ทันเรียก)
 const TransitionCurtain = forwardRef(function TransitionCurtain({ screenKey }, ref) {
   const [state, setState] = useState({ visible: false, mode: "sweep", phase: null, direction: "forward", playId: 0 });
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  const liveRef = useRef({ visible: false, mode: "sweep", phase: null });
 
   const prevKey = useRef(screenKey);
   const prevOrder = useRef(SCREEN_ORDER[screenKey] ?? 0);
   const firstRun = useRef(true);
   const timers = useRef([]);
+  const holdStart = useRef(0);
+  const MIN_HOLD_MS = 1150;
+
+  const dust = useMemo(() => {
+    let seed = 20240401;
+    const rnd = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+
+    const grains = Array.from({ length: 210 }, () => {
+      const roll = rnd();
+      const big = roll < 0.1;
+      const mid = !big && roll < 0.34;
+      const pale = rnd() < 0.34;
+      return {
+        top: rnd() * 104 - 2,
+        size: big ? 6 + rnd() * 7 : mid ? 3 + rnd() * 3 : 1.4 + rnd() * 2,
+        blur: big ? 26 + rnd() * 20 : mid ? 12 + rnd() * 10 : 6 + rnd() * 6,
+        spread: big ? 5 : mid ? 2.5 : 1.2,
+        color: pale ? "#f0dcff" : "#ffe9a8",
+        dy: (rnd() - 0.5) * 26,
+        dy2: (rnd() - 0.3) * 34,
+        delay: rnd() * 0.5,
+        dur: 1 + rnd() * 0.2,
+      };
+    });
+
+    const streaks = Array.from({ length: 14 }, () => ({
+      top: rnd() * 100,
+      len: 70 + rnd() * 160,
+      thick: 1 + rnd() * 2.5,
+      color: rnd() < 0.4 ? "#f0dcff" : "#ffe9a8",
+      dy: (rnd() - 0.5) * 16,
+      dy2: (rnd() - 0.3) * 22,
+      delay: rnd() * 0.45,
+      dur: 0.82 + rnd() * 0.22,
+    }));
+
+    const glints = Array.from({ length: 16 }, () => ({
+      top: 2 + rnd() * 94,
+      size: 18 + rnd() * 30,
+      dy: (rnd() - 0.5) * 20,
+      dy2: (rnd() - 0.35) * 28,
+      delay: rnd() * 0.42,
+      dur: 1.02 + rnd() * 0.2,
+    }));
+
+    const winds = [
+      { top: -12, w: 62, delay: 0, dur: 1.5, op: 1 },
+      { top: -12, w: 44, delay: 0.16, dur: 1.28, op: 0.7 },
+      { top: -12, w: 78, delay: 0.3, dur: 1.62, op: 0.5 },
+    ];
+
+    return { grains, streaks, glints, winds };
+  }, []);
 
   const clearTimers = () => {
     timers.current.forEach(clearTimeout);
     timers.current = [];
   };
 
-  // โหมดกวาดจบในตัว (sweep): ปิด -> ค้างสั้นๆ -> เปิด ในอนิเมชันเดียวยาว 0.72s (ดู .p-curtain-bar)
-  const playSweep = (dir) => {
-    clearTimers();
-    setState((s) => ({ visible: true, mode: "sweep", phase: null, direction: dir, playId: s.playId + 1 }));
-    timers.current.push(setTimeout(() => setState((s) => ({ ...s, visible: false })), 850));
+  const hide = () => {
+    liveRef.current = { ...liveRef.current, visible: false };
+    setState((s) => ({ ...s, visible: false }));
   };
 
-  // โหมดค้างปิด (hold): ปิด -> ค้างสนิทไม่มีกำหนด -> ปล่อยเปิดตอนเรียก releaseHold()
+  const playSweep = (dir) => {
+    clearTimers();
+    liveRef.current = { visible: true, mode: "sweep", phase: null };
+    setState((s) => ({ visible: true, mode: "sweep", phase: null, direction: dir, playId: s.playId + 1 }));
+    timers.current.push(setTimeout(hide, 1800));
+  };
+
   const startHold = (dir) => {
     clearTimers();
+    holdStart.current = Date.now();
+    liveRef.current = { visible: true, mode: "hold", phase: "in" };
     setState((s) => ({ visible: true, mode: "hold", phase: "in", direction: dir, playId: s.playId + 1 }));
     timers.current.push(setTimeout(() => {
-      setState((s) => (s.mode === "hold" && s.phase === "in" ? { ...s, phase: "held" } : s));
-    }, 340));
-    // กันเหนียว: เผื่อ server ไม่ตอบกลับเลย ไม่ให้จอมืดค้างตลอดไป
+      const cur = liveRef.current;
+      if (cur.mode !== "hold" || cur.phase !== "in") return;
+      liveRef.current = { ...cur, phase: "held" };
+      setState((s) => ({ ...s, phase: "held" }));
+    }, 420));
     timers.current.push(setTimeout(() => releaseHold(), 6000));
   };
 
   const releaseHold = () => {
-    const cur = stateRef.current;
+    const cur = liveRef.current;
     if (cur.mode !== "hold" || cur.phase === "out" || !cur.visible) return;
+    // ค้างจออย่างน้อย MIN_HOLD_MS เสมอ — ถ้า server ตอบเร็วมาก ม่านจะถูกเปิดตั้งแต่ละอองยังพัดไม่ทันเต็มจอ
+    const waited = Date.now() - holdStart.current;
+    if (waited < MIN_HOLD_MS) {
+      clearTimers();
+      if (cur.phase === "in") {
+        timers.current.push(setTimeout(() => {
+          const c = liveRef.current;
+          if (c.mode !== "hold" || c.phase !== "in") return;
+          liveRef.current = { ...c, phase: "held" };
+          setState((st) => ({ ...st, phase: "held" }));
+        }, Math.max(0, 440 - waited)));
+      }
+      timers.current.push(setTimeout(releaseHold, MIN_HOLD_MS - waited));
+      return;
+    }
     clearTimers();
+    liveRef.current = { ...cur, phase: "out" };
     setState((s) => ({ ...s, phase: "out" }));
-    timers.current.push(setTimeout(() => setState((s) => ({ ...s, visible: false })), 400));
+    timers.current.push(setTimeout(hide, 520));
   };
 
   useImperativeHandle(ref, () => ({
@@ -62,13 +133,16 @@ const TransitionCurtain = forwardRef(function TransitionCurtain({ screenKey }, r
     holdCover(dir = "forward") {
       startHold(dir);
     },
+    // ข้ามม่านไปเลยสำหรับรอยต่อที่มีอนิเมชันของตัวเองอยู่แล้ว (ฉากเปิดตัวผู้เล่น -> สนาม)
+    skip(targetKey) {
+      prevKey.current = targetKey;
+      prevOrder.current = SCREEN_ORDER[targetKey] ?? 0;
+    },
     release() {
       releaseHold();
     },
   }));
 
-  // useLayoutEffect (ไม่ใช่ useEffect ธรรมดา): ต้องซิงค์ให้ทันก่อนเบราว์เซอร์วาดเฟรมแรก
-  // ไม่งั้นจะเห็นหน้าใหม่โผล่ก่อน แล้วม่านค่อยตามมาทีหลัง (กระพริบให้เห็นรอยต่อ)
   useLayoutEffect(() => {
     if (firstRun.current) {
       firstRun.current = false;
@@ -76,16 +150,14 @@ const TransitionCurtain = forwardRef(function TransitionCurtain({ screenKey }, r
       prevOrder.current = SCREEN_ORDER[screenKey] ?? 0;
       return;
     }
-    if (screenKey === prevKey.current) return; // ถูกจัดการล่วงหน้าไปแล้ว หรือไม่มีการเปลี่ยนจริง
+    if (screenKey === prevKey.current) return;
     const order = SCREEN_ORDER[screenKey] ?? 0;
     const dir = order >= prevOrder.current ? "forward" : "back";
     prevKey.current = screenKey;
     prevOrder.current = order;
 
-    const holding = stateRef.current.mode === "hold" && stateRef.current.visible;
+    const holding = liveRef.current.mode === "hold" && liveRef.current.visible;
     if (holding) {
-      // กำลังค้างปิดจออยู่แล้ว (มาจาก holdCover ก่อนหน้า) — ข้ามสถานะกลาง "connecting" ไว้ก่อน
-      // แล้วค่อยปล่อยม่านเปิดตอนถึงหน้าจริง (lobby/game) เพื่อไม่ให้เห็นข้อความ "กำลังเชื่อมต่อ..." โผล่แทรก
       if (screenKey !== "connecting") releaseHold();
     } else {
       playSweep(dir);
@@ -94,25 +166,79 @@ const TransitionCurtain = forwardRef(function TransitionCurtain({ screenKey }, r
 
   if (!state.visible) return null;
 
-  const backCls = state.direction === "back" ? "p-curtain-back" : "";
-  const holdCls =
-    state.mode === "hold"
-      ? state.phase === "in"
-        ? "p-curtain-hold-in"
-        : state.phase === "held"
-        ? "p-curtain-held"
-        : "p-curtain-hold-out"
-      : "";
-  const logoShow = state.mode === "sweep" || state.phase !== "out";
-
   return (
-    <div key={state.playId} className="p-curtain" aria-hidden="true">
-      <span className={`p-curtain-bar p-curtain-bar-a ${backCls} ${holdCls}`} />
-      <span className={`p-curtain-bar p-curtain-bar-b ${backCls} ${holdCls}`} />
-      <span className={`p-curtain-bar p-curtain-bar-c ${backCls} ${holdCls}`} />
-      <span className={`p-curtain-logo ${state.mode === "hold" ? "p-curtain-logo-hold" : ""} ${state.mode === "hold" && logoShow ? "show" : ""}`}>
-        <img src="/image/logo_current.webp" alt="" />
-      </span>
+    <div
+      key={state.playId}
+      className="av-curtain"
+      data-mode={state.mode}
+      data-phase={state.phase || ""}
+      data-dir={state.direction}
+      aria-hidden="true"
+    >
+      <span className="av-dust-veil" />
+      <div className="av-dust">
+        {dust.winds.map((w, i) => (
+          <span
+            key={`w${i}`}
+            className="av-wind"
+            style={{
+              width: `${w.w}vw`,
+              "--wo": w.op,
+              animationDelay: `${w.delay}s`,
+              animationDuration: `${w.dur}s`,
+            }}
+          />
+        ))}
+        {dust.grains.map((g, i) => (
+          <span
+            key={`g${i}`}
+            className="av-grain"
+            style={{
+              top: `${g.top}%`,
+              width: g.size,
+              height: g.size,
+              "--gc": g.color,
+              "--gb": `${g.blur}px`,
+              "--gs": `${g.spread}px`,
+              "--dy": `${g.dy}vh`,
+              "--dy2": `${g.dy2}vh`,
+              animationDelay: `${g.delay}s`,
+              animationDuration: `${g.dur}s`,
+            }}
+          />
+        ))}
+        {dust.streaks.map((g, i) => (
+          <span
+            key={`t${i}`}
+            className="av-streak"
+            style={{
+              top: `${g.top}%`,
+              width: g.len,
+              height: g.thick,
+              "--gc": g.color,
+              "--dy": `${g.dy}vh`,
+              "--dy2": `${g.dy2}vh`,
+              animationDelay: `${g.delay}s`,
+              animationDuration: `${g.dur}s`,
+            }}
+          />
+        ))}
+        {dust.glints.map((g, i) => (
+          <span
+            key={`s${i}`}
+            className="av-glint"
+            style={{
+              top: `${g.top}%`,
+              width: g.size,
+              height: g.size,
+              "--dy": `${g.dy}vh`,
+              "--dy2": `${g.dy2}vh`,
+              animationDelay: `${g.delay}s`,
+              animationDuration: `${g.dur}s`,
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
 });

@@ -1,0 +1,225 @@
+:root {
+  --av-void: #050308;
+  --av-ink: #100918;
+  --av-ink-2: #1b0f2a;
+  --av-royal: #2e1145;
+  --av-purple: #6d2f83;
+  --av-orchid: #b95fc4;
+  --av-lilac: #e8c4ef;
+
+  --av-gold: #c9992f;
+  --av-gold-mid: #e8bf5a;
+  --av-gold-lit: #ffe9a8;
+  --av-gold-deep: #5e3f08;
+
+  --av-paper: #f3e9d8;
+  --av-blood: #9b2d3a;
+
+  --font-av-display: "Cinzel", "Trirong", "Kanit", serif;
+  --font-av-thai: "Trirong", "Kanit", serif;
+  --font-av-body: "Kanit", "Segoe UI", sans-serif;
+
+  --rot: 0.1;
+}
+
+.av[data-corrupt="1"] { --rot: 0.12; }
+.av[data-corrupt="2"] { --rot: 0.34; }
+.av[data-corrupt="3"] { --rot: 0.56; }
+.av[data-corrupt="4"] { --rot: 0.78; }
+.av[data-corrupt="5"] { --rot: 1; }
+
+.av {
+  position: relative;
+  isolation: isolate;
+  color: #efe6f5;
+  font-family: var(--font-av-body);
+  background:
+    radial-gradient(ellipse 90% 60% at 50% -12%, rgba(109, 47, 131, 0.48), transparent 70%),
+    radial-gradient(ellipse 70% 55% at 6% 100%, rgba(46, 17, 69, 0.85), transparent 72%),
+    linear-gradient(172deg, #0c0614 0%, var(--av-void) 58%, #090412 100%);
+}
+
+.av::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.4;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='84' height='84' viewBox='0 0 84 84'%3E%3Cg fill='none' stroke='%23b95fc4' stroke-width='0.9' opacity='0.2'%3E%3Cpath d='M42 3 L68 42 L42 81 L16 42 Z'/%3E%3Cpath d='M42 18 L55 42 L42 66 L29 42 Z' opacity='0.55'/%3E%3Ccircle cx='42' cy='42' r='4'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 84px 84px;
+  -webkit-mask-image: radial-gradient(ellipse at 50% 40%, #000 15%, rgba(0, 0, 0, 0.25) 78%);
+  mask-image: radial-gradient(ellipse at 50% 40%, #000 15%, rgba(0, 0, 0, 0.25) 78%);
+}
+
+.av::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 42% 100% at 0% 50%, rgba(201, 153, 47, calc(var(--rot) * 0.16)), transparent 62%),
+    radial-gradient(ellipse 42% 100% at 100% 50%, rgba(201, 153, 47, calc(var(--rot) * 0.14)), transparent 62%),
+    radial-gradient(circle at 50% 45%, transparent 36%, rgba(5, 3, 8, 0.78) 100%);
+}
+
+.av-content { position: relative; z-index: 10; }
+
+.av-fae {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+  -webkit-mask-image: radial-gradient(ellipse 60% 58% at 50% 50%, transparent 34%, rgba(0, 0, 0, 0.45) 62%, #000 86%);
+  mask-image: radial-gradient(ellipse 60% 58% at 50% 50%, transparent 34%, rgba(0, 0, 0, 0.45) 62%, #000 86%);
+}
+
+.av-vine {
+  position: absolute;
+  overflow: visible;
+  opacity: calc(0.26 + var(--rot) * 0.4);
+  will-change: transform;
+  animation: avSway 11s ease-in-out infinite alternate;
+}
+@keyframes avSway {
+  from { transform: rotate(var(--vr, 0deg)) scale(var(--vs, 1)) skewX(-1.2deg); }
+  to { transform: rotate(var(--vr, 0deg)) scale(var(--vs, 1)) skewX(1.2deg); }
+}
+
+.av-vine-stem {
+  fill: none;
+  stroke: var(--av-gold-mid);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-dasharray: var(--len, 300);
+  stroke-dashoffset: var(--len, 300);
+  animation: avVineGrow 3.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.av-vine-stem-thin { stroke-width: 0.8; opacity: 0.7; }
+@keyframes avVineGrow { to { stroke-dashoffset: 0; } }
+
+.av-leaf {
+  fill: var(--av-gold);
+  transform-box: fill-box;
+  transform-origin: 0% 50%;
+  opacity: 0;
+  animation: avLeafOpen 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes avLeafOpen {
+  from { opacity: 0; transform: scale(0.1) rotate(-18deg); }
+  to { opacity: 0.9; transform: scale(1) rotate(0deg); }
+}
+
+.av-blossom {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: avBlossomOpen 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards, avBlossomGlow 4.2s ease-in-out infinite 1.2s;
+}
+@keyframes avBlossomOpen {
+  from { opacity: 0; transform: scale(0.1) rotate(-60deg); }
+  to { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+@keyframes avBlossomGlow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+.av-blossom-petal { fill: var(--av-gold-lit); }
+.av-blossom-core { fill: #fff; }
+
+.av-moth {
+  position: absolute;
+  width: 14px;
+  height: 10px;
+  pointer-events: none;
+  will-change: transform;
+  animation: avMothFly linear infinite;
+}
+.av-moth::before,
+.av-moth::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 7px;
+  height: 10px;
+  background: linear-gradient(140deg, var(--av-gold-lit), var(--av-gold));
+  border-radius: 80% 20% 60% 40%;
+  box-shadow: 0 0 8px 1px rgba(232, 191, 90, 0.6);
+  animation: avMothFlap 0.34s ease-in-out infinite alternate;
+}
+.av-moth::before { left: 0; transform-origin: right center; }
+.av-moth::after { right: 0; transform-origin: left center; transform: scaleX(-1); }
+@keyframes avMothFlap {
+  from { transform: scaleX(0.35); }
+  to { transform: scaleX(1); }
+}
+.av-moth::after { animation-name: avMothFlapR; }
+@keyframes avMothFlapR {
+  from { transform: scaleX(-0.35); }
+  to { transform: scaleX(-1); }
+}
+@keyframes avMothFly {
+  0% { transform: translate3d(0, 0, 0); opacity: 0; }
+  10% { opacity: calc(0.4 + var(--rot) * 0.6); }
+  25% { transform: translate3d(22vw, -8vh, 0); }
+  50% { transform: translate3d(46vw, 6vh, 0); }
+  75% { transform: translate3d(70vw, -5vh, 0); }
+  90% { opacity: calc(0.3 + var(--rot) * 0.5); }
+  100% { transform: translate3d(96vw, 3vh, 0); opacity: 0; }
+}
+
+.av-mote {
+  position: absolute;
+  bottom: -2vh;
+  pointer-events: none;
+  z-index: 0;
+  border-radius: 50%;
+  background: var(--av-gold-lit);
+  box-shadow: 0 0 9px 2px rgba(232, 191, 90, 0.7);
+  will-change: transform, opacity;
+  animation: avMoteRise linear infinite;
+}
+@keyframes avMoteRise {
+  0% { transform: translate3d(0, 0, 0) scale(0.55); opacity: 0; }
+  14% { opacity: calc(0.3 + var(--rot) * 0.55); }
+  86% { opacity: calc(0.25 + var(--rot) * 0.45); }
+  100% { transform: translate3d(30px, -104vh, 0) scale(1.15); opacity: 0; }
+}
+
+.av-crystal {
+  position: absolute;
+  pointer-events: none;
+  background: radial-gradient(circle at 34% 30%, var(--av-gold-lit), var(--av-gold) 52%, var(--av-gold-deep));
+  border-radius: 60% 40% 55% 45%;
+  box-shadow: 0 0 14px 2px rgba(232, 191, 90, 0.5);
+  opacity: calc(0.4 + var(--rot) * 0.6);
+  will-change: transform;
+  animation: avBudPulse 4.6s ease-in-out infinite;
+}
+@keyframes avBudPulse {
+  0%, 100% { transform: rotate(var(--cr, 0deg)) scale(0.75); }
+  50% { transform: rotate(var(--cr, 0deg)) scale(1.1); }
+}
+
+.av-crack {
+  position: absolute;
+  pointer-events: none;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--av-gold-lit), transparent);
+  box-shadow: 0 0 8px 1px rgba(255, 233, 168, 0.6);
+  opacity: calc(0.25 + var(--rot) * 0.6);
+}
+
+.av-veil {
+  position: relative;
+  background: linear-gradient(160deg, rgba(31, 18, 47, 0.88), rgba(9, 5, 15, 0.93));
+  border-radius: 22px;
+  border: 1px solid rgba(185, 95, 196, 0.26);
+  box-shadow: inset 0 1px 0 rgba(232, 196, 239, 0.12), 0 24px 56px -28px rgba(0, 0, 0, 0.95);
+}
+.av-veil-gilded {
+  border-color: rgba(232, 191, 90, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 233, 168, 0.2), 0 0 32px -8px rgba(232, 191, 90, 0.6), 0 24px 56px -28px rgba(0, 0, 0, 0.95);
+}

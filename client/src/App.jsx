@@ -40,6 +40,7 @@ export default function App() {
   const [taken, setTaken] = useState([]);
   const [name, setName] = useState("");
   const [position, setPosition] = useState(null);
+  const [color, setColor] = useState(null);   // สีประจำตัวที่ผู้เล่นปรับเองในหน้าตั้งค่า
   // โหมดประหยัด (patch 2.0.6): ข้ามวีดีโอท่าไม้ตาย/คัตซีน — เห็นแค่แจ้งเตือน แต่ยังต้องรอผู้เล่นอื่นดูจบ
   const [lowQ, setLowQ] = useState(() => {
     try {
@@ -86,7 +87,7 @@ export default function App() {
       //  ซึ่งทำลายแก่นของโหมด (ตัวตนต้องถูกซ่อนจนกว่าจะลงดวล) โหมดนี้มีฉากเปิดของตัวเอง
       //  คือ "บูตระบบ SE.RA.PH" ที่โชว์ทุกคนเป็นเงาดำ ??? แทน (seraph/scenes.jsx)
       if (!wasInMatch && nowInMatch && !s.seraph) {
-        curtainRef.current?.preTrigger("gameintro");
+        curtainRef.current?.skip("gameintro");
         setIntroPlayers(s.players);
         setShowIntro(true);
       }
@@ -182,6 +183,8 @@ export default function App() {
   const prevInMatch = useRef(false);
   const prevCycle = useRef(null); // ช่วงเวลาเดิม (day/night) — เปลี่ยนเมื่อไหร่ เพลงประจำช่วงต้องเริ่มใหม่จากต้น
   const cycleSeq = useRef(0);     // seq เพลงกลางวัน/กลางคืน: +1 ทุกครั้งที่สลับช่วงเวลา -> เริ่มเพลงใหม่
+  const attackSeq = useRef(0);    // seq เพลงช่วงโจมตี: +1 ทุกครั้งที่เข้าช่วงโจมตี -> เริ่มเพลงใหม่เสมอ
+  const prevAttackPhase = useRef(false);
   const phase = stage === "connected" && state ? state.gameState : null;
   const cycle = stage === "connected" && state ? state.cycle : null;
   const skillMusic = stage === "connected" && state ? state.skillMusic : null;
@@ -209,11 +212,19 @@ export default function App() {
     }
     if (!inMatch) prevCycle.current = null;
 
+    // เข้าช่วงโจมตีรอบใหม่ -> ขยับ seq ให้เพลงช่วงโจมตีเริ่มจากต้นทุกครั้ง
+    const inAttackPhase = phase === "ATTACK" || phase === "ATTACKING";
+    if (inAttackPhase && !prevAttackPhase.current) attackSeq.current++;
+    prevAttackPhase.current = inAttackPhase;
+
     // เพลงพื้นหลัง: โหมด SE.RA.PH คุมของตัวเองใน SeraphGame — ตรงนี้ต้องไม่ยุ่งด้วย
     //  แต่ "เสียงเอฟเฟกต์" ด้านล่างต้องทำงานทุกโหมด (เดิม early-return ตรงนี้ทำให้เสียงหายไปทั้งโหมด)
     if (!seraphMode) {
       // โหมดประหยัด (patch 2.0.6): ข้ามวีดีโอคัตซีน — ระหว่างรอคนอื่นดูวีดีโอ เพลงเล่นต่อตามปกติ
-      const track = musicForState(stage === "connected" ? state : null, { lowQ, cycleSeq: cycleSeq.current });
+      // หน้าไตเติล: ยังไม่เล่นเพลง — เพลงหน้าหลักเริ่มหลังกดเข้าเกมเท่านั้น
+      const track = stage === "splash"
+        ? { name: null }
+        : musicForState(stage === "connected" ? state : null, { lowQ, cycleSeq: cycleSeq.current, attackSeq: attackSeq.current });
       if (track.name) playMusic(track.name, track.seq);
       else stopMusic();
     }
@@ -232,9 +243,10 @@ export default function App() {
     }
   }, [stage, phase, cycle, skillMusic, skillMusicSeq, lowQ, mandatoryCutscene, state?.cutscene?.id, state?.attack?.id, state?.roundNumber, !!(state && state.seraph)]);
 
-  const goCharacter = (n, pos) => {
+  const goCharacter = (n, pos, col) => {
     setName(n);
     setPosition(pos);
+    setColor(col || null);
     setStage("character");
   };
   // extra: ตัวเลือกเพิ่มเติมตอนเลือกตัว (เช่น ชิกิ: shikiUlt = "deatheye" | "wither")
@@ -244,7 +256,7 @@ export default function App() {
     if (navLockRef.current) return;
     navLockRef.current = true;
     curtainRef.current?.holdCover("forward");
-    socket.emit("join", { name, position, characterId, ...(extra || {}) });
+    socket.emit("join", { name, position, color, characterId, ...(extra || {}) });
   };
   const leaveLobby = () => {
     saveSessionToken(null);
@@ -260,11 +272,15 @@ export default function App() {
     if (navLockRef.current) return;
     navLockRef.current = true;
     curtainRef.current?.preTrigger(targetScreenKey);
-    setTimeout(applyFn, 340); // ~จังหวะที่แถบกวาดปิดจอสนิทพอดี (ดู keyframes pCurtainSweep)
-    setTimeout(() => { navLockRef.current = false; }, 820); // ~ยาวกว่าอนิเมชันม่านทั้งหมดเล็กน้อย
+    setTimeout(applyFn, 660); // ~กลางช่วงที่ละอองบังจอทึบสนิท (ดู avVeilGust)
+    setTimeout(() => { navLockRef.current = false; }, 1860); // ~ยาวกว่าอนิเมชันม่านทั้งหมดเล็กน้อย
   };
   // ฉากเปิดตัวผู้เล่นจบแล้ว -> ปิดจอ (local, ควบคุมได้แน่นอน) แล้วค่อยสลับเป็นสนามเกมจริง
-  const finishIntro = () => navigate("game", () => setShowIntro(false));
+  // ฉากเปิดตัวมีอนิเมชันปิดฉากของตัวเอง (เผยสนามที่วางรออยู่ข้างหลัง) จึงไม่ใช้ม่านละอองคั่น
+  const finishIntro = () => {
+    curtainRef.current?.skip("game");
+    setShowIntro(false);
+  };
 
   let screen;
   let screenKey;
@@ -277,7 +293,8 @@ export default function App() {
         taken={taken}
         initialName={name}
         initialPos={position}
-        onNext={(n, pos) => navigate("character", () => goCharacter(n, pos))}
+        initialColor={color}
+        onNext={(n, pos, col) => navigate("character", () => goCharacter(n, pos, col))}
       />
     );
     screenKey = "setup";
@@ -287,6 +304,7 @@ export default function App() {
         roster={roster}
         takenChars={takenChars}
         position={position}
+        color={color}
         name={name}
         onConfirm={confirmCharacter}
         onBack={() => navigate("setup", () => setStage("setup"))}
@@ -294,7 +312,13 @@ export default function App() {
     );
     screenKey = "character";
   } else if (!state) {
-    screen = <div className="min-h-screen grid place-items-center text-lg opacity-70">กำลังเชื่อมต่อ...</div>;
+    screen = (
+      <div className="av min-h-screen grid place-items-center" data-corrupt="3">
+        <div className="av-content av-breathe av-heading text-2xl" style={{ color: "rgba(232,196,239,.6)" }}>
+          กำลังเชื่อมต่อ…
+        </div>
+      </div>
+    );
     screenKey = "connecting";
   } else if (["LOBBY", "TEAM_MODE", "TEAM_SETUP"].includes(state.gameState)) {
     screen = (
@@ -310,7 +334,12 @@ export default function App() {
     screenKey = "lobby";
   } else if (showIntro) {
     // แมตช์เพิ่งเริ่ม -> เผยผู้เล่นทีละคนก่อนเสมอ (ควบคุมด้วย navigate เอง ไม่ผูกกับ state ของเกมที่เดินต่อไปเรื่อยๆ)
-    screen = <GameIntro players={introPlayers} onDone={finishIntro} />;
+    screen = (
+      <>
+        <Game state={state} lowQ={lowQ} skillConfirmOn={skillConfirmOn} />
+        <GameIntro players={introPlayers} onDone={finishIntro} />
+      </>
+    );
     screenKey = "gameintro";
   } else if (state.seraph) {
     // SE.RA.PH Moon Cell: มีฉาก/HUD ของตัวเอง (วันที่ 5 ส่งต่อให้ <Game> ข้างในอีกที)

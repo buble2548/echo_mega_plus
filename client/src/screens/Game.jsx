@@ -1,8 +1,13 @@
 import { GUTS_AMMO_INFO, shopInfoOf } from "../data/shop";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { PERMANENT_STATUS_KEYS } from "../data/permanentStatus";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Card from "../components/Card";
 import Button from "../components/Button";
+import VictoryScreen from "../components/VictoryScreen";
+import ArenaBackdrop from "../components/ArenaBackdrop";
+import { RoundBanner, CycleScene } from "../components/BattleScenes";
+import { AvModal, AvButton } from "../components/avalon";
 import { socket } from "../socket";
 import { clickSound, playSfx, stopSfx, startLoopSfx, stopLoopSfx, playCutsceneVideo, suspendMusic, DOOM_WEAPON_SOUNDS } from "../audio";
 
@@ -240,122 +245,211 @@ function OverloadForceCutscene({ cs }) {
 function AttackSkillCard({ s, i }) {
   return (
     <motion.div
-      className="flex items-center gap-2 bg-black/70 rounded-xl px-2.5 py-1.5 border border-white/15 w-full max-w-[15rem]"
-      initial={{ opacity: 0, x: -16 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.25, delay: i * 0.08 }}
+      className="fx-skill"
+      style={{ "--sc": s.color || "var(--av-orchid)" }}
+      initial={{ opacity: 0, x: -26, filter: "blur(8px)" }}
+      animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+      transition={{ duration: 0.34, delay: i * 0.09, ease: [0.16, 1, 0.3, 1] }}
     >
+      <span className="fx-skill-edge" />
       {s.img ? (
-        <img src={s.img} alt="" className="w-14 h-10 object-cover rounded-lg shrink-0" />
+        <img src={s.img} alt="" className="fx-skill-img" />
       ) : (
-        <span className="w-10 h-10 grid place-items-center text-xl shrink-0">✦</span>
+        <span className="fx-skill-rune">✦</span>
       )}
       <div className="text-left leading-tight min-w-0">
-        <div className="text-sm sm:text-base font-bold text-echo-gold">{s.name}</div>
-        <div className="text-xs sm:text-sm font-bold truncate" style={{ color: s.color }}>{s.by}</div>
+        <div className="av-heading text-sm truncate" style={{ color: "var(--av-gold-lit)" }}>{s.name}</div>
+        <div className="av-heading text-xs truncate" style={{ color: s.color }}>{s.by}</div>
       </div>
     </motion.div>
   );
 }
 
+function AttackCall() {
+  const sparks = Array.from({ length: 16 }, (_, i) => {
+    const a = (i / 16) * Math.PI * 2 + 0.25;
+    const d = 22 + (i % 5) * 8;
+    return {
+      sx: `${(Math.cos(a) * d).toFixed(1)}vw`,
+      sy: `${(Math.sin(a) * d * 0.85).toFixed(1)}vh`,
+      size: 3 + (i % 3) * 2,
+      delay: 0.18 + (i % 6) * 0.03,
+    };
+  });
+  return (
+    <div className="ac">
+      <div className="ac-wash" />
+      <span className="ac-blade ac-blade-a" />
+      <span className="ac-blade ac-blade-b" />
+      <span className="ac-ring" />
+      <span className="ac-chev ac-chev-l" />
+      <span className="ac-chev ac-chev-r" />
+      {sparks.map((k, i) => (
+        <span
+          key={i}
+          className="rb-spark"
+          style={{
+            width: k.size,
+            height: k.size,
+            marginLeft: -k.size / 2,
+            marginTop: -k.size / 2,
+            "--sx": k.sx,
+            "--sy": k.sy,
+            animationDelay: `${k.delay}s`,
+          }}
+        />
+      ))}
+      <div className="absolute inset-0 grid place-items-center">
+        <div
+          className="ac-text av-title av-title-thai text-8xl"
+          style={{
+            background: "linear-gradient(180deg,#fff 0%,#ffe9a8 38%,#ff9d6b 66%,#8d1622 100%)",
+            WebkitBackgroundClip: "text",
+            backgroundClip: "text",
+            color: "transparent",
+          }}
+        >
+          เริ่มโจมตีได้
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AttackFx({ a }) {
   const total = a.fxMs || 3000;
-  const [stage, setStage] = useState(0); // 0=พุ่งเข้า/แฟลช 1=ผลลัพธ์ 2=สกิลไล่เข้า
+  const [stage, setStage] = useState(0);
   useEffect(() => {
     setStage(0);
-    const t1 = setTimeout(() => setStage(1), Math.min(420, total * 0.3));
-    const t2 = setTimeout(() => setStage(2), Math.min(650, total * 0.42));
+    const t1 = setTimeout(() => setStage(1), Math.min(460, total * 0.3));
+    const t2 = setTimeout(() => setStage(2), Math.min(780, total * 0.44));
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [a.id, total]);
 
+  const speeds = useMemo(
+    () => Array.from({ length: 15 }, (_, i) => ({ top: 3 + i * 6.4, h: 1 + (i % 3), delay: (i % 6) * 0.035 })),
+    []
+  );
+  const cracks = useMemo(
+    () => Array.from({ length: 14 }, (_, i) => ({ deg: i * 25.7 + (i % 3) * 8, len: 26 + (i % 4) * 16, delay: (i % 5) * 0.025 })),
+    []
+  );
+
+  const accent = a.dodge ? "#6fd8ff" : a.kill ? "#ff5f6d" : "#ffe9a8";
+  const atkSkills = (a.skills || []).filter((sk) => (sk.side ? sk.side === "atk" : sk.by === a.byName));
+  const defSkills = (a.skills || []).filter((sk) => (sk.side ? sk.side === "def" : sk.by !== a.byName));
+
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-black/55 overflow-hidden">
-      {/* แฟลชกระทบ — วาบครั้งเดียวตอนเข้าสเตจผล */}
-      <AnimatePresence>
-        {stage >= 1 && (
-          <motion.div
-            key="flash"
-            className="absolute inset-0 bg-white pointer-events-none"
-            initial={{ opacity: 0.9 }}
-            animate={{ opacity: 0 }}
-            transition={{ duration: 0.35, ease: "easeOut" }}
+    <div className="fx">
+      <div className="fx-veil" />
+
+      {stage < 1 && speeds.map((sp, i) => (
+        <span key={i} className="fx-speed" style={{ top: `${sp.top}%`, height: sp.h, animationDelay: `${sp.delay}s` }} />
+      ))}
+
+      {stage >= 1 && (
+        <>
+          <span className="fx-white" />
+          <span
+            className="fx-shock"
+            style={{ borderColor: accent, boxShadow: `0 0 60px 14px ${accent}99, inset 0 0 40px 8px ${accent}55` }}
           />
-        )}
-      </AnimatePresence>
-      <div className="flex flex-col items-center gap-3 text-hard px-3">
-        <div className="flex items-center gap-4 sm:gap-8">
+          {cracks.map((c, i) => (
+            <span
+              key={i}
+              className="fx-crackline"
+              style={{
+                width: `${c.len}vw`,
+                "--ca": `${c.deg}deg`,
+                animationDelay: `${c.delay}s`,
+                background: `linear-gradient(90deg, #fff, ${accent} 28%, transparent)`,
+              }}
+            />
+          ))}
+        </>
+      )}
+
+      <div className={`absolute inset-0 flex flex-col items-center justify-center gap-6 px-[6vw] ${stage === 1 ? "fx-shake" : ""}`}>
+        <div className="relative w-full max-w-6xl flex items-center justify-between">
           <motion.div
-            className="flex flex-col items-center gap-1"
-            initial={{ x: -160, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            transition={{ duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }}
+            className="flex flex-col items-center gap-2 shrink-0"
+            initial={{ x: -280, opacity: 0, rotate: -12 }}
+            animate={{ x: 0, opacity: 1, rotate: -4 }}
+            transition={{ duration: 0.42, ease: [0.2, 0.8, 0.2, 1] }}
           >
-            <div className="rounded-2xl overflow-hidden w-24 h-24 sm:w-28 sm:h-28 border-4 -rotate-3" style={{ borderColor: a.byColor }}>
-              <img src={a.byImg} alt="" className="w-full h-full object-cover" />
+            <div className="fx-portrait w-36 h-36" style={{ borderColor: a.byColor, boxShadow: `0 0 40px -8px ${a.byColor}` }}>
+              <img src={a.byImg} alt="" />
             </div>
-            <span className="font-bold text-base sm:text-lg" style={{ color: a.byColor }}>{a.byName}</span>
+            <span className="av-chip" style={{ borderColor: a.byColor, color: a.byColor }}>{a.byName}</span>
           </motion.div>
-          <AnimatePresence mode="wait">
+
+          <div className="flex-1 grid place-items-center min-w-0">
             {stage >= 1 && (
-              <motion.div
-                key="result"
-                className="text-center"
-                initial={{ opacity: 0, scale: 0.6 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.3, ease: "backOut" }}
-              >
-                <div className="text-4xl sm:text-5xl">{a.dodge ? "💨" : a.kill ? "💀" : "⚔️"}</div>
+              <div className="fx-dmg text-center">
                 {a.dodge ? (
-                  <div className="text-3xl sm:text-4xl font-black text-echo-cyan drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">หลบพ้น!</div>
+                  <div
+                    className="av-title av-title-thai text-7xl"
+                    style={{ background: "linear-gradient(180deg,#fff,#6fd8ff 60%,#2f8fb8)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}
+                  >
+                    หลบพ้น
+                  </div>
                 ) : a.kill ? (
-                  <div className="text-3xl sm:text-4xl font-black text-echo-hp drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">สังหาร!</div>
+                  <div
+                    className="av-title av-title-thai text-7xl"
+                    style={{ background: "linear-gradient(180deg,#fff,#ff8a94 55%,#8d1622)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}
+                  >
+                    สังหาร
+                  </div>
                 ) : (
-                  <div className="text-4xl sm:text-5xl font-black text-echo-hp drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">-{a.dmg}</div>
+                  <span className="av-title text-[10rem] leading-none" style={{ WebkitTextStroke: "2px rgba(94,63,8,.55)" }}>
+                    -{a.dmg}
+                  </span>
                 )}
-                {a.revenge && <div className="text-xs text-echo-gold font-bold">NT-D แก้แค้น!</div>}
-                {a.aoe && <div className="text-xs">ตีหมู่!</div>}
-              </motion.div>
+                <div className="flex items-center justify-center gap-2 mt-2">
+                  {a.revenge && <span className="av-chip av-chip-gold">NT-D แก้แค้น</span>}
+                  {a.aoe && <span className="av-chip av-chip-gold">ตีหมู่</span>}
+                </div>
+              </div>
             )}
-          </AnimatePresence>
+          </div>
+
           <motion.div
-            className="flex flex-col items-center gap-1"
-            initial={{ scale: 1 }}
-            animate={stage >= 1 ? { x: [0, 10, -6, 0], scale: [1, 0.94, 1] } : {}}
-            transition={{ duration: 0.4, ease: "easeOut" }}
+            className="flex flex-col items-center gap-2 shrink-0"
+            initial={{ rotate: 4 }}
+            animate={stage >= 1 ? { x: [0, 30, -12, 0], rotate: [4, 13, 4] } : {}}
+            transition={{ duration: 0.5, ease: "easeOut" }}
           >
-            {/* สั่นแค่ตอนกระทบ (stage 1) — พอขึ้นกล่องเหตุผลดาเมจ (stage 2) หยุดสั่น กันบังตากับกล่องข้อมูล */}
-            <div className={`${stage === 1 ? "shake" : ""} rounded-2xl overflow-hidden w-24 h-24 sm:w-28 sm:h-28 border-4 rotate-3`} style={{ borderColor: a.targetColor }}>
-              <img src={a.targetImg} alt="" className="w-full h-full object-cover" />
+            <div
+              className="fx-portrait w-36 h-36"
+              style={{
+                borderColor: a.targetColor,
+                boxShadow: `0 0 40px -8px ${a.targetColor}`,
+                filter: stage >= 1 && a.kill ? "grayscale(1) brightness(0.7)" : undefined,
+                transition: "filter .5s ease",
+              }}
+            >
+              <img src={a.targetImg} alt="" />
             </div>
-            <span className="font-bold text-base sm:text-lg" style={{ color: a.targetColor }}>{a.targetName}</span>
+            <span className="av-chip" style={{ borderColor: a.targetColor, color: a.targetColor }}>{a.targetName}</span>
           </motion.div>
         </div>
-        {stage >= 2 && a.skills && a.skills.length > 0 && (() => {
-          // แยกฝั่งชัดเจน: ซ้าย = สกิลฝั่งโจมตี | ขวา = สกิลฝั่งป้องกัน (ไม่ปนกันตรงกลาง)
-          const atk = a.skills.filter((s) => (s.side ? s.side === "atk" : s.by === a.byName));
-          const def = a.skills.filter((s) => (s.side ? s.side === "def" : s.by !== a.byName));
-          const both = atk.length > 0 && def.length > 0;
-          return (
-            <div className="grid grid-cols-2 gap-x-4 w-full max-w-2xl items-start">
-              <div className={`flex flex-col items-center gap-1.5 ${both ? "border-r-2 border-white/25 pr-4" : ""}`}>
-                {atk.length > 0 && (
-                  <div className="text-sm sm:text-base font-black bg-black/60 rounded-full px-4 py-0.5 border" style={{ color: a.byColor, borderColor: a.byColor }}>
-                    ⚔️ ฝั่งโจมตี
-                  </div>
-                )}
-                {atk.map((s, i) => <AttackSkillCard key={i} s={s} i={i} />)}
-              </div>
-              <div className="flex flex-col items-center gap-1.5 pl-1">
-                {def.length > 0 && (
-                  <div className="text-sm sm:text-base font-black bg-black/60 rounded-full px-4 py-0.5 border" style={{ color: a.targetColor, borderColor: a.targetColor }}>
-                    🛡️ ฝั่งป้องกัน
-                  </div>
-                )}
-                {def.map((s, i) => <AttackSkillCard key={i} s={s} i={i} />)}
-              </div>
+
+        {stage >= 2 && (atkSkills.length > 0 || defSkills.length > 0) && (
+          <div className="grid grid-cols-2 gap-x-8 w-full max-w-3xl items-start">
+            <div className="flex flex-col items-center gap-1.5">
+              {atkSkills.length > 0 && (
+                <span className="av-chip" style={{ borderColor: a.byColor, color: a.byColor }}>ฝั่งโจมตี</span>
+              )}
+              {atkSkills.map((sk, i) => <AttackSkillCard key={i} s={sk} i={i} />)}
             </div>
-          );
-        })()}
+            <div className="flex flex-col items-center gap-1.5">
+              {defSkills.length > 0 && (
+                <span className="av-chip" style={{ borderColor: a.targetColor, color: a.targetColor }}>ฝั่งป้องกัน</span>
+              )}
+              {defSkills.map((sk, i) => <AttackSkillCard key={i} s={sk} i={i} />)}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -497,25 +591,14 @@ function OverloadForceBadge() {
 //  กลางวัน = background_morning.jpg | กลางคืน = background_night.jpg
 //  เปลี่ยนช่วงเวลาแบบ crossfade ช้าๆ (ไม่ตัดปุ๊บปั๊บ) — ซ้อนทั้ง 2 ภาพแล้วเฟดสลับกัน
 //  ระหว่าง Lie Like Vortigern (โอเบรอน) ฉากหลังกลางคืนกลายเป็นวีดีโอ oberon_background.mp4 (เฟดเข้า)
-function GameBackground({ cycle, oberonBg, bardBg, shikiBg, hisakawaBg, overloadForce, lowQ, seraph }) {
+function GameBackground({ cycle, round, oberonBg, bardBg, shikiBg, hisakawaBg, overloadForce, lowQ, seraph }) {
   // SE.RA.PH: โหมดนี้วาดฉากหลังของตัวเองไว้ข้างล่างแล้ว (สนามดวลวันที่ 5 กลางวัน/กลางคืน)
   //  ถ้าปล่อยให้กระดานเดิมวาดทับ จะกลายเป็นฉากหลังของเกมปกติแทน
   if (seraph) return null;
   const night = cycle === "night";
   return (
     <div className="absolute inset-0 -z-10 pointer-events-none overflow-hidden">
-      <img
-        src="/image/background_morning.jpg"
-        alt=""
-        className="absolute inset-0 w-full h-full object-cover transition-opacity duration-[3000ms] ease-in-out"
-        style={{ opacity: night ? 0 : 1 }}
-      />
-      <img
-        src="/image/background_night.jpg"
-        alt=""
-        className="absolute inset-0 w-full h-full object-cover transition-opacity duration-[3000ms] ease-in-out"
-        style={{ opacity: night ? 1 : 0 }}
-      />
+      <ArenaBackdrop cycle={cycle} round={round} />
       {/* มิติมายาบรรเลง (Bard): โลหิต = ตอนเช้า / วิญญาณ = ตอนกลางคืน (ทับฉากหลังอื่นทั้งหมด) */}
       {bardBg && (
         <img
@@ -569,8 +652,7 @@ function GameBackground({ cycle, oberonBg, bardBg, shikiBg, hisakawaBg, overload
           className="absolute inset-0 w-full h-full object-cover bg-fade-in"
         />
       )}
-      <div className="absolute inset-0 bg-black/25" />
-      <div className="absolute inset-0 p-board-overlay" />
+      <div className="absolute inset-0 bg-black/15" />
     </div>
   );
 }
@@ -578,109 +660,104 @@ function GameBackground({ cycle, oberonBg, bardBg, shikiBg, hisakawaBg, overload
 // ---------- แบนเนอร์สลับช่วงเวลา (กลางวัน <-> กลางคืน ทุก 3 เทิร์น) ----------
 //  c.oberon = "ราตรีกลืนกิน": โอเบรอนใช้ท่าไม้ตาย 2 — ฉากหลังวีดีโอ + เพลงประจำตัว จนกว่าจะหมดกลางคืน
 // ---------- ฉากสลับกลางวัน/กลางคืน: วอชสีเต็มจอ + แถบแสงกวาดแนวทแยง + ไอคอนลอยขึ้นเรืองแสง + ข้อความคลี่ตัว ----------
-function CycleBanner({ c }) {
-  const night = c.cycle === "night";
-  const accent = night ? "#818cf8" : "#f6ad3c";
-  const title = night ? (c.oberon ? "ราตรีกลืนกิน" : "ราตรีมาเยือน") : "รุ่งอรุณมาถึง";
-  const sub = night ? (c.oberon ? "ราชาแห่งการหลอกลวงครอบงำราตรี — จนกว่าฟ้าจะสาง" : "สุ่มสกิลพื้นฐาน/สกิลรองแพงขึ้น +1 ทุกเทิร์น") : "จบเทิร์นได้แต้มสกิลเพิ่ม +1";
+// ---------- ฉากสรุปผล: ลีดเดอร์บอร์ดแนวนอน — แถวผู้ชนะ (ทองเรืองแสง เข้าจากซ้าย) บนสุด
+//  ตามด้วยแถวผู้แพ้ (เข้าจากขวา มีเลขอันดับ) ด้านล่าง — คนละภาษาการออกแบบกับพอร์เทรตคู่แบบเดิมโดยสิ้นเชิง ----------
+function Laurel({ size = 250 }) {
+  const leaves = Array.from({ length: 22 }, (_, i) => i);
   return (
-    <div className="fixed inset-0 z-40 pointer-events-none overflow-hidden">
-      {/* วอชสีเต็มจอ วาบแล้วจางหาย */}
-      <motion.div
-        className="absolute inset-0"
-        style={{ background: `radial-gradient(circle at 50% 32%, ${accent}4d, transparent 62%)` }}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: [0, 1, 0] }}
-        transition={{ duration: 2.2, times: [0, 0.3, 1], ease: "easeInOut" }}
-      />
-      {/* แถบแสงกวาดแนวทแยงผ่านจอครั้งเดียว */}
-      <motion.div
-        className="absolute inset-y-0"
-        style={{ width: "38vw", background: `linear-gradient(100deg, transparent, ${accent}66, transparent)`, transform: "skewX(-12deg)" }}
-        initial={{ left: "-40vw" }}
-        animate={{ left: "108vw" }}
-        transition={{ duration: 1, ease: [0.6, 0, 0.3, 1] }}
-      />
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-hard">
-        <motion.div
-          className="text-7xl sm:text-8xl"
-          style={{ filter: `drop-shadow(0 0 28px ${accent})` }}
-          initial={{ y: 70, opacity: 0, scale: 0.5 }}
-          animate={{ y: 0, opacity: 1, scale: 1 }}
-          transition={{ duration: 0.65, ease: [0.2, 0.8, 0.2, 1.2] }}
-        >
-          {night ? (c.oberon ? "🌑" : "🌙") : "☀️"}
-        </motion.div>
-        <motion.div
-          className="text-3xl sm:text-4xl font-black"
-          style={{ color: accent }}
-          initial={{ opacity: 0, letterSpacing: "0.6em" }}
-          animate={{ opacity: 1, letterSpacing: "0.04em" }}
-          transition={{ duration: 0.6, delay: 0.2, ease: "easeOut" }}
-        >
-          {title}
-        </motion.div>
-        <motion.div
-          className="text-sm sm:text-base font-bold bg-black/55 rounded-full px-4 py-1"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.5 }}
-        >
-          {sub}
-        </motion.div>
-      </div>
-    </div>
+    <svg className="sum-laurel" width={size} height={size * 0.55} viewBox="0 0 260 143" aria-hidden="true">
+      {leaves.map((i) => {
+        const side = i % 2 === 0 ? -1 : 1;
+        const t = Math.floor(i / 2) / 10;
+        const ang = Math.PI * (0.5 + t * 0.4);
+        const cx = 130 + Math.cos(ang) * 120 * side;
+        const cy = 140 - Math.sin(ang) * 100;
+        return (
+          <ellipse
+            key={i}
+            cx={cx}
+            cy={cy}
+            rx="11"
+            ry="4.6"
+            fill="#ffe9a8"
+            transform={`rotate(${side * (26 + t * 44)} ${cx} ${cy})`}
+          />
+        );
+      })}
+    </svg>
   );
 }
 
-// ---------- ฉากสรุปผล: ลีดเดอร์บอร์ดแนวนอน — แถวผู้ชนะ (ทองเรืองแสง เข้าจากซ้าย) บนสุด
-//  ตามด้วยแถวผู้แพ้ (เข้าจากขวา มีเลขอันดับ) ด้านล่าง — คนละภาษาการออกแบบกับพอร์เทรตคู่แบบเดิมโดยสิ้นเชิง ----------
 function SummaryTiers({ winners, losers, compact }) {
   if (!winners.length && !losers.length) return null;
-  const winAvatar = compact ? "w-12 h-12" : "w-14 h-14 sm:w-16 sm:h-16";
-  const loseAvatar = compact ? "w-9 h-9" : "w-10 h-10 sm:w-11 sm:h-11";
+  const winAvatar = compact ? 54 : 72;
+  const loseAvatar = compact ? 32 : 40;
   return (
-    <div className="flex flex-col gap-2 w-full">
-      {winners.map((p, i) => (
-        <motion.div
-          key={p.id}
-          className="relative flex items-center gap-3 rounded-xl px-3 py-2.5 sm:px-4 sm:py-3 overflow-hidden"
-          style={{
-            background: "linear-gradient(100deg, rgba(229,179,59,.4), rgba(229,179,59,.08) 70%)",
-            border: "2px solid #e5b33b",
-            boxShadow: "0 0 22px -4px rgba(229,179,59,.7)",
-          }}
-          initial={{ x: -100, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          transition={{ duration: 0.45, delay: i * 0.12, ease: [0.2, 0.8, 0.2, 1] }}
-        >
-          <span className="text-2xl sm:text-3xl shrink-0">🏆</span>
-          <img src={p.img} alt="" className={`${winAvatar} rounded-full object-cover border-2 shrink-0`} style={{ borderColor: p.color }} />
-          <div className="min-w-0 flex-1">
-            <div className="font-black truncate text-sm sm:text-base" style={{ color: p.color }}>{p.name}</div>
-            <div className="text-[10px] sm:text-xs font-bold text-echo-gold opacity-90">ผู้ชนะ</div>
+    <div className="sum">
+      <div className="sum-veil" />
+
+      <div className="sum-head relative z-10 flex flex-col items-center gap-1">
+        <span className="av-label" style={{ letterSpacing: "0.5em" }}>ผลการจั่วไพ่</span>
+        <span className="av-crack" style={{ position: "relative", width: compact ? "16rem" : "26rem", height: 2 }} />
+      </div>
+
+      <div
+        className="relative z-10 flex flex-col items-center gap-2"
+        style={{ width: compact ? "min(24rem, 92vw)" : "min(40rem, 80vw)" }}
+      >
+        {winners.map((p, i) => (
+          <div key={p.id} className="sum-win w-full" style={{ animationDelay: `${i * 0.13}s` }}>
+            <Laurel size={compact ? 190 : 250} />
+            <img
+              src={p.img}
+              alt=""
+              className="rounded-full object-cover shrink-0 relative"
+              style={{ width: winAvatar, height: winAvatar, border: `2px solid ${p.color}`, boxShadow: `0 0 22px -4px ${p.color}` }}
+            />
+            <div className="min-w-0 flex-1 relative">
+              <div className="av-label" style={{ fontSize: "0.68rem" }}>ผู้ชนะรอบนี้</div>
+              <div className={`av-heading truncate text-white ${compact ? "text-lg" : "text-2xl"}`}>{p.name}</div>
+            </div>
+            <span className={`av-title relative shrink-0 ${compact ? "text-4xl" : "text-6xl"}`}>
+              {p.busted ? "แตก" : p.score}
+            </span>
           </div>
-          <div className="text-xl sm:text-2xl font-black text-echo-gold shrink-0">{p.busted ? "แตก!" : p.score}</div>
-        </motion.div>
-      ))}
-      {losers.length > 0 && (
-        <div className="flex flex-col gap-1.5 mt-1 border-t border-white/10 pt-2">
-          {losers.map((p, i) => (
-            <motion.div
-              key={p.id}
-              className="flex items-center gap-2 sm:gap-2.5 rounded-lg px-2.5 py-1.5 sm:px-3 sm:py-2 bg-white/5 border border-white/10"
-              initial={{ x: 100, opacity: 0 }}
-              animate={{ x: 0, opacity: 0.85 }}
-              transition={{ duration: 0.35, delay: 0.15 + i * 0.07, ease: "easeOut" }}
-            >
-              <span className="text-[10px] sm:text-xs font-black opacity-50 w-4 text-center shrink-0">{i + 2}</span>
-              <img src={p.img} alt="" className={`${loseAvatar} rounded-full object-cover grayscale border shrink-0`} style={{ borderColor: p.color }} />
-              <div className="min-w-0 flex-1 text-xs sm:text-sm font-bold truncate" style={{ color: p.color }}>{p.name}</div>
-              <div className="text-xs sm:text-sm font-bold text-echo-hp shrink-0">{p.busted ? "แตก!" : p.score}</div>
-            </motion.div>
-          ))}
-        </div>
-      )}
+        ))}
+
+        {losers.length > 0 && (
+          <div className="w-full mt-2 flex flex-col">
+            {losers.map((p, i) => (
+              <div key={p.id} className="sum-row" style={{ animationDelay: `${0.2 + i * 0.08}s` }}>
+                <span
+                  className="av-numeral shrink-0 w-7 text-center"
+                  style={{ fontSize: compact ? "1.5rem" : "2rem", WebkitTextStroke: "1.5px rgba(185,95,196,.55)" }}
+                >
+                  {i + 2}
+                </span>
+                <img
+                  src={p.img}
+                  alt=""
+                  className="rounded-full object-cover grayscale shrink-0"
+                  style={{ width: loseAvatar, height: loseAvatar, border: `1px solid ${p.color}` }}
+                />
+                <span
+                  className={`av-heading truncate shrink-0 ${compact ? "text-sm" : "text-base"}`}
+                  style={{ color: p.color, maxWidth: "11rem" }}
+                >
+                  {p.name}
+                </span>
+                <span className="sum-lead" />
+                <span
+                  className={`av-heading shrink-0 ${compact ? "text-sm" : "text-lg"}`}
+                  style={{ color: p.busted ? "#e06a78" : "rgba(239,230,245,.8)" }}
+                >
+                  {p.busted ? "ไพ่แตก" : p.score}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -696,7 +773,7 @@ function OverlayLayer({ phase, attack, csAnnounce, csSkipped, timeLeft, flash, n
       {notice && <TransformNotice key={notice.id} n={notice} />}
       {overloadForce && <OverloadForceBadge />}
       {bylethCourse && <BylethCourseBadge course={bylethCourse} shifted={!!overloadForce} onOpen={onOpenBylethCourse} />}
-      {cycleFx && <CycleBanner key={cycleFx.id} c={cycleFx} />}
+      {cycleFx && <CycleScene key={cycleFx.id} c={cycleFx} />}
     </>
   );
 }
@@ -748,7 +825,7 @@ function ModalMounts({
 }
 
 // ชื่อเฟส (โชว์อนิเมชันตอนเปลี่ยนเฟส)
-const PHASE_NAMES = { PLAYING: "🎴 สุ่มการ์ด", ATTACK: "⚔️ โจมตี" };
+const PHASE_NAMES = { PLAYING: "🎴 สุ่มการ์ด" };
 
 // สถานะที่ผูกกับท่าไม้ตายของแต่ละตัวละคร — ใช้เช็คว่ากำลังมีผลอยู่ไหม (กดซ้ำไม่ได้จนกว่าจะหมดเวลา)
 //  หมายเหตุ: โคโตเนะไม่อยู่ในตารางนี้ — สถานะ kready คือ "ร่าง [พร้อมลุย]" ที่ต้องยังอยู่ตอนกดท่าไม้ตายในร่าง
@@ -1257,7 +1334,7 @@ const STATUS_INFO = {
   // ---------- สถานะ Universal ใหม่ (patch 3.4) ----------
   daichiUnite: { icon: "✨", label: "unite", cls: "bg-echo-gold text-gray-900", desc: "มาUNITEกัน (ไดจิ): รวมร่างเป็นอุลตร้าแมนเอ็กซ์ — พลังโจมตี +1 · สวมเกราะได้ด้วยไพ่ตายของฉัน · การ์ดใบที่ทำให้แต้มเกินถูกตัดเก็บไว้บวกเพิ่มเทิร์นหน้า (1 ครั้ง/เทิร์น)" },
   cayPistol: { icon: "🔫", label: "ปืนพก", cls: "bg-echo-cyan text-gray-900", desc: "ปืนพกหน่วยรบ (คาเยนน์): การโจมตีปกติที่เข้าเป้าฟื้นพลังชีวิต 3 หน่วย — ทำงานครั้งเดียวแล้วหมด (คงอยู่ 1 เทิร์น)" },
-  cayGepard: { icon: "🛡️", label: "เกพาร์ด", cls: "bg-echo-gold text-gray-900", desc: "ร่วมร่างสหายแห่งเทพ (คาเยนน์): ร่างเกพาร์ด — ความเสียหายที่ได้รับไม่ถูกเลื่อนอีกต่อไป · การโจมตีปกติแต่ละครั้งที่เข้าเป้ามีโอกาส 30% มอบ \"เปราะบาง\" · ปลดล็อก \"แน่จริงก็หลบสิ\" และ \"มิสไซล์แห่งคำอำลา\"" },
+  cayGepard: { icon: "🛡️", label: "เกพาร์ด", cls: "bg-echo-gold text-gray-900", desc: "ร่วมร่างสหายแห่งเทพ (คาเยนน์): ร่างเกพาร์ด — ความเสียหายที่ได้รับไม่ถูกเลื่อนอีกต่อไป · การโจมตีปกติแต่ละครั้งที่เข้าเป้ามีโอกาส 50% มอบ \"เปราะบาง\" · ปลดล็อก \"แน่จริงก็หลบสิ\" และ \"มิสไซล์แห่งคำอำลา\"" },
   mend:      { icon: "💚", label: "เยียวยา", cls: "bg-echo-armor", desc: "เยียวยา: ต้นเทิร์นฟื้นพลังชีวิตเท่ากับจำนวนหน่วยที่ระบุ (1 หน่วย = 1 พลังชีวิต) — ซ้อนทับจำนวนเทิร์นได้สูงสุด 5 เทิร์น" },
   blind:     { icon: "🕶️", label: "ตาบอด", cls: "bg-echo-hp", desc: "ตาบอด: มองไม่เห็นอะไรเลยทั้งเทิร์น — ไพ่ แต้ม พลังงาน พลังชีวิต และเกราะของทุกคนรวมทั้งของตัวเอง ถูกปิดหมด" },
   // ---------- ผู้วิงวอน The Supplicant (patch 3.4 new) ----------
@@ -1491,14 +1568,10 @@ function StatusChips({ p, left, compact, max = 5 }) {
 
 // สถานะที่เป็นสแตคถาวร/ตัวนับเรื่อยๆ ไม่ใช่ตัวนับถอยหลังเทิร์น (ต้องตรงกับรายการยกเว้นในลูปลดเทิร์นสถานะทั่วไปที่ server.js
 //  ไม่งั้น StatusModal จะโชว์ "เหลือ N เทิร์น" หลอกๆ ทั้งที่ค่า v ที่แท้จริงคือจำนวนสแตคสะสม ไม่ใช่เทิร์นที่เหลือ)
-const PERMANENT_STATUS_KEYS = new Set([
-  "dawn", "chill", "hburn", "hbleed", "melody", "star", "emeraude", "saphir", "lance", "takutoThirdAtk",
-  "doomCrucible", "fortune", "rsHopper", "cassius", "yaak", "spear", "ohger", "evade", "empower",
-  "miyakoHeal", "miyakoCombo", "miyakoUlt", "hakunoInvertReady", "hakunoNoRegenReady", "kotoneLove", "kotoneReady", "kready",
-  "deathline", "tepeuCook", "tepeuPonder", "hisakawaTempo", "graybeast", "grit", "healthfull", "overweight",
-]);
 
-const isPermanentTurnValue = (it) => (it.v || 0) >= 999;
+// ค่าธง "ถาวร" ฝั่งเซิร์ฟเวอร์คือ 999 แต่บางสกิลใส่ซ้ำ/บวกทับจนโตกว่านั้นมาก
+// ตัวนับเทิร์นจริงยาวสุดในเกมไม่ถึง 99 — เกินจากนี้ถือว่าไม่ใช่จำนวนเทิร์นแน่นอน
+const isPermanentTurnValue = (it) => (it.v || 0) >= 99;
 const isPermanentStatus = (it) => PERMANENT_STATUS_KEYS.has(it.key) || isPermanentTurnValue(it);
 const showStatusValue = (it) => it.v > 1 && !isPermanentTurnValue(it);
 
@@ -1547,29 +1620,32 @@ function StatusModal({ p, onClose, statusOnly }) {
     ? [["สกิลติดตัว", ch.passive], ["สกิลพื้นฐาน", ch.basic], ["สกิลรอง", ch.secondary], ["ท่าไม้ตาย", ch.ultimate]]
     : [];
   return (
-    <div className="fixed inset-0 z-40 bg-black/60 grid place-items-center p-4" onClick={onClose}>
-      <div className="bg-echo-navy rounded-2xl p-5 max-w-md w-full shadow-2xl max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        {statusOnly ? (
-          <div className="font-black text-lg mb-3" style={{ color: p.color }}>🩹 สถานะของ{p.name}</div>
-        ) : (
-          <div className="flex items-center gap-3 mb-3">
-            <div className="rounded-xl overflow-hidden w-14 h-14 border-2 shrink-0 bg-black/40" style={{ borderColor: p.color }}>
-              {p.img && <img src={p.img} alt="" className="w-full h-full object-cover" />}
-            </div>
-            <div className="min-w-0">
-              <div className="text-lg font-black truncate" style={{ color: p.color }}>
-                {p.name}{!p.connected && <span className="ml-2 text-xs text-echo-hp">• reconnecting</span>}
-              </div>
-              <div className="text-sm opacity-80 truncate">{p.character?.name} — สถานะ / รายละเอียดสกิล</div>
-            </div>
+    <AvModal
+      label={statusOnly ? "สถานะ" : "ข้อมูลผู้เล่น"}
+      title={p.name}
+      width="min(34rem, 94vw)"
+      onClose={onClose}
+      right={
+        !statusOnly && p.img ? (
+          <span className="av-frame relative block w-12 h-12 overflow-hidden shrink-0" style={{ border: `1px solid ${p.color}` }}>
+            <img src={p.img} alt="" className="w-full h-full object-cover" />
+          </span>
+        ) : null
+      }
+    >
+      <>
+        {!statusOnly && (
+          <div className="av-heading text-sm mb-4" style={{ color: "rgba(239,230,245,.6)" }}>
+            {p.character?.name}
+            {!p.connected && <span className="ml-2 text-xs" style={{ color: "var(--av-blood)" }}>• reconnecting</span>}
           </div>
         )}
         {items.length === 0 ? (
-          <div className="text-sm opacity-70 py-2 text-center">ไม่มีสถานะผิดปกติ</div>
+          <div className="av-label py-4 text-center" style={{ color: "rgba(239,230,245,.4)" }}>ไม่มีสถานะผิดปกติ</div>
         ) : (
           <div className="flex flex-col gap-2">
             {items.map((it) => (
-              <div key={it.key} className="flex items-start gap-2 rounded-xl bg-white/5 border border-white/10 px-3 py-2">
+              <div key={it.key} className="av-item flex items-start gap-3">
                 <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-md font-bold shrink-0 ${it.cls}`}><span>{it.icon}</span><span>{it.label}{it.amt > 0 ? ` +${it.amt}` : ""}</span></span>
                 <div className="min-w-0">
                   <span className="text-sm opacity-90 leading-snug">{it.desc}</span>
@@ -1589,33 +1665,37 @@ function StatusModal({ p, onClose, statusOnly }) {
             ))}
           </div>
         )}
-        {/* รายละเอียดสกิลตัวละคร (ดูของฝั่งตรงข้ามได้) */}
         {skillRows.length > 0 && (
-          <div className="mt-3 border-t border-white/10 pt-2">
-            <div className="font-bold mb-1.5">สกิลของ {ch.name}</div>
-            {skillRows.map(([label, s], i) =>
-              s ? (
-                <div key={i} className="flex items-start gap-2 py-1.5 border-t border-white/5 first:border-t-0">
-                  {s.img ? (
-                    <img src={s.img} alt="" className="w-16 h-11 object-cover rounded-lg shrink-0 mt-0.5" />
-                  ) : (
-                    <span className="w-16 h-11 grid place-items-center text-xl shrink-0 bg-white/5 rounded-lg mt-0.5">✦</span>
-                  )}
-                  <div className="min-w-0">
-                    <div className="flex justify-between gap-2">
-                      <span className="font-bold text-sm">{label} · <span className="text-echo-gold">{s.name}</span></span>
-                      <span className="text-xs opacity-70 shrink-0">{s.cost != null ? `ใช้ ${s.cost}` : "ฟรี"}</span>
+          <div className="mt-5">
+            <div className="av-label mb-3">{ch.name}</div>
+            <div className="flex flex-col gap-2">
+              {skillRows.map(([label, s], i) =>
+                s ? (
+                  <div key={i} className="av-item flex items-start gap-3">
+                    {s.img ? (
+                      <img src={s.img} alt="" className="w-16 h-11 object-cover shrink-0 mt-0.5" />
+                    ) : (
+                      <span className="w-16 h-11 grid place-items-center text-xl shrink-0 mt-0.5" style={{ background: "rgba(185,95,196,.12)" }}>✦</span>
+                    )}
+                    <div className="min-w-0">
+                      <div className="flex justify-between gap-2">
+                        <span className="av-heading text-sm">
+                          {label} · <span style={{ color: "var(--av-gold-lit)" }}>{s.name}</span>
+                        </span>
+                        <span className="text-xs shrink-0" style={{ color: "rgba(239,230,245,.5)" }}>
+                          {s.cost != null ? `ใช้ ${s.cost}` : "ฟรี"}
+                        </span>
+                      </div>
+                      <div className="text-xs leading-snug" style={{ color: "rgba(239,230,245,.72)" }}>{s.desc}</div>
                     </div>
-                    <div className="text-xs opacity-80 leading-snug">{s.desc}</div>
                   </div>
-                </div>
-              ) : null
-            )}
+                ) : null
+              )}
+            </div>
           </div>
         )}
-        <Button className="mt-3 w-full" onClick={() => { clickSound(); onClose(); }}>ปิด</Button>
-      </div>
-    </div>
+      </>
+    </AvModal>
   );
 }
 
@@ -1688,49 +1768,106 @@ function ItemIcon({ info, className = "" }) {
 
 // ร้านค้ามายา (patch 2.3): ร้านเดียว 15 ช่อง — รีสต็อกทุกๆ 5 เทิร์น
 //  กริดขยายออกด้านข้าง (สูงสุด 5 คอลัมน์ = 3 แถว) ไม่ให้โมดัลยืดลงจนต้อง scroll แนวตั้ง
+function ShopHerald() {
+  const sparks = Array.from({ length: 14 }, (_, i) => {
+    const a = (i / 14) * Math.PI * 2;
+    const d = 12 + (i % 4) * 7;
+    return {
+      sx: `${(Math.cos(a) * d).toFixed(1)}vw`,
+      sy: `${(Math.sin(a) * d * 0.7).toFixed(1)}vh`,
+      size: 3 + (i % 3) * 2,
+      delay: 0.2 + (i % 5) * 0.04,
+    };
+  });
+  return (
+    <div className="sh">
+      <div className="sh-ribbon">
+        {sparks.map((k, i) => (
+          <span
+            key={i}
+            className="sh-spark"
+            style={{
+              width: k.size,
+              height: k.size,
+              marginLeft: -k.size / 2,
+              marginTop: -k.size / 2,
+              "--sx": k.sx,
+              "--sy": k.sy,
+              animationDelay: `${k.delay}s`,
+            }}
+          />
+        ))}
+        <svg className="sh-coin relative shrink-0" width="62" height="62" viewBox="0 0 62 62" aria-hidden="true">
+          <defs>
+            <linearGradient id="shCoinG" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="#fff6df" />
+              <stop offset="45%" stopColor="#ffe9a8" />
+              <stop offset="100%" stopColor="#c9992f" />
+            </linearGradient>
+          </defs>
+          <circle cx="31" cy="31" r="26" fill="url(#shCoinG)" />
+          <circle cx="31" cy="31" r="21" fill="none" stroke="#5e3f08" strokeWidth="1.4" opacity="0.6" />
+          <path d="M31 16 L35.6 26.4 L47 27.6 L38.5 35.2 L41 46.4 L31 40.6 L21 46.4 L23.5 35.2 L15 27.6 L26.4 26.4 Z" fill="#5e3f08" opacity="0.55" />
+        </svg>
+        <div className="relative min-w-0">
+          <div className="av-label" style={{ letterSpacing: "0.42em" }}>ร้านค้ามายา</div>
+          <div className="av-title av-title-thai text-4xl leading-tight whitespace-nowrap">มาเยือนแล้ว</div>
+          <div className="av-heading text-sm" style={{ color: "rgba(239,230,245,.62)" }}>
+            กดไอคอนร้านค้าเพื่อเลือกซื้อของ
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ShopModal({ shop, me, onClose }) {
   const list = shop;
   const hasGun = (me?.inventory || []).some((i) => i.type === "gutsGun");
   const isIgnis = me?.characterId === "ignis";
   return (
-    <div className="fixed inset-0 z-40 bg-black/70 grid place-items-center p-4" onClick={onClose}>
-      <div className="bg-echo-navy rounded-2xl p-4 sm:p-5 w-full max-w-md sm:max-w-3xl lg:max-w-5xl shadow-2xl max-h-[90vh] overflow-y-auto border-2 border-echo-gold" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-xl font-black text-echo-gold">🏪 ร้านค้ามายา</div>
-          <div className="text-sm font-bold bg-black/40 rounded-lg px-2 py-1">🪙 {me?.gold ?? 0} เหรียญ</div>
-        </div>
+    <AvModal
+      label="ร้านค้า"
+      title="ร้านค้ามายา"
+      width="min(72rem, 94vw)"
+      onClose={onClose}
+      right={<span className="av-chip av-chip-gold"><span>🪙 {me?.gold ?? 0}</span></span>}
+    >
+      <>
         {(!list || list.length === 0) ? (
-          <div className="text-sm opacity-70 py-6 text-center">ร้านค้ายังไม่เปิด — จะเปิดทุกๆ 5 เทิร์น</div>
+          <div className="av-label py-10 text-center" style={{ color: "rgba(239,230,245,.4)" }}>ร้านจะเติมของทุกๆ 5 เทิร์น</div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2">
+          <div className="grid grid-cols-5 gap-3">
             {list.map((it) => {
               const info = shopInfoOf(it);
               const sold = !!it.sold;
               const afford = (me?.gold ?? 0) >= it.price;
               const owned = (it.type === "gutsGun" && (hasGun || isIgnis)) || (it.type === "gutsAmmo" && it.ammo === "hyper_trigger" && (isIgnis || (me?.inventory || []).some((ownedItem) => ownedItem.type === "gutsAmmo" && ownedItem.ammo === "hyper_trigger"))) || (it.type === "gutsAmmo" && it.ammo === "trigger_dark_key" && (me?.inventory || []).some((ownedItem) => ownedItem.type === "gutsAmmo" && ownedItem.ammo === "trigger_dark_key")); // ปืนมีได้กระบอกเดียว / Hyper Key ซื้อขาด
               return (
-                <div key={it.id} className={`rounded-xl border p-2 flex flex-col items-center text-center gap-1 ${sold ? "border-white/10 bg-white/5 opacity-50" : "border-echo-gold/50 bg-black/30"}`}>
-                  <ItemIcon info={info} className="text-2xl h-10 w-10" />
-                  <div className="text-xs font-bold leading-tight">{info.label(it)}</div>
-                  <div className="text-[11px] opacity-70 leading-snug line-clamp-3">{info.desc}</div>
-                  <div className="mt-auto w-full flex flex-col items-center gap-1 pt-1">
-                    <div className="text-xs font-bold text-echo-gold">🪙 {it.price}</div>
-                    <Button
-                      className="w-full py-1.5 text-xs"
+                <div
+                  key={it.id}
+                  className={`av-frame av-panel av-gild-hover relative p-3 flex flex-col items-center text-center gap-1.5 ${sold ? "opacity-40" : "av-panel-gilded"}`}
+                >
+                  <ItemIcon info={info} className="text-3xl h-12 w-12" />
+                  <div className="av-heading text-xs leading-tight">{info.label(it)}</div>
+                  <div className="text-[11px] leading-snug line-clamp-3" style={{ color: "rgba(239,230,245,.6)" }}>{info.desc}</div>
+                  <div className="mt-auto w-full flex flex-col items-center gap-2 pt-2">
+                    <div className="av-label" style={{ fontSize: "0.7rem" }}>🪙 {it.price}</div>
+                    <AvButton
+                      className="w-full py-1.5 text-xs px-2"
                       disabled={sold || owned || !afford}
-                      onClick={() => { clickSound(); socket.emit("buyShopItem", { itemId: it.id }); }}
+                      onClick={() => { playSfx("buy_something"); socket.emit("buyShopItem", { itemId: it.id }); }}
                     >
                       {sold ? "ขายแล้ว" : owned ? "มีแล้ว" : afford ? "ซื้อ" : "เหรียญไม่พอ"}
-                    </Button>
+                    </AvButton>
                   </div>
                 </div>
               );
             })}
           </div>
         )}
-        <Button className="mt-3 w-full" onClick={() => { clickSound(); onClose(); }}>ปิด</Button>
-      </div>
-    </div>
+      </>
+    </AvModal>
   );
 }
 
@@ -1782,11 +1919,10 @@ function InventoryModal({ me, players, gameState, roundNumber, onPickGunAmmo, on
   }
 
   return (
-    <div className="fixed inset-0 z-40 bg-black/70 grid place-items-center p-4" onClick={onClose}>
-      <div className="bg-echo-navy rounded-2xl p-5 max-w-md w-full shadow-2xl max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="text-xl font-black mb-3">🎒 กระเป๋าของ {me?.name}</div>
+    <AvModal label="กระเป๋า" title={`กระเป๋าของ ${me?.name || ""}`} width="min(34rem, 94vw)" onClose={onClose}>
+      <>
         {items.length === 0 ? (
-          <div className="text-sm opacity-70 py-6 text-center">ยังไม่มีของในคลัง — ซื้อได้จากร้านค้ามายา</div>
+          <div className="av-label py-8 text-center" style={{ color: "rgba(239,230,245,.4)" }}>ยังไม่มีของในคลัง</div>
         ) : (
           <div className="flex flex-col gap-2">
             {items.map((it) => {
@@ -1796,28 +1932,28 @@ function InventoryModal({ me, players, gameState, roundNumber, onPickGunAmmo, on
               const isAmmo = it.type === "gutsAmmo";
               const picking = isColorItem && colorPickUid === it.uid;
               return (
-                <div key={it.uid} className={`flex flex-col gap-2 rounded-xl border px-3 py-2 ${isGun ? "bg-echo-gold/10 border-echo-gold/50" : "bg-white/5 border-white/10"}`}>
-                  <div className="flex items-center gap-2">
+                <div key={it.uid} className="av-item flex flex-col gap-2" style={isGun ? { borderLeftColor: "var(--av-gold-mid)" } : undefined}>
+                  <div className="flex items-center gap-3">
                     <ItemIcon info={info} className="text-2xl h-10 w-10" />
                     <div className="min-w-0 flex-1">
-                      <div className="font-bold text-sm">{info.label(it)}</div>
-                      <div className="text-xs opacity-70 leading-snug">{info.desc}</div>
+                      <div className="av-heading text-sm">{info.label(it)}</div>
+                      <div className="text-xs leading-snug" style={{ color: "rgba(239,230,245,.62)" }}>{info.desc}</div>
                     </div>
                     {isGun ? (
-                      <Button className="px-3 py-1.5 text-xs shrink-0" disabled={!gunOpen && !!fireBlock} title={fireBlock || ""} onClick={toggleGun}>
+                      <AvButton className="px-4 py-1.5 text-xs shrink-0" disabled={!gunOpen && !!fireBlock} title={fireBlock || ""} onClick={toggleGun}>
                         {gunOpen ? "ยกเลิก" : "ยิง"}
-                      </Button>
+                      </AvButton>
                     ) : isAmmo ? (
-                      <span className="text-[10px] opacity-60 shrink-0 text-right leading-tight">ใช้ผ่าน<br />ปืน</span>
+                      <span className="av-label shrink-0 text-right" style={{ fontSize: "0.62rem" }}>ใช้ผ่านปืน</span>
                     ) : isColorItem ? (
-                      <Button className="px-3 py-1.5 text-xs shrink-0" onClick={() => (picking ? cancelColorPick() : startColorPick(it.uid))}>
+                      <AvButton className="px-4 py-1.5 text-xs shrink-0" onClick={() => (picking ? cancelColorPick() : startColorPick(it.uid))}>
                         {picking ? "ยกเลิก" : "ใช้"}
-                      </Button>
+                      </AvButton>
                     ) : (
-                      <Button className="px-3 py-1.5 text-xs shrink-0" onClick={() => applyItem(it.uid)}>ใช้</Button>
+                      <AvButton className="px-4 py-1.5 text-xs shrink-0" onClick={() => applyItem(it.uid)}>ใช้</AvButton>
                     )}
                   </div>
-                  {isGun && !gunOpen && fireBlock && <div className="text-[11px] text-echo-hp/90">⚠️ {fireBlock}</div>}
+                  {isGun && !gunOpen && fireBlock && <div className="text-[11px]" style={{ color: "#e06a78" }}>⚠️ {fireBlock}</div>}
                   {isGun && gunOpen && (
                     <div className="rounded-lg bg-black/40 p-2">
                       <div className="text-xs opacity-80 mb-1">เลือกกระสุน / คีย์ (กระสุนทั่วไปเลือกแล้วไปจิ้มเป้าหมายบนกระดาน):</div>
@@ -1880,9 +2016,8 @@ function InventoryModal({ me, players, gameState, roundNumber, onPickGunAmmo, on
             })}
           </div>
         )}
-        <Button className="mt-3 w-full" onClick={() => { clickSound(); onClose(); }}>ปิด</Button>
-      </div>
-    </div>
+      </>
+    </AvModal>
   );
 }
 
@@ -1996,33 +2131,43 @@ function MobileOpponent({ p, phase, targetable, onAttack, picked, onInspect, hos
 function CharModal({ ch, me, onClose }) {
   const myStatuses = me ? statusEntries(me, true) : [];
   return (
-    <div className="fixed inset-0 z-40 bg-black/60 grid place-items-center p-4" onClick={onClose}>
-      <div className="bg-echo-navy rounded-2xl p-5 max-w-md w-full shadow-2xl max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="text-xl font-bold mb-2">{ch.name}</div>
-        {[["สกิลติดตัว", ch.passive], ["สกิลพื้นฐาน", ch.basic], ["สกิลรอง", ch.secondary], ["ท่าไม้ตาย", ch.ultimate]].map(([label, s], i) =>
-          s ? (
-            <div key={i} className="py-1.5 border-t border-white/10">
-              <div className="flex justify-between"><span className="font-bold">{label} · {s.name}</span><span className="text-xs opacity-70">{s.cost != null ? `ใช้ ${s.cost}` : "ฟรี"}</span></div>
-              <div className="text-sm opacity-80">{s.desc}</div>
-            </div>
-          ) : null
-        )}
+    <AvModal label="ข้อมูลตัวละคร" title={ch.name} width="min(34rem, 94vw)" onClose={onClose}>
+      <>
+        <div className="flex flex-col gap-2">
+          {[["สกิลติดตัว", ch.passive], ["สกิลพื้นฐาน", ch.basic], ["สกิลรอง", ch.secondary], ["ท่าไม้ตาย", ch.ultimate]].map(([label, s], i) =>
+            s ? (
+              <div key={i} className="av-item">
+                <div className="flex justify-between gap-3">
+                  <span className="av-heading text-sm">
+                    {label} · <span style={{ color: "var(--av-gold-lit)" }}>{s.name}</span>
+                  </span>
+                  <span className="text-xs shrink-0" style={{ color: "rgba(239,230,245,.5)" }}>
+                    {s.cost != null ? `ใช้ ${s.cost}` : "ฟรี"}
+                  </span>
+                </div>
+                <div className="text-sm mt-1 leading-snug" style={{ color: "rgba(239,230,245,.78)" }}>{s.desc}</div>
+              </div>
+            ) : null
+          )}
+        </div>
         {myStatuses.length > 0 && (
-          <div className="py-1.5 border-t border-white/10">
-            <div className="font-bold mb-1.5">สถานะที่ติดอยู่ตอนนี้</div>
-            <div className="flex flex-col gap-1.5">
+          <div className="mt-5">
+            <div className="av-label mb-3">สถานะที่ติดอยู่ตอนนี้</div>
+            <div className="flex flex-col gap-2">
               {myStatuses.map((it) => (
-                <div key={it.key} className="flex items-start gap-2 rounded-xl bg-white/5 border border-white/10 px-3 py-1.5">
-                  <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-md font-bold shrink-0 ${it.cls}`}><span>{it.icon}</span><span>{it.label}{it.amt > 0 ? ` +${it.amt}` : ""}{showStatusValue(it) ? ` ${it.v}` : ""}</span></span>
-                  <span className="text-sm opacity-90 leading-snug">{it.desc}</span>
+                <div key={it.key} className="av-item flex items-start gap-3">
+                  <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 font-bold shrink-0 ${it.cls}`}>
+                    <span>{it.icon}</span>
+                    <span>{it.label}{it.amt > 0 ? ` +${it.amt}` : ""}{showStatusValue(it) ? ` ${it.v}` : ""}</span>
+                  </span>
+                  <span className="text-sm leading-snug" style={{ color: "rgba(239,230,245,.85)" }}>{it.desc}</span>
                 </div>
               ))}
             </div>
           </div>
         )}
-        <Button className="mt-3 w-full" onClick={() => { clickSound(); onClose(); }}>ปิด</Button>
-      </div>
-    </div>
+      </>
+    </AvModal>
   );
 }
 
@@ -2622,22 +2767,22 @@ function SkillSlot({ label, tier, skill, points, disabled, onUse, ammo, cost, si
         disabled={!usable}
         onClick={() => usable && onUse(tier, skill, label, useCost)}
         title={skill ? `${skill.name} — ${skill.desc}` : ""}
-        className={`relative w-full ${heightCls} overflow-hidden bg-gray-300 shadow-lg transition ${
-          usable ? "hover:scale-105" : "opacity-70 cursor-not-allowed grayscale"
-        }`}
+        data-usable={usable ? "true" : "false"}
+        className={`bd-skill ${heightCls} ${usable ? "" : "opacity-65 cursor-not-allowed grayscale"}`}
         style={{
-          clipPath: "polygon(10% 0,100% 0,100% 90%,90% 100%,0 100%,0 10%)",
-          boxShadow: usable ? `0 0 0 2px ${accent}, 0 8px 18px -4px rgba(0,0,0,.6)` : "0 0 0 2px rgba(255,255,255,.15)",
+          boxShadow: usable
+            ? `0 0 0 1px ${accent}, 0 0 24px -9px ${accent}, 0 16px 28px -14px rgba(0,0,0,.92)`
+            : "0 0 0 1px rgba(255,255,255,.12)",
         }}
       >
-        <span className="absolute top-0 inset-x-0 h-1.5 z-10" style={{ background: accent }} />
+        <span className="bd-skill-bar" style={{ background: accent }} />
         {skill && skill.img && !broken ? (
           <img src={skill.img} alt="" className="absolute inset-0 w-full h-full object-cover" onError={() => setBroken(true)} />
         ) : (
           <div className="absolute inset-0 grid place-items-center text-gray-500 text-3xl">✦</div>
         )}
         {skill && (
-          <span className={`absolute top-1 right-1 text-xs font-bold rounded px-1.5 ${useCost < skill.cost ? "bg-echo-gold text-gray-900" : "bg-black/60 text-white"}`}>
+          <span className={`bd-skill-cost ${useCost < skill.cost ? "bg-echo-gold text-gray-900" : "bg-black/70 text-white"}`}>
             {useCost}
           </span>
         )}
@@ -3062,6 +3207,37 @@ function KaiOverhaulSlot({ me }) {
 
 // ---------- กองการ์ดกลางจอ: การ์ดคว่ำซ้อนกันเล็กน้อย ไม่ต้องมีอาร์ตใหม่ ----------
 //  onClick (ถ้ามี) เปิดสมุดการ์ด (DeckLedgerModal) — ต้องเปิด pointer-events เฉพาะจุดนี้เอง เพราะ wrapper รอบนอก (โลโก้/กึ่งกลางจอ) เป็น pointer-events-none ทั้งแถบ
+function BoardTimer({ seconds, phaseKey }) {
+  const [max, setMax] = useState(seconds || 1);
+  useEffect(() => { setMax(Math.max(1, seconds || 1)); /* เฟสใหม่ -> เริ่มนับเพดานใหม่ */ // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phaseKey]);
+  useEffect(() => { setMax((m) => Math.max(m, seconds || 0)); }, [seconds]);
+  const pct = max > 0 ? Math.max(0, Math.min(1, (seconds || 0) / max)) : 0;
+  const circ = 2 * Math.PI * 20;
+  const low = (seconds || 0) <= 10;
+  return (
+    <div className="bd-timer" data-low={low ? "true" : "false"}>
+      <svg viewBox="0 0 48 48" aria-hidden="true">
+        <circle className="bd-timer-ring" cx="24" cy="24" r="20" />
+        <circle
+          className="bd-timer-arc"
+          cx="24"
+          cy="24"
+          r="20"
+          strokeDasharray={circ}
+          strokeDashoffset={circ * (1 - pct)}
+        />
+      </svg>
+      <span
+        className="relative leading-none"
+        style={{ fontFamily: "var(--font-av-display)", fontWeight: 900, fontSize: "1.25rem", color: low ? "#ff8a94" : "#ffe9a8" }}
+      >
+        {seconds}
+      </span>
+    </div>
+  );
+}
+
 function DeckPile({ hostRef, size = "md", onClick }) {
   const dims = { sm: { w: 36, h: 48 }, md: { w: 48, h: 64 }, lg: { w: 80, h: 112 } };
   const dim = dims[size] || dims.md;
@@ -3246,7 +3422,10 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
   const [hakunoCmdOpen, setHakunoCmdOpen] = useState(false); // คิชินามิ ฮาคุโนะ: เมนูเลือกคำสั่งอาคมบัญชาระดับ EX+
   const [statusViewId, setStatusViewId] = useState(null); // ดูสถานะผู้เล่นคนอื่น (แตะการ์ดตอนไม่ได้เลือกเป้า)
   const [bagOpen, setBagOpen] = useState(false);     // ร้านค้ามายา (patch 2.2 full): เปิดดูคลังของตัวเอง
-  const [shopOpen, setShopOpen] = useState(false);   // ร้านค้ามายา: เปิดหน้าร้านค้า
+  const [shopOpen, setShopOpen] = useState(false);
+  const [attackCall, setAttackCall] = useState(false);
+  const [heraldSeq, setHeraldSeq] = useState(0);
+  const [shopHerald, setShopHerald] = useState(false);   // ร้านค้ามายา: เปิดหน้าร้านค้า
   const [deckOpen, setDeckOpen] = useState(false);   // สมุดการ์ดกองกลาง: กดที่กองการ์ดกลางเพื่อดู
   const shopAutoShown = useRef(-1);                  // จำรอบร้านค้าที่เด้งอัตโนมัติไปแล้ว (กันเด้งซ้ำ)
   const vp = useViewport();
@@ -3272,14 +3451,33 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
       playSfx(`nanayaVoice${1 + Math.floor(Math.random() * 5)}`);
     }
   }, [phase, actualWinner, state.roundNumber]);
+  // เข้าช่วงโจมตี -> ฉากประกาศ "เริ่มโจมตีได้" + เสียงเปลี่ยนช่วง (ไม่บังการกดเลือกเป้า)
+  useEffect(() => {
+    if (phase !== "ATTACK") return undefined;
+    playSfx("change_cutscene");
+    setAttackCall(true);
+    const t = setTimeout(() => setAttackCall(false), 2200);
+    return () => clearTimeout(t);
+  }, [phase, state.roundNumber]);
+  // ฉากบอกจำนวนเทิร์น -> เสียงเปลี่ยนช่วงเดียวกัน
+  useEffect(() => {
+    if (phase !== "TRANSITION") return;
+    playSfx("change_cutscene");
+  }, [phase, state.roundNumber]);
   // ร้านค้ามายา (patch 2.2 full): เด้งหน้าร้านค้าอัตโนมัติครั้งเดียวทุกครั้งที่มีสินค้าชุดใหม่ (รอบร้านค้าเปลี่ยน)
   useEffect(() => {
     const seq = state.shop?.[0]?.id?.split("_")[1];
     if (seq && shopAutoShown.current !== seq) {
       shopAutoShown.current = seq;
-      setShopOpen(true);
+      setHeraldSeq((n) => n + 1);
     }
   }, [state.shop]);
+  useEffect(() => {
+    if (!heraldSeq) return undefined;
+    const t1 = setTimeout(() => setShopHerald(true), 2700);
+    const t2 = setTimeout(() => setShopHerald(false), 6400);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [heraldSeq]);
   // ผู้เล่นที่กำลังเปิดดูสถานะ (ข้อมูลสดจาก state ทุกครั้งที่ re-render)
   const statusView = statusViewId ? state.players.find((x) => x.id === statusViewId) : null;
   // Beat Mode (คุวากาตะ เลือด < 3): ท่าไม้ตายใช้ไม่ได้เสมอ
@@ -4052,7 +4250,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
     const revealed = phase === "SUMMARY" || phase === "ATTACK" || phase === "ATTACKING";
     return (
       <div className="fixed inset-0 overflow-hidden flex flex-col">
-        <GameBackground cycle={state.cycle} oberonBg={state.oberonBg} bardBg={state.bardBg} shikiBg={state.shikiBg} hisakawaBg={state.hisakawaBg} overloadForce={state.overloadForce} lowQ={lowQ} seraph={!!state.seraph} />
+        <GameBackground cycle={state.cycle} round={state.roundNumber} oberonBg={state.oberonBg} bardBg={state.bardBg} shikiBg={state.shikiBg} hisakawaBg={state.hisakawaBg} overloadForce={state.overloadForce} lowQ={lowQ} seraph={!!state.seraph} />
         {/* แถบบน: รอบ + เวลา (เว้นขวาให้ปุ่มเสียง) */}
         <div className="shrink-0 flex flex-col items-center gap-1 pt-2 px-14 min-h-[40px]">
           {(phase === "PLAYING" || phase === "ATTACK") && (
@@ -4462,14 +4660,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
 
         {/* ---------- เฟสสรุปผล: ลีดเดอร์บอร์ด (เต็มจอ เลื่อนดูได้) ---------- */}
         {phase === "SUMMARY" && (
-          <div className="fixed inset-0 z-30 flex flex-col items-center justify-center gap-0 p-3 bg-black/50 pointer-events-none">
-            <div className="pop-in relative w-full max-w-sm rounded-t-2xl px-5 py-2 text-center overflow-hidden" style={{ background: "linear-gradient(120deg,var(--color-p-accent),var(--color-p-accent-deep))" }}>
-              <span className="relative text-lg font-black text-white text-hard tracking-wide">ผลการจั่วไพ่รอบนี้</span>
-            </div>
-            <div className="pop-in flex flex-col gap-3 rounded-b-2xl px-4 py-4 w-full max-w-sm max-h-[65vh] overflow-y-auto bg-gradient-to-b from-slate-900/97 to-black/97 border-x border-b border-white/10 shadow-2xl pointer-events-auto">
-              <SummaryTiers winners={summaryWinners} losers={summaryLosers} compact />
-            </div>
-          </div>
+          <SummaryTiers winners={summaryWinners} losers={summaryLosers} compact />
         )}
 
         {/* ---------- อนิเมชันเปลี่ยนเฟส ---------- */}
@@ -4492,26 +4683,14 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
         {bylethInfoOpen && <BylethCourseInfoModal course={state.bylethFieldFx} onClose={() => setBylethInfoOpen(false)} />}
 
         {/* ---------- แบนเนอร์รอบถัดไป ---------- */}
-        {phase === "TRANSITION" && (
-          <div className="fixed inset-0 grid place-items-center bg-black/40 z-30">
-            <div className="round-banner text-6xl font-black text-white text-hard">รอบที่ {state.roundNumber + 1}</div>
-          </div>
-        )}
+        {phase === "TRANSITION" && <RoundBanner round={state.roundNumber + 1} />}
 
-        {/* ---------- จบเกม ---------- */}
+        {attackCall && <AttackCall />}
+
+        {shopHerald && <ShopHerald />}
+
         {phase === "GAMEOVER" && (
-          <div className="fixed inset-0 grid place-items-center bg-black/60 z-30 p-4">
-            <div className="text-center">
-              <div className="text-4xl font-black mb-4">
-                {(() => {
-                  if (state.gameMode !== "ffa" && state.winningTeamId) { const ws = state.players.filter((p) => p.alive && p.teamId === state.winningTeamId); const names = ws.map((w) => w.name).join(" & "); return <>🏆 Team {state.winningTeamId}{names ? ` (${names})` : ""} ชนะ!</>; }
-                  if (state.allyWin) { const ws = state.players.filter((p) => p.alive); return <>🤝 {ws.map((w) => w.name).join(" & ")} ชนะทั้งคู่!</>; }
-                  const c = state.players.find((p) => p.alive); return c ? <>🏆 {c.name} ชนะ!</> : "จบเกม";
-                })()}
-              </div>
-              <Button className="py-4 px-8 text-xl" onClick={() => { clickSound(); socket.emit("backToLobby"); }}>🏠 กลับห้องรอ</Button>
-            </div>
-          </div>
+          <VictoryScreen state={state} onBackToLobby={() => socket.emit("backToLobby")} />
         )}
 
         <ModalMounts
@@ -4549,15 +4728,15 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
 
   return (
     <div className="fixed inset-0 overflow-hidden">
-      <GameBackground cycle={state.cycle} oberonBg={state.oberonBg} bardBg={state.bardBg} shikiBg={state.shikiBg} hisakawaBg={state.hisakawaBg} overloadForce={state.overloadForce} lowQ={lowQ} seraph={!!state.seraph} />
+      <GameBackground cycle={state.cycle} round={state.roundNumber} oberonBg={state.oberonBg} bardBg={state.bardBg} shikiBg={state.shikiBg} hisakawaBg={state.hisakawaBg} overloadForce={state.overloadForce} lowQ={lowQ} seraph={!!state.seraph} />
       <div
         className="relative overflow-hidden"
         style={{ width: DESIGN_W, height: designH, transform: `scale(${scale})`, transformOrigin: "top left" }}
       >
       {/* กองการ์ดกลาง ทับตำแหน่งโลโก้กลางโต๊ะเดิม (โลโก้เป็นแค่วอเตอร์มาร์กจางๆ ด้านหลัง) — ใหญ่ขึ้นชัดเจน */}
       <div className="absolute inset-x-0 top-[40%] flex justify-center pointer-events-none">
-        <div className="relative grid place-items-center">
-          <img src="/image/logo_current.webp" alt="" className="h-16 sm:h-20 w-auto opacity-25" />
+        <div className="bd-deck relative grid place-items-center">
+          <img src="/image/logo_current.webp" alt="" className="relative h-16 sm:h-20 w-auto opacity-20" />
           <div className="absolute inset-0 grid place-items-center">
             <DeckPile hostRef={deckRef} size="lg" onClick={() => setDeckOpen(true)} />
           </div>
@@ -4570,8 +4749,13 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
 
       {/* ตัวจับเวลา + รอบ */}
       {(phase === "PLAYING" || phase === "ATTACK") && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 p-chip text-xl font-bold text-white bg-black/50 px-5 py-1.5 border-b-2" style={{ borderColor: "var(--color-p-accent-bright)" }}>
-          <span>{state.oberonBg ? "🌑" : nightNow ? "🌙" : "☀️"} รอบที่ {state.roundNumber} · ⏱️ {state.timeLeft} วิ</span>
+        <div className="bd-top">
+          <span className="relative text-3xl leading-none">{state.oberonBg ? "🌑" : nightNow ? "🌙" : "☀️"}</span>
+          <div className="relative text-center">
+            <div className="av-label" style={{ fontSize: "0.64rem", letterSpacing: "0.34em" }}>รอบที่</div>
+            <div className="av-title leading-none" style={{ fontSize: "2rem" }}>{state.roundNumber}</div>
+          </div>
+          <BoardTimer seconds={state.timeLeft} phaseKey={`${phase}-${state.roundNumber}`} />
         </div>
       )}
       {/* ราตรีกลืนกิน: ป้ายค้างระหว่างฉากหลังโอเบรอนมีผล (จนกว่าจะหมดกลางคืน) */}
@@ -4847,7 +5031,12 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
                 แตกแล้วการ์ดจะเป็นสีเทาเหมือน disable + ขึ้นคำว่า "แต้มเกิน" แทนสัญลักษณ์ระเบิด
                 ลอยสูงกว่ากลุ่มอื่น (mb เยอะกว่า) — กฎข้อ 2 การ์ดต้องอยู่บนสุดเสมอ */}
             <div className="flex flex-col items-center mb-3 sm:mb-6 order-first lg:order-none w-full lg:w-auto">
-              <div className="text-3xl sm:text-4xl font-black leading-none text-hard mb-1.5" style={{ fontFamily: P_DISPLAY, color: me.busted ? "var(--color-echo-hp)" : "var(--color-echo-gold)" }}>
+              <div
+                className={`${me.busted ? "av-heading" : "av-title"} leading-none mb-1.5`}
+                style={me.busted
+                  ? { fontSize: "2rem", color: "#ff8a94", textShadow: "0 2px 10px rgba(0,0,0,.95)" }
+                  : { fontSize: "3rem" }}
+              >
                 {me.busted ? "แต้มเกิน" : (me.score != null ? me.score : "???")}
               </div>
               <div ref={selfHandRef} className="flex items-center justify-center w-[240px] sm:w-[290px] h-[120px] sm:h-[140px]">
@@ -4991,14 +5180,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
 
       {/* ---------- เฟสสรุปผล: ลีดเดอร์บอร์ด (กลางจอ) ---------- */}
       {phase === "SUMMARY" && (
-        <div className="absolute top-[14%] left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-0 pointer-events-none">
-          <div className="pop-in relative w-full min-w-[24rem] rounded-t-2xl px-6 py-2.5 text-center overflow-hidden" style={{ background: "linear-gradient(120deg,var(--color-p-accent),var(--color-p-accent-deep))" }}>
-            <span className="relative text-xl sm:text-2xl font-black text-white text-hard tracking-wide">ผลการจั่วไพ่รอบนี้</span>
-          </div>
-          <div className="pop-in flex flex-col gap-3 rounded-b-2xl px-6 sm:px-8 py-5 min-w-[24rem] max-h-[65vh] overflow-y-auto bg-gradient-to-b from-slate-900/97 to-black/97 border-x border-b border-white/10 shadow-2xl backdrop-blur-md pointer-events-auto">
-            <SummaryTiers winners={summaryWinners} losers={summaryLosers} />
-          </div>
-        </div>
+        <SummaryTiers winners={summaryWinners} losers={summaryLosers} />
       )}
 
       {/* ---------- อนิเมชันเปลี่ยนเฟส (กลางจอ) ---------- */}
@@ -5021,28 +5203,14 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
       {bylethInfoOpen && <BylethCourseInfoModal course={state.bylethFieldFx} onClose={() => setBylethInfoOpen(false)} />}
 
       {/* ---------- แบนเนอร์รอบถัดไป ---------- */}
-      {phase === "TRANSITION" && (
-        <div className="absolute inset-0 grid place-items-center bg-black/40 z-30">
-          <div className="round-banner text-6xl sm:text-8xl font-black text-white text-hard">
-            รอบที่ {state.roundNumber + 1}
-          </div>
-        </div>
-      )}
+      {phase === "TRANSITION" && <RoundBanner round={state.roundNumber + 1} />}
 
-      {/* ---------- จบเกม ---------- */}
+      {attackCall && <AttackCall />}
+
+      {shopHerald && <ShopHerald />}
+
       {phase === "GAMEOVER" && (
-        <div className="absolute inset-0 grid place-items-center bg-black/60 z-30">
-          <div className="text-center">
-            <div className="text-4xl sm:text-5xl font-black mb-4">
-              {(() => {
-                if (state.gameMode !== "ffa" && state.winningTeamId) { const ws = state.players.filter((p) => p.alive && p.teamId === state.winningTeamId); const names = ws.map((w) => w.name).join(" & "); return <>🏆 Team {state.winningTeamId}{names ? ` (${names})` : ""} ชนะ!</>; }
-                  if (state.allyWin) { const ws = state.players.filter((p) => p.alive); return <>🤝 {ws.map((w) => w.name).join(" & ")} ชนะทั้งคู่!</>; }
-                  const c = state.players.find((p) => p.alive); return c ? <>🏆 {c.name} ชนะ!</> : "จบเกม";
-              })()}
-            </div>
-            <Button onClick={() => { clickSound(); socket.emit("backToLobby"); }}>🏠 กลับห้องรอ</Button>
-          </div>
-        </div>
+        <VictoryScreen state={state} onBackToLobby={() => socket.emit("backToLobby")} />
       )}
 
       {/* ---------- modal รายละเอียดตัวละคร / ดูสถานะผู้เล่น ---------- */}
