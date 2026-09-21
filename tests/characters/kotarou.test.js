@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { engine, computeAttackBase } = require('../../server.js');
+const { engine, computeAttackBase, captureTurnSnapshot } = require('../../server.js');
 const kotarou = require('../../characters/kotarou.js');
 const CHARACTERS = require('../../characters.js');
 
@@ -407,4 +407,17 @@ test('ความจุพื้นฐานในโมดูลต้อง�
   K.maxHpPenalty = 0;
   assert.equal(engine.maxHpOf(K), kotarou.KOTAROU_MAX_HP, 'ค่าความจุพื้นฐานไม่ตรงกัน — สูตรหลบหลีกจะเพี้ยน');
   assert.equal(kotarou.capacityLost(engine, K), 0);
+});
+
+// afterSummary ใช้ค่าที่คืนมาตัดสินว่าจะหยุดไหม ถ้าไม่คืน true เฟสโจมตีจะเดินต่อทับเทิร์นที่เพิ่งย้อนไป
+// (ผลที่เห็นคือ "กดแล้วไม่ย้อนเลย" ทั้งที่กลไกย้อนทำงานไปแล้ว)
+test('ย้อนเทิร์นสำเร็จต้องคืน true และพากลับเข้าเฟสจั่วไพ่', () => {
+  const { K } = setup();
+  engine.setGameState('SUMMARY');
+  captureTurnSnapshot();
+  const ok = engine.triggerKotarouRewind(K);
+  assert.equal(ok, true, 'ต้องคืน true ให้ afterSummary หยุดก่อนเข้าเฟสโจมตี');
+  assert.notEqual(engine.gameState, 'ATTACK', 'ย้อนแล้วต้องไม่เดินต่อเข้าเฟสโจมตี');
+  assert.equal(K.kotarouDebt, kotarou.REWIND_HP_COST, 'ต้องลงหนี้เลือดไว้จริง = กลไกย้อนทำงานครบ');
+  engine.clearPhaseTimer();
 });

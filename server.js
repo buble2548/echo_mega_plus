@@ -4514,6 +4514,7 @@ function triggerKotarouRewind(p) {
   queueCutscene(p, "kotarouRewind");
   CHAR_HOOKS.kotarou.onRewound(engine, p);
   runCutsceneQueue(beginKotarouRewindDraw);
+  return true; // ผู้เรียกต้องหยุดทันที ไม่งั้นเฟสโจมตีจะเดินต่อทับเทิร์นที่เพิ่งย้อนไป
 }
 
 function triggerOverloadForce() {
@@ -6596,6 +6597,7 @@ const engine = {
   get overloadForceCount() { return overloadForceCount; },
   setOverloadForceCount(v) { overloadForceCount = Number(v) || 0; },
   triggerOverloadForce,
+  triggerKotarouRewind, // เปิดให้เทสต์พิสูจน์ได้ว่าย้อนแล้วคืนค่าบอกผู้เรียกให้หยุดจริง
   applyOverloadOverdrawPenalty,
   applyBuff: rawApplyBuff,
   applyDebuff,
