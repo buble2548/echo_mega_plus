@@ -216,8 +216,10 @@ module.exports = {
   // ============================================================
   //  ล็อกเมื่อความจุพลังชีวิตเหลือ 1: ทุ่มสุดตัวครบแล้วการโจมตีปกติแรงพอตัวอยู่แล้ว
   //  และการเสียเลือด 1 หน่วยตอนความจุเหลือ 1 คือการฆ่าตัวตายเปล่าๆ
+  //  อาวุธที่หลอมไว้ "ค้างอยู่จนกว่าจะได้โจมตี" จึงหลอมซ้ำทับของเดิมไม่ได้
+  //  (ไม่งั้นจ่ายเลือดใบละ 1 หน่วยเพื่ออัปเกรดดาบไปเรื่อยๆ ได้ในเทิร์นเดียว)
   canTransmute(engine, p) {
-    return isKotarou(p) && p.alive && engine.maxHpOf(p) > 1 && (p.inventory || []).length > 0;
+    return isKotarou(p) && p.alive && engine.maxHpOf(p) > 1 && !weaponOf(p) && (p.inventory || []).length > 0;
   },
 
   transmute(engine, p, uid, kind) {
@@ -263,6 +265,17 @@ module.exports = {
       if (total > CLAW_DMG_CAP) bonus -= total - CLAW_DMG_CAP;
     }
     return Math.max(-1, bonus);
+  },
+
+  // ---------- อาวุธหมดอายุเมื่อได้โจมตีแล้ว ----------
+  //  เรียกท้ายการโจมตีปกติ · กรงเล็บต้องครบโควตาก่อนถึงจะสลาย (2 ครั้งนับเป็นการโจมตีครั้งเดียว)
+  consumeWeaponOnAttack(engine, p) {
+    const w = weaponOf(p);
+    if (!isKotarou(p) || !w) return;
+    if (w.kind === "claw" && (p.kotarouClawLeft || 0) > 1) return; // ยังเหลือหมัดในโควตา
+    p.kotarouWeapon = null;
+    p.kotarouClawLeft = 0;
+    engine.log(`⚔️ ${p.name} ${w.kind === "sword" ? "ดาบแห่งจิตใจ" : "กรงเล็บ"}สลายไปหลังลงมือแล้ว`);
   },
 
   // ---------- กรงเล็บ: โจมตีปกติครั้งที่ 2 ----------

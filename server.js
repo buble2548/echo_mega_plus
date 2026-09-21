@@ -5473,6 +5473,8 @@ function doAttack(byId, targetId) {
   //  ทำให้ทุกหมัดที่เหลือในคอมโบเดียวกันได้โบนัสด้วย (นับทั้งคอมโบเป็นการโจมตีครั้งเดียวตามที่ตั้งใจไว้) — ไม่ใช่คอมโบก็เคลียร์ทิ้งหลังหมัดนี้ตามปกติ
   //  + เป้าหมายเกราะไม่ฟื้น 5 เทิร์น
   if (miyakoUltAtk) CHAR_HOOKS.miyako.resolveUltHit(engine, attacker, target);
+  // เท็นโนจิ โคทาโร่: อาวุธที่หลอมไว้สลายเมื่อได้ลงมือแล้ว (กรงเล็บรอให้ครบ 2 หมัดก่อน)
+  CHAR_HOOKS.kotarou.consumeWeaponOnAttack(engine, attacker);
   // เสริมพลัง (Rejuvenation): ใช้แล้วหมดไปทันทีเมื่อได้โจมตี
   if (empowerAtk) {
     delete attacker.statuses.empower;

@@ -881,6 +881,7 @@
       rgba(185, 95, 196, 0.13) 330deg, transparent 339deg, transparent 360deg);
   -webkit-mask-image: radial-gradient(52% 52% at 50% 52%, transparent 18%, #000 62%, transparent 92%);
   mask-image: radial-gradient(52% 52% at 50% 52%, transparent 18%, #000 62%, transparent 92%);
+  will-change: transform;
   animation: giRays 26s linear infinite, giFade 1s ease both;
 }
 @keyframes giRays { to { transform: rotate(360deg); } }
@@ -897,6 +898,7 @@
   fill: none;
   stroke: rgba(232, 191, 90, 0.5);
   stroke-width: 1.3;
+  will-change: transform;
   filter: drop-shadow(0 0 10px rgba(232, 191, 90, 0.45));
 }
 .gi-sigil-spin { transform-origin: 200px 200px; animation: giSpin 48s linear infinite; }
@@ -930,6 +932,7 @@
 .gi-bust {
   position: absolute;
   bottom: 9vh;
+  will-change: transform, opacity;
   width: clamp(150px, 19vw, 290px);
   height: clamp(210px, 27vw, 400px);
   transform: translateX(-50%) scale(var(--d, 1));
@@ -937,8 +940,8 @@
   animation: giBustRise 1s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 @keyframes giBustRise {
-  from { opacity: 0; transform: translateX(-50%) translateY(16vh) scale(calc(var(--d, 1) * 0.86)); }
-  to { opacity: 1; transform: translateX(-50%) scale(var(--d, 1)); }
+  from { opacity: 0; transform: translateX(-50%) translateY(14vh) scale(var(--d, 1)); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0) scale(var(--d, 1)); }
 }
 .gi-beam {
   position: absolute;
@@ -950,7 +953,7 @@
   pointer-events: none;
   -webkit-mask-image: linear-gradient(180deg, transparent, #000 34%, #000 74%, transparent);
   mask-image: linear-gradient(180deg, transparent, #000 34%, #000 74%, transparent);
-  filter: blur(9px);
+  opacity: 0.8;
   animation: giBeam 3.4s ease-in-out infinite alternate;
 }
 @keyframes giBeam { from { opacity: 0.55; } to { opacity: 1; } }
@@ -967,15 +970,17 @@
 .gi-bust-img img { object-position: 50% 14%; }
 .gi-ghost-no {
   position: absolute;
-  top: -6%;
+  z-index: 2;
+  top: 0;
+  line-height: 0.78;
   left: 50%;
   transform: translateX(-50%);
   font-family: var(--font-av-display);
   font-weight: 900;
-  font-size: clamp(7rem, 16vh, 15rem);
-  line-height: 0.8;
+  font-size: clamp(5rem, 12vh, 11rem);
   color: transparent;
-  -webkit-text-stroke: 2px rgba(232, 191, 90, 0.3);
+  -webkit-text-stroke: 2px rgba(232, 191, 90, 0.55);
+  text-shadow: 0 4px 18px rgba(0, 0, 0, 0.9);
   pointer-events: none;
   user-select: none;
 }

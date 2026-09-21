@@ -10,7 +10,7 @@ function IntroPortrait({ p, className, style, bare = false }) {
       style={bare ? style : { background: `linear-gradient(150deg, ${p.color}, var(--av-void))`, ...style }}
     >
       {introImg && !broken ? (
-        <img src={introImg} alt="" className="absolute inset-0 w-full h-full object-cover" onError={() => setBroken(true)} />
+        <img src={introImg} alt="" decoding="async" className="absolute inset-0 w-full h-full object-cover" onError={() => setBroken(true)} />
       ) : (
         <span className="absolute inset-0 grid place-items-center text-7xl" style={{ fontFamily: "var(--font-av-display)", fontWeight: 900, color: "rgba(255,255,255,.72)" }}>
           {(p.name || "?").slice(0, 1).toUpperCase()}
@@ -20,7 +20,7 @@ function IntroPortrait({ p, className, style, bare = false }) {
   );
 }
 
-const EMBERS = Array.from({ length: 26 }, () => ({
+const EMBERS = Array.from({ length: 14 }, () => ({
   x: Math.random() * 100,
   s: 2 + Math.random() * 4,
   d: Math.random() * 2.4,
@@ -152,14 +152,17 @@ export default function GameIntro({ players, onDone }) {
                     "--d": depth.toFixed(3),
                     "--tilt": `${off * 7}deg`,
                     "--lift": `${(0.5 - Math.abs(off)) * 7}vh`,
-                    animationDelay: `${0.42 + Math.abs(off) * 0.55}s`,
+                    // ไล่ทีละคนตามลำดับที่นั่ง ไม่ใช่ตามระยะห่างจากกลาง — แบบเดิมคนริมสองข้างได้ delay
+                    // ใกล้เคียงกันมาก ทุกคนเลยโผล่พร้อมกันเป็นกลุ่ม = เบราว์เซอร์ต้องวาดรูปใหญ่ทุกใบในเฟรมเดียว
+                    animationDelay: `${(0.35 + i * 0.13).toFixed(2)}s`,
                   }}
                 >
                   <span className="gi-beam" style={{ background: `linear-gradient(180deg, transparent, ${p.color}66 46%, transparent)` }} />
-                  <span className="gi-ghost-no">{p.position}</span>
                   <span className="gi-bust-img">
                     <IntroPortrait bare p={p} className="w-full h-full" />
                   </span>
+                  {/* เลขประจำตัวต้องอยู่ "หลัง" รูปใน DOM ไม่งั้นรูปวาดทับจนมองไม่เห็น */}
+                  <span className="gi-ghost-no">{p.position}</span>
                   <span className="gi-bust-name" style={{ "--pc": p.color }}>{p.name}</span>
                 </div>
               );

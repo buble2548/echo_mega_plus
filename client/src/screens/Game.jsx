@@ -5619,6 +5619,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
       />
       {lumiIdolOpen && me && <LumiIdolModal me={me} onPick={pickLumiIdol} onClose={() => { clickSound(); setLumiIdolOpen(false); }} />}
         {brianKeyOpen && me && <BrianKeyModal me={me} onPick={pickBrianKey} onClose={() => { clickSound(); setBrianKeyOpen(false); }} />}
+        {kotarouOpen && me && <KotarouModal me={me} tier={kotarouOpen} onPick={pickKotarou} onClose={() => { clickSound(); setKotarouOpen(null); }} />}
         {connorPredictOpen && me && <ConnorPredictModal me={me} players={state.players} onSubmit={submitConnorPredict} onClose={() => { clickSound(); setConnorPredictOpen(false); }} />}
         {yuiSongOpen && me && <YuiSongModal me={me} onPick={pickYuiSong} onClose={() => setYuiSongOpen(false)} />}
       </div>
