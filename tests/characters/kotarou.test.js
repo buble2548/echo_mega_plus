@@ -221,12 +221,20 @@ test('กลับไปแก้ไข: ไม่ชนะ -> ย้อน แ�
   assert.equal(K.kotarouDebt, kotarou.REWIND_HP_COST * 2, 'ย้อนซ้ำต้องทบหนี้');
 });
 
-test('หนี้เลือดถูกเก็บตอนขึ้นเทิร์นใหม่ — ย้อน 2 ครั้งแล้วยังแพ้ = ตาย', () => {
+test('หนี้เลือดถูกเก็บตอนขึ้นเทิร์นใหม่ และทบจนฆ่าเขาได้จริง', () => {
   const { K } = setup();
-  K.kotarouDebt = kotarou.REWIND_HP_COST * 2; // 8 หน่วย เกินความจุสูงสุด
+  // ที่ราคา 3: ย้อน 2 ครั้ง = 6 หน่วย จากความจุ 7 -> รอดมาที่ 1 หน่วยแบบเฉียดฉิว
+  K.kotarouDebt = kotarou.REWIND_HP_COST * 2;
   kotarou.collectDebt(engine, K);
-  assert.equal(K.alive, false, 'หนี้ 8 หน่วยต้องฆ่าเขาจริง — นี่คือความเสี่ยงที่ตั้งใจ');
+  assert.equal(K.alive, true, 'ย้อน 2 ครั้งต้องยังรอด (เปลี่ยนจากราคา 4 ที่ตายแน่นอน)');
+  assert.equal(K.hp, engine.maxHpOf(K) - kotarou.REWIND_HP_COST * 2);
   assert.equal(K.kotarouDebt, 0, 'หนี้ต้องถูกล้างหลังเก็บ ไม่เก็บซ้ำเทิร์นหน้า');
+
+  // ย้อนครั้งที่ 3 (ชนเพดานกันลูปพอดี) = 9 หน่วย ซึ่งเกินความจุเต็ม -> ตายแน่นอน
+  const { K: K2 } = setup();
+  K2.kotarouDebt = kotarou.REWIND_HP_COST * 3;
+  kotarou.collectDebt(engine, K2);
+  assert.equal(K2.alive, false, 'หนี้ที่เกินความจุเต็มต้องฆ่าเขาจริง — นี่คือความเสี่ยงที่ตั้งใจ');
 });
 
 test('ชนะในเทิร์นที่เขียนใหม่ -> หนี้เลือดถูกลบทิ้ง', () => {
@@ -240,7 +248,7 @@ test('ชนะในเทิร์นที่เขียนใหม่ -> �
   assert.equal(K.kotarouDebt, 0);
 
   kotarou.collectDebt(engine, K);
-  assert.equal(K.hp, 7, 'หนี้ถูกลบแล้ว ต้องไม่เสียเลือดตอนขึ้นเทิร์นใหม่');
+  assert.equal(K.hp, engine.maxHpOf(K), 'หนี้ถูกลบแล้ว ต้องไม่เสียเลือดตอนขึ้นเทิร์นใหม่');
 });
 
 test('กดกลับไปแก้ไขไม่ได้เมื่อพลังชีวิตเหลือ 4 หรือน้อยกว่า', () => {
