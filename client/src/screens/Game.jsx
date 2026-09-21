@@ -2164,6 +2164,17 @@ function VitalExtras({ p, className = "" }) {
   const bits = [];
   if (p.shield > 0) bits.push(["sh", `+🛡️${p.shield}`, "#7fd4ff", `โล่ชั่วคราว ${p.shield}`]);
   if (p.lumiProducerHp != null && !p.lumiIdolDown) bits.push(["pr", `🎧${p.lumiProducerHp}`, "#ff8ad0", `โปรดิวเซอร์เหลือพลังชีวิต ${p.lumiProducerHp}/${p.lumiProducerMax}`]);
+  const k = p.kotarou;
+  if (k) {
+    if (k.mode === "life") bits.push(["km", "🩸ราก", "#ff8a94", "สลับรากชีวิต — แต้มสกิลที่ควรฟื้นไปเป็นพลังชีวิตแทน (แต้มสกิลไม่ฟื้น)"]);
+    if (k.mode === "energy") bits.push(["km", "⚡พลัง", "#ffe9a8", "สลับพลังงาน — เหรียญที่ควรได้ไปเป็นแต้มสกิลแทน (ไม่ได้เหรียญ)"]);
+    if (k.weapon) bits.push(["kw", k.weapon.kind === "sword" ? `🗡️${k.weapon.dmg}` : "🐾", "#7fd4ff",
+      k.weapon.kind === "sword" ? `ดาบแห่งจิตใจ — โจมตีปกติ ${k.weapon.dmg} หน่วย` : "กรงเล็บ — โจมตีปกติได้ 2 ครั้ง"]);
+    if (k.power > 0) bits.push(["kp", `⚔️+${k.power}`, "#ffe9a8", `ทุ่มสุดตัว — พลังโจมตีถาวร +${k.power}`]);
+    if (k.dodge > 0) bits.push(["kd", `💨${k.dodge}%`, "#9fd0ff", "อัตราหลบหลีกจากความจุพลังชีวิตที่หายไป"]);
+    if (k.debt > 0) bits.push(["kb", `🩸${k.debt}`, "#ff8a94", `หนี้พลังชีวิต — จะเสีย ${k.debt} หน่วยตอนขึ้นเทิร์นถัดไป`]);
+    if (k.loseImmune) bits.push(["ki", "🛡️แพ้", "#8ff0b5", "เลือดเหลือ 3 หรือน้อยกว่า — ไม่รับความเสียหายจากการแพ้การจั่วไพ่"]);
+  }
   if (!bits.length) return null;
   return (
     <div className={`pc-extra ${className}`}>
@@ -2366,6 +2377,62 @@ function CharModal({ ch, me, onClose }) {
 }
 
 // DoomGuy (patch 2.2 full): แจ้งเตือนชาร์จ Crucible สะสมได้เท่าไหร่แล้ว (ครบ 5 ปลดล็อกท่าไม้ตาย)
+// ---------- เท็นโนจิ โคทาโร่: ป้ายบอกว่าตอนนี้สับรางอะไรไว้ + อาวุธ/พลัง/หนี้เลือด ----------
+//  โหมดสับรางคงอยู่ข้ามเทิร์นและเปลี่ยนวิธีรับทรัพยากรทั้งหมด ถ้าไม่โชว์ก็ไม่มีทางรู้ว่าเปิดอะไรค้างไว้
+const KOTAROU_MODE_UI = {
+  life: { icon: "🩸", label: "สลับรากชีวิต", hint: "แต้มสกิลที่ควรฟื้นทุกเทิร์น ถูกสับรางไปฟื้นพลังชีวิตแทน — ระหว่างนี้แต้มสกิลไม่ฟื้นเลย", tone: "#ff8a94" },
+  energy: { icon: "⚡", label: "สลับพลังงาน", hint: "เหรียญที่ควรได้ทุกเทิร์น ถูกสับรางไปเป็นแต้มสกิลแทน — ระหว่างนี้ไม่ได้เหรียญ", tone: "#e8bf5a" },
+  off: { icon: "⭕", label: "ไม่ได้สับราง", hint: "รับแต้มสกิลและเหรียญตามปกติ", tone: "rgba(239,230,245,.6)" },
+};
+function KotarouBadge({ me, ch }) {
+  if (!ch || ch.id !== "kotarou") return null;
+  const k = me.kotarou || {};
+  const m = KOTAROU_MODE_UI[k.mode || "off"] || KOTAROU_MODE_UI.off;
+  const w = k.weapon;
+  return (
+    <>
+      <span className="text-xs font-bold rounded-full px-2 py-0.5 whitespace-nowrap bg-black/55" style={{ color: m.tone }} title={m.hint}>
+        {m.icon} {m.label}
+      </span>
+      {w && (
+        <span
+          className="text-xs font-bold rounded-full px-2 py-0.5 whitespace-nowrap bg-black/55 text-echo-cyan"
+          title={w.kind === "sword"
+            ? `ดาบแห่งจิตใจ — การโจมตีปกติสร้างความเสียหาย ${w.dmg} หน่วย (แทนดาเมจพื้นฐาน) · อยู่จนกว่าจะได้โจมตี`
+            : `กรงเล็บ — เลือกโจมตีได้ 2 ครั้ง${w.bonus ? " · ดาเมจ +1 จากของราคา 6+" : ""} · อยู่จนกว่าจะโจมตีครบ`}
+        >
+          {w.kind === "sword" ? `🗡️ ดาบ ${w.dmg}` : `🐾 กรงเล็บ${k.clawLeft > 1 ? ` ${k.clawLeft}/2` : ""}`}
+        </span>
+      )}
+      {k.power > 0 && (
+        <span className="text-xs font-bold rounded-full px-2 py-0.5 whitespace-nowrap bg-black/55 text-echo-gold" title={`ทุ่มสุดตัว — พลังโจมตีถาวร +${k.power} (แลกมาด้วยความจุพลังชีวิต)`}>
+          ⚔️ +{k.power}
+        </span>
+      )}
+      {k.dodge > 0 && (
+        <span className="text-xs font-bold rounded-full px-2 py-0.5 whitespace-nowrap bg-black/55" style={{ color: "#9fd0ff" }} title="rewrite — ความจุพลังชีวิตที่หายไปทุก 1 หน่วย เพิ่มอัตราหลบหลีก 5%">
+          💨 {k.dodge}%
+        </span>
+      )}
+      {k.loseImmune && (
+        <span className="text-xs font-bold rounded-full px-2 py-0.5 whitespace-nowrap bg-black/55" style={{ color: "#8ff0b5" }} title="rewrite — พลังชีวิตเหลือ 3 หน่วยหรือน้อยกว่า จึงไม่รับความเสียหายจากการแพ้การจั่วไพ่">
+          🛡️ ภูมิแพ้จั่ว
+        </span>
+      )}
+      {k.armed && (
+        <span className="text-xs font-black rounded-full px-2 py-0.5 whitespace-nowrap bg-echo-magenta text-white animate-pulse" title="กลับไปแก้ไข — ถ้าตอนสรุปผลไม่ได้เป็นผู้ชนะ เวลาจะย้อนกลับไปต้นเทิร์น">
+          ⏪ เขียนทับไว้แล้ว
+        </span>
+      )}
+      {k.debt > 0 && (
+        <span className="text-xs font-black rounded-full px-2 py-0.5 whitespace-nowrap bg-echo-hp text-white" title={`ราคาของการย้อนเวลา — จะเสียพลังชีวิต ${k.debt} หน่วยทันทีที่ขึ้นเทิร์นถัดไป`}>
+          🩸 หนี้ {k.debt}
+        </span>
+      )}
+    </>
+  );
+}
+
 function DoomChargeBadge({ me, ch }) {
   if (!ch || ch.id !== "doomguy") return null;
   const charge = Math.min(5, me.doomCharge || 0);
@@ -4886,7 +4953,8 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
               <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mt-2 min-w-0">
                 {me.hisakawa ? <TwinVitals p={me} compact /> : <LifeBar p={me} />}
                 {!me.hisakawa && <StatusChips p={me} left />}
-                <DoomChargeBadge me={me} ch={ch} />
+                <KotarouBadge me={me} ch={ch} />
+                  <DoomChargeBadge me={me} ch={ch} />
                 <TakutoStarBadge me={me} ch={ch} />
                 <TakumiGearBadge me={me} ch={ch} />
                 <EijiDodgeBadge me={me} ch={ch} />
@@ -5378,6 +5446,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
                     {me.character.name}
                   </button>
                   <TeamBadge teamId={me.teamId} />
+                  <KotarouBadge me={me} ch={ch} />
                   <DoomChargeBadge me={me} ch={ch} />
                   <TakutoStarBadge me={me} ch={ch} />
                   <TakumiGearBadge me={me} ch={ch} />

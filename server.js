@@ -4707,6 +4707,13 @@ function resolveRound() {
         lastLog.push(`⚡ ${l.name} กันตายทำงานแล้ว — ไม่รับความเสียหายจากการแพ้`);
         continue;
       }
+      // เท็นโนจิ โคทาโร่ (rewrite): เลือดเหลือ 3 หรือน้อยกว่า -> ภูมิต่อความเสียหายจากการแพ้จั่ว
+      if (CHAR_HOOKS.kotarou.loseDamageImmune(engine, l)) {
+        addSkill(l, 1);
+        firePassive(l, "lose");
+        lastLog.push(`🩸 ${l.name} rewrite — พลังชีวิตเหลือ ${l.hp} หน่วย ร่างที่ถูกเขียนทับไม่รับความเสียหายจากการแพ้`);
+        continue;
+      }
       if ((l.statuses.monster || 0) > 0) {
         // ร่างไคจู (MonsterLive): แพ้เพราะแต้มน้อยสุด/ไพ่แตก รับความเสียหายน้อยลง 1 หน่วย (1 -> 0)
         addSkill(l, 1);

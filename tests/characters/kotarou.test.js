@@ -118,6 +118,15 @@ test('rewrite: เลือดไม่เต็ม -> เกราะที่�
   assert.equal(kotarou.divertArmorRegen(engine, K), false, 'เลือดเต็มแล้วต้องปล่อยให้ฟื้นเกราะ');
 });
 
+// ถ้ากลืนการฟื้นเกราะไปแล้วฟื้นเลือดไม่สำเร็จ เขาจะเสียทั้งสองทาง — ต้องคืนให้ระบบฟื้นเกราะต่อ
+test('rewrite: ฟื้นเลือดไม่ได้ (ไร้ทางเยียวยา) -> คืนการฟื้นเกราะให้ระบบ ไม่กลืนทิ้ง', () => {
+  const { K } = setup();
+  K.hp = 3;
+  K.statuses.nohealing = 3;
+  assert.equal(kotarou.divertArmorRegen(engine, K), false, 'ต้องไม่กลืน เพราะฟื้นเลือดไม่ได้จริง');
+  assert.equal(K.hp, 3);
+});
+
 // ---------------------------------------------------------------- สกิลติดตัว 3 + ท่าไม้ตาย 2
 test('ทุ่มสุดตัว: ความจุ -2 / โจมตี +1 ต่อครั้ง และ 3 ครั้งชนเพดานหลบ 30% พอดี', () => {
   const { K } = setup();
@@ -240,6 +249,19 @@ test('กดกลับไปแก้ไขไม่ได้เมื่อ�
   assert.equal(kotarou.canRewind(engine, K), false);
   K.hp = 5;
   assert.equal(kotarou.canRewind(engine, K), true);
+});
+
+// ---------------------------------------------------------------- สกิลติดตัว 4: ภูมิดาเมจแพ้จั่ว
+test('เลือดเหลือ 3 หรือน้อยกว่า -> ไม่รับความเสียหายจากการแพ้จั่ว', () => {
+  const { K } = setup();
+  K.hp = 4;
+  assert.equal(kotarou.loseDamageImmune(engine, K), false);
+  K.hp = kotarou.LOW_HP_IMMUNE_AT;
+  assert.equal(kotarou.loseDamageImmune(engine, K), true);
+  K.hp = 1;
+  assert.equal(kotarou.loseDamageImmune(engine, K), true);
+  K.alive = false;
+  assert.equal(kotarou.loseDamageImmune(engine, K), false, 'ตกรอบแล้วไม่ต้องคิดภูมิอีก');
 });
 
 // ---------------------------------------------------------------- สกิลติดตัว 2: ฟื้นคืนชีพ

@@ -22,6 +22,7 @@ const ID = "kotarou";
 const KOTAROU_MAX_HP = 7;        // ความจุพลังชีวิตพื้นฐาน (เท่า MAX_HP ปกติ — เขียนไว้ตรงนี้ให้สูตรหลบอ่านค่าเดียวกัน)
 const DODGE_PER_CAPACITY = 5;    // ความจุที่หายไป 1 หน่วย -> อัตราหลบ +5%
 const DODGE_MAX = 30;            // เพดานอัตราหลบ (= ความจุหาย 6 หน่วย = ทุ่มสุดตัวครบ 3 ครั้ง)
+const LOW_HP_IMMUNE_AT = 3;      // เลือดเหลือเท่านี้หรือน้อยกว่า -> ไม่รับความเสียหายจากการแพ้จั่วอีกเลย
 
 // ---------- สกิลพื้นฐาน เขียนทับใหม่ ----------
 const MODE_LIFE = "life";        // สลับรากชีวิต: แต้มสกิลที่ควรฟื้น -> ไปฟื้นพลังชีวิตแทน
@@ -83,6 +84,7 @@ module.exports = {
   KOTAROU_MAX_HP,
   DODGE_PER_CAPACITY,
   DODGE_MAX,
+  LOW_HP_IMMUNE_AT,
   MODE_LIFE,
   MODE_ENERGY,
   MODE_OFF,
@@ -168,8 +170,20 @@ module.exports = {
     if (!isKotarou(p) || !p.alive) return false;
     if (p.hp >= engine.maxHpOf(p)) return false; // เลือดเต็มแล้ว -> ปล่อยให้ฟื้นเกราะตามปกติ
     const healed = engine.healHp(p, 1);
-    if (healed > 0) engine.log(`🩹 ${p.name} rewrite — เกราะที่ควรฟื้นถูกเขียนทับเป็นพลังชีวิต +${healed}`);
+    // ฟื้นเลือดไม่ได้จริงๆ (ไร้ทางเยียวยา / ผกผัน / ถูกผนึก) -> ต้องคืนการฟื้นเกราะให้ระบบทำต่อ
+    //  ไม่งั้นเขาจะเสียทั้งสองทาง: เลือดก็ไม่ขึ้น เกราะก็ถูกกลืนหายไปเฉยๆ
+    if (healed <= 0) return false;
+    engine.log(`🩹 ${p.name} rewrite — เกราะที่ควรฟื้นถูกเขียนทับเป็นพลังชีวิต +${healed}`);
     return true;
+  },
+
+  // ============================================================
+  //  สกิลติดตัว 4 — เลือดต่ำแล้วไม่ตายเพราะแพ้จั่ว
+  // ============================================================
+  //  ตัวละครนี้จ่ายเลือดตลอดเวลา (หลอมอาวุธ · หนี้ย้อนเวลา · ขายความจุ) จนมักอยู่ในเขตเลือดต่ำเป็นปกติ
+  //  ถ้ายังโดนดาเมจแพ้จั่วซ้ำอีก แผนระยะยาวทุกแบบของเขาจะถูกตัดจบด้วยเรื่องที่คุมไม่ได้เลย
+  loseDamageImmune(engine, p) {
+    return isKotarou(p) && p.alive && p.hp <= LOW_HP_IMMUNE_AT;
   },
 
   // ============================================================
@@ -478,6 +492,7 @@ module.exports = {
       power: powerOf(p),
       dodge: dodgeChance(engine, p),
       debt: p.kotarouDebt || 0,
+      loseImmune: this.loseDamageImmune(engine, p),
       armed: !!p.kotarouRewindArmed,
       revived: !!p.kotarouRevived,
       clawLeft: p.kotarouClawLeft || 0,
