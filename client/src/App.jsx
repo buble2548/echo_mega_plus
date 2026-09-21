@@ -336,7 +336,7 @@ export default function App() {
     // แมตช์เพิ่งเริ่ม -> เผยผู้เล่นทีละคนก่อนเสมอ (ควบคุมด้วย navigate เอง ไม่ผูกกับ state ของเกมที่เดินต่อไปเรื่อยๆ)
     screen = (
       <>
-        <Game state={state} lowQ={lowQ} skillConfirmOn={skillConfirmOn} />
+        <Game state={state} lowQ={lowQ} skillConfirmOn={skillConfirmOn} muteScenes />
         <GameIntro players={introPlayers} onDone={finishIntro} />
       </>
     );

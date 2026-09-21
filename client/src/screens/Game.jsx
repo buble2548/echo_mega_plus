@@ -3421,7 +3421,7 @@ function FlyingCardsLayer({ flights, onDone }) {
   );
 }
 
-export default function Game({ state, lowQ, skillConfirmOn = true }) {
+export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = false }) {
   const [skillOpen, setSkillOpen] = useState(false);
   const [showChar, setShowChar] = useState(false);
   const [flash, setFlash] = useState(null); // สกิลช่วงจั่วการ์ด เด้งทันทีบนกระดาน
@@ -3474,6 +3474,10 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
   const [drawCall, setDrawCall] = useState(0);
   const prevPhaseRef = useRef(null);
   const callTimers = useRef({ atk: null, draw: null });
+  // ประกาศช่วงละครั้งต่อเทิร์น — phase กลับมาเป็น PLAYING/ATTACK ซ้ำได้หลายรอบในเทิร์นเดียว
+  //  (จบคัตซีนท่าไม้ตาย, Overload Force แจกไพ่ใหม่, หมัดต่อเนื่องของคาเยนน์/ฮิซากาว่า)
+  //  ถ้าไม่กันไว้ ฉากจะเด้งซ้อนกันทุกครั้งที่กลับเข้า phase เดิม
+  const announced = useRef({ draw: 0, atk: 0 });
   const [heraldSeq, setHeraldSeq] = useState(0);
   const [shopHerald, setShopHerald] = useState(false);   // ร้านค้ามายา: เปิดหน้าร้านค้า
   const [deckOpen, setDeckOpen] = useState(false);   // สมุดการ์ดกองกลาง: กดที่กองการ์ดกลางเพื่อดู
@@ -3503,13 +3507,16 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
   }, [phase, actualWinner, state.roundNumber]);
   // เข้าช่วงโจมตี -> ฉากประกาศ "เริ่มโจมตีได้" + เสียงเปลี่ยนช่วง (ไม่บังการกดเลือกเป้า)
   useEffect(() => {
-    if (phase !== "ATTACK") return;
+    if (phase !== "ATTACK" || muteScenes) return;
+    if (announced.current.atk === state.roundNumber) return;
+    announced.current.atk = state.roundNumber;
     playSfx("change_cutscene");
+    setDrawCall(0);
     setAttackCall((n) => n + 1);
     // ตัวตั้งเวลาปิดต้องอยู่นอก cleanup ของ effect — ผู้เล่นเลือกเป้าเร็วกว่าฉากจบได้เสมอ
     clearTimeout(callTimers.current.atk);
     callTimers.current.atk = setTimeout(() => setAttackCall(0), 2200);
-  }, [phase, state.roundNumber]);
+  }, [phase, state.roundNumber, muteScenes]);
   // ฉากบอกจำนวนเทิร์น -> เสียงเปลี่ยนช่วงเดียวกัน
   useEffect(() => {
     if (phase !== "TRANSITION") return;
@@ -3520,12 +3527,16 @@ export default function Game({ state, lowQ, skillConfirmOn = true }) {
   useEffect(() => {
     const prev = prevPhaseRef.current;
     prevPhaseRef.current = phase;
-    if (phase !== "PLAYING") return;
+    if (phase !== "PLAYING" || muteScenes) return;
+    if (announced.current.draw === state.roundNumber) return;
+    announced.current.draw = state.roundNumber;
+    // แบนเนอร์เปลี่ยนเทิร์นเพิ่งประกาศเสียงไป ไม่ต้องซ้ำอีกครั้ง
     if (prev !== "TRANSITION") playSfx("change_cutscene");
+    setAttackCall(0);
     setDrawCall((n) => n + 1);
     clearTimeout(callTimers.current.draw);
     callTimers.current.draw = setTimeout(() => setDrawCall(0), 2000);
-  }, [phase, state.roundNumber]);
+  }, [phase, state.roundNumber, muteScenes]);
   useEffect(() => () => {
     clearTimeout(callTimers.current.atk);
     clearTimeout(callTimers.current.draw);
