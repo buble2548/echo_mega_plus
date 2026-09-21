@@ -42,6 +42,7 @@ const producer_lumi = require("./producer_lumi");
 const muimi = require("./muimi");
 const cayenne = require("./cayenne");
 const daichi = require("./daichi");
+const kotarou = require("./kotarou");
 
 const CHARACTER_MODULES = [
   tohno,
@@ -82,6 +83,7 @@ const CHARACTER_MODULES = [
   producer_lumi,
   cayenne,
   daichi,
+  kotarou,
 ];
 
 const CHAR_HOOKS = {};

@@ -10,6 +10,7 @@
 // ============================================================
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTick } from "../tickStore";
 import { SeraphBackground, DayRail, MatrixSlots, WatchedFrame } from "./ui";
 
 const PD = "var(--font-p-display)";
@@ -191,6 +192,7 @@ function PlayerPlate({ p, pos, mine, matrixLv, isFoe, phase }) {
 }
 
 export default function Arena({ state, onHit, onLock }) {
+  const tickSeconds = useTick();
   const sc = state.seraph;
   const me = state.players.find((p) => p.id === state.youId);
   const [size, setSize] = useState({ w: 1280, h: 720 });
@@ -243,9 +245,9 @@ export default function Arena({ state, onHit, onLock }) {
           <DayRail duelDay={sc.daysTotal} day={sc.day} />
           <div
             className="text-2xl sm:text-4xl font-black leading-none"
-            style={{ fontFamily: PD, color: state.timeLeft <= 10 ? "var(--color-sc-red)" : "#fff" }}
+            style={{ fontFamily: PD, color: tickSeconds <= 10 ? "var(--color-sc-red)" : "#fff" }}
           >
-            {state.timeLeft}
+            {tickSeconds}
           </div>
         </div>
       </div>

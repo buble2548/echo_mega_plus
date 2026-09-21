@@ -13,7 +13,7 @@ const DIFFICULTY_GROUPS = [
   { key: "fun", label: "เอาฮา", color: "#9B4F96", order: ["appleguy", "dan"] },
   { key: "extreme", label: "ยากสุดขีด", color: "#111827", order: ["satoru"] },
   { key: "impossible", label: "ทักษิณ จะโปรหาบิดาท่านหรือ?", color: "#450a0a", order: ["tohno", "nanaya", "princess_shiki"] },
-  { key: "special", label: "พิเศษ", color: "#0e7490", order: ["ultraman_trigger", "yui", "shido", "brian", "producer_lumi"] },
+  { key: "special", label: "พิเศษ", color: "#0e7490", order: ["ultraman_trigger", "yui", "shido", "brian", "producer_lumi", "kotarou"] },
 ];
 
 function charsInGroup(roster, g) {

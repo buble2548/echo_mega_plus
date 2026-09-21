@@ -446,12 +446,6 @@
 }
 .av-intro-numeral { animation: avIntroNumeral 0.9s cubic-bezier(0.16, 1, 0.3, 1) both; }
 
-@keyframes avLineup {
-  0% { opacity: 0; transform: translateY(44px) scale(0.88); }
-  100% { opacity: 1; transform: translateY(0) scale(1); }
-}
-.av-lineup-item { animation: avLineup 0.56s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
-
 .av-portrait-plate { position: absolute; inset: -9px; z-index: -1; border-radius: 14px; }
 
 .av-over {
@@ -604,31 +598,42 @@
 
 .av-slider {
   width: 100%;
-  height: 4px;
-  border-radius: 999px;
+  height: 24px;
   appearance: none;
-  background: linear-gradient(90deg, var(--av-gold) var(--fill, 50%), rgba(185, 95, 196, 0.22) var(--fill, 50%));
+  background: transparent;
   outline: none;
   cursor: pointer;
 }
+.av-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--av-gold) var(--fill, 50%), rgba(185, 95, 196, 0.22) var(--fill, 50%));
+}
+.av-slider::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--av-gold) var(--fill, 50%), rgba(185, 95, 196, 0.22) var(--fill, 50%));
+}
 .av-slider::-webkit-slider-thumb {
   appearance: none;
-  width: 14px;
-  height: 14px;
+  margin-top: -5px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: linear-gradient(140deg, var(--av-gold-lit), var(--av-gold));
   box-shadow: 0 0 10px 2px rgba(232, 191, 90, 0.8);
   cursor: pointer;
 }
 .av-slider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border: none;
   border-radius: 50%;
   background: linear-gradient(140deg, var(--av-gold-lit), var(--av-gold));
   box-shadow: 0 0 10px 2px rgba(232, 191, 90, 0.8);
   cursor: pointer;
 }
+
 
 .av-fan { position: absolute; display: flex; align-items: stretch; justify-content: center; }
 
@@ -757,11 +762,6 @@
   100% { opacity: 0; filter: brightness(1); }
 }
 
-.av-lineup-out { animation: avLineupOut 0.95s cubic-bezier(0.4, 0, 0.6, 1) forwards; }
-@keyframes avLineupOut {
-  0% { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
-  100% { transform: translate3d(var(--ox, 0), var(--oy, -40vh), 0) scale(1.8); opacity: 0; }
-}
 
 .av-reveal-bloom {
   position: absolute;
@@ -807,7 +807,9 @@
 
 .av-hue {
   width: 100%;
-  height: 14px;
+  height: 22px;
+  padding: 4px 0;
+  background-clip: content-box;
   border-radius: 999px;
   appearance: none;
   outline: none;
@@ -847,4 +849,263 @@
 .av-swatch[data-on="true"] {
   transform: scale(1.16);
   box-shadow: 0 0 0 2px var(--av-gold-lit), 0 0 18px -2px currentColor;
+}
+
+/* ===== ฉากสรุปก่อนลงสนาม: วงพิธีเรียกขาน =====
+   เดิมเป็นการ์ดสี่เหลี่ยมเรียงแถวเดียวกับหัวข้อลอยอยู่ข้างบน — ไม่มีจังหวะ ไม่มีความลึก
+   ของใหม่: ตราพิธีวาดตัวเองอยู่หลัง · ครึ่งตัวผู้เล่นเรียงเป็นส่วนโค้งมีลำแสงประจำตัว
+   · คมดาบฟาดผ่านจอแล้วคลื่นกระแทกแผ่ออกพร้อมชื่อฉาก */
+.gi-finale { z-index: 5; }
+.gi-finale-out { animation: giFinaleOut 0.9s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
+@keyframes giFinaleOut {
+  to { opacity: 0; transform: scale(1.14); filter: blur(7px); }
+}
+
+.gi-rays {
+  position: absolute;
+  inset: -20%;
+  pointer-events: none;
+  background:
+    conic-gradient(from 0deg at 50% 52%,
+      rgba(232, 191, 90, 0.16) 0deg, transparent 9deg, transparent 21deg,
+      rgba(185, 95, 196, 0.13) 30deg, transparent 39deg, transparent 51deg,
+      rgba(232, 191, 90, 0.16) 60deg, transparent 69deg, transparent 81deg,
+      rgba(185, 95, 196, 0.13) 90deg, transparent 99deg, transparent 111deg,
+      rgba(232, 191, 90, 0.16) 120deg, transparent 129deg, transparent 141deg,
+      rgba(185, 95, 196, 0.13) 150deg, transparent 159deg, transparent 171deg,
+      rgba(232, 191, 90, 0.16) 180deg, transparent 189deg, transparent 201deg,
+      rgba(185, 95, 196, 0.13) 210deg, transparent 219deg, transparent 231deg,
+      rgba(232, 191, 90, 0.16) 240deg, transparent 249deg, transparent 261deg,
+      rgba(185, 95, 196, 0.13) 270deg, transparent 279deg, transparent 291deg,
+      rgba(232, 191, 90, 0.16) 300deg, transparent 309deg, transparent 321deg,
+      rgba(185, 95, 196, 0.13) 330deg, transparent 339deg, transparent 360deg);
+  -webkit-mask-image: radial-gradient(52% 52% at 50% 52%, transparent 18%, #000 62%, transparent 92%);
+  mask-image: radial-gradient(52% 52% at 50% 52%, transparent 18%, #000 62%, transparent 92%);
+  animation: giRays 26s linear infinite, giFade 1s ease both;
+}
+@keyframes giRays { to { transform: rotate(360deg); } }
+@keyframes giFade { from { opacity: 0; } to { opacity: 1; } }
+
+.gi-sigil {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(94vh, 76vw);
+  height: min(94vh, 76vw);
+  transform: translate(-50%, -52%);
+  pointer-events: none;
+  fill: none;
+  stroke: rgba(232, 191, 90, 0.5);
+  stroke-width: 1.3;
+  filter: drop-shadow(0 0 10px rgba(232, 191, 90, 0.45));
+}
+.gi-sigil-spin { transform-origin: 200px 200px; animation: giSpin 48s linear infinite; }
+.gi-sigil-spin-rev { transform-origin: 200px 200px; animation: giSpin 34s linear infinite reverse; }
+@keyframes giSpin { to { transform: rotate(360deg); } }
+
+/* เส้นวาดตัวเอง: ตั้งระยะ dash ให้ยาวกว่าเส้นจริงแน่ๆ แล้วไล่ offset กลับมาเป็นศูนย์ */
+.gi-draw { stroke-dasharray: 1400; stroke-dashoffset: 1400; animation: giDraw 1.5s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.gi-draw-1 { animation-delay: 0.05s; }
+.gi-draw-2 { animation-delay: 0.3s; }
+.gi-draw-3 { animation-delay: 0.5s; }
+.gi-draw-4 { animation-delay: 0.62s; }
+@keyframes giDraw { to { stroke-dashoffset: 0; } }
+.gi-ring-dash {
+  stroke: rgba(232, 191, 90, 0.34);
+  stroke-width: 6;
+  stroke-dasharray: 2 16;
+  stroke-linecap: round;
+  opacity: 0;
+  animation: giFade 0.8s ease 0.75s forwards;
+}
+.gi-rune {
+  fill: rgba(255, 233, 168, 0.85);
+  stroke: none;
+  opacity: 0;
+  animation: giFade 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.9s forwards;
+}
+
+/* ---- แถวผู้ท้าชิง ---- */
+.gi-stage { position: absolute; inset: 0; }
+.gi-bust {
+  position: absolute;
+  bottom: 9vh;
+  width: clamp(150px, 19vw, 290px);
+  height: clamp(210px, 27vw, 400px);
+  transform: translateX(-50%) scale(var(--d, 1));
+  transform-origin: 50% 100%;
+  animation: giBustRise 1s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+@keyframes giBustRise {
+  from { opacity: 0; transform: translateX(-50%) translateY(16vh) scale(calc(var(--d, 1) * 0.86)); }
+  to { opacity: 1; transform: translateX(-50%) scale(var(--d, 1)); }
+}
+.gi-beam {
+  position: absolute;
+  left: 50%;
+  bottom: -6vh;
+  width: 62%;
+  height: 130%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 34%, #000 74%, transparent);
+  mask-image: linear-gradient(180deg, transparent, #000 34%, #000 74%, transparent);
+  filter: blur(9px);
+  animation: giBeam 3.4s ease-in-out infinite alternate;
+}
+@keyframes giBeam { from { opacity: 0.55; } to { opacity: 1; } }
+
+/* ขอบละลายด้วย mask ทุกทิศ จึงไม่เหลือเค้าโครงกล่องสักใบ */
+.gi-bust-img {
+  display: block;
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--tilt, 0deg)) translateY(calc(var(--lift, 0vh) * -1));
+  -webkit-mask-image: radial-gradient(62% 68% at 50% 40%, #000 46%, rgba(0, 0, 0, 0.55) 72%, transparent 92%);
+  mask-image: radial-gradient(62% 68% at 50% 40%, #000 46%, rgba(0, 0, 0, 0.55) 72%, transparent 92%);
+}
+.gi-bust-img img { object-position: 50% 14%; }
+.gi-ghost-no {
+  position: absolute;
+  top: -6%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-av-display);
+  font-weight: 900;
+  font-size: clamp(7rem, 16vh, 15rem);
+  line-height: 0.8;
+  color: transparent;
+  -webkit-text-stroke: 2px rgba(232, 191, 90, 0.3);
+  pointer-events: none;
+  user-select: none;
+}
+.gi-bust-name {
+  position: absolute;
+  inset-inline: -10%;
+  bottom: -1.6em;
+  text-align: center;
+  font-family: var(--font-av-thai);
+  font-weight: 800;
+  font-size: clamp(0.85rem, 1.5vh, 1.15rem);
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-shadow: 0 0 14px var(--pc, #b95fc4), 0 2px 8px rgba(0, 0, 0, 0.95);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- คมดาบ + คลื่นกระแทก ---- */
+.gi-slash {
+  position: absolute;
+  top: 50%;
+  left: -30%;
+  width: 160%;
+  height: 4px;
+  transform-origin: 50% 50%;
+  background: linear-gradient(90deg, transparent, #fff 42%, #ffe9a8 52%, transparent);
+  box-shadow: 0 0 34px 10px rgba(255, 233, 168, 0.8);
+  opacity: 0;
+  animation: giSlash 0.5s cubic-bezier(0.5, 0, 0.2, 1) 1.15s forwards;
+}
+@keyframes giSlash {
+  0% { opacity: 0; transform: rotate(-14deg) translateX(-42%) scaleY(0.3); }
+  22% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(-14deg) translateX(42%) scaleY(1.7); }
+}
+.gi-shock {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 22vh;
+  height: 22vh;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 233, 168, 0.9);
+  transform: translate(-50%, -50%) scale(0.2);
+  opacity: 0;
+  animation: giShock 0.9s cubic-bezier(0.16, 1, 0.3, 1) 1.4s forwards;
+}
+@keyframes giShock {
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(0.2); border-width: 6px; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(7); border-width: 0.5px; }
+}
+
+/* ---- ชื่อฉาก ---- */
+.gi-title-wrap {
+  position: absolute;
+  top: 13vh;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 2vw, 30px);
+  white-space: nowrap;
+}
+.gi-title {
+  font-family: var(--font-av-thai);
+  font-weight: 900;
+  font-size: clamp(2.6rem, 8vh, 6rem);
+  line-height: 1.42;
+  background: linear-gradient(178deg, #fff8e2 8%, #ffe9a8 34%, #c9992f 66%, #7a5510 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 4px 18px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 26px rgba(232, 191, 90, 0.55));
+  animation: giTitleOpen 0.72s cubic-bezier(0.16, 1, 0.3, 1) 1.38s backwards;
+}
+/* ชื่อฉากพุ่งเข้ามาพร้อมจังหวะที่คมดาบฟาดผ่านพอดี */
+@keyframes giTitleOpen {
+  from { opacity: 0; letter-spacing: 0.42em; transform: scale(1.22); filter: blur(10px) drop-shadow(0 0 30px rgba(232, 191, 90, 0.9)); }
+  to { opacity: 1; letter-spacing: 0; transform: none; filter: drop-shadow(0 4px 18px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 26px rgba(232, 191, 90, 0.55)); }
+}
+.gi-wing {
+  width: clamp(80px, 13vw, 190px);
+  height: auto;
+  fill: none;
+  stroke: var(--av-gold-mid, #e8bf5a);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 8px rgba(232, 191, 90, 0.7));
+  opacity: 0;
+  animation-duration: 0.7s;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-delay: 1.62s;
+  animation-fill-mode: forwards;
+}
+.gi-wing-gem { fill: var(--av-gold-lit, #ffe9a8); stroke: none; }
+.gi-wing-l { animation-name: giWingL; }
+.gi-wing-r { animation-name: giWingR; }
+@keyframes giWingL { from { opacity: 0; transform: translateX(26px); } to { opacity: 1; transform: none; } }
+@keyframes giWingR { from { opacity: 0; transform: translateX(-26px); } to { opacity: 1; transform: none; } }
+
+.gi-sub {
+  position: absolute;
+  top: calc(13vh + clamp(3.6rem, 11vh, 8.2rem));
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-av-thai);
+  font-weight: 700;
+  font-size: clamp(0.8rem, 1.8vh, 1.15rem);
+  letter-spacing: 0.34em;
+  color: rgba(232, 196, 239, 0.8);
+  white-space: nowrap;
+  opacity: 0;
+  animation: giFade 0.7s ease 1.95s forwards;
+}
+
+.gi-ember {
+  position: absolute;
+  bottom: -3%;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffe9a8, rgba(232, 191, 90, 0));
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation-name: giEmber;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@keyframes giEmber {
+  0% { transform: translate3d(0, 0, 0) scale(0.6); opacity: 0; }
+  14% { opacity: 1; }
+  100% { transform: translate3d(3vw, -108vh, 0) scale(1.1); opacity: 0; }
 }

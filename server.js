@@ -1356,6 +1356,8 @@ function instantDeath(p, force) {
   if (!force && p.characterId === "producer_lumi" && CHAR_HOOKS.producer_lumi.tryIdolDown(engine, p)) return;
   // ริต้า เบอร์นัล (สกิลติดตัว 2 patch 2.1.7, characters/phenex.js): ตกรอบจริงขณะท่าไม้ตาย 2 ยังทำงานอยู่ -> ปลดปล่อยความเจ็บปวดที่สะสมทั้งหมดก่อนตาย
   if (p.characterId === "phenex") CHAR_HOOKS.phenex.maybeReleasePainOnDeath(engine, p);
+  // เท็นโนจิ โคทาโร่ (rewrite): ตกรอบจริง แต่ตั้งธงให้ endTurn() ย้อนเทิร์นกลับมาให้ 1 ครั้งต่อเกม
+  if (!force) CHAR_HOOKS.kotarou.onDeath(engine, p);
   p.hp = 0; p.alive = false; p.result = "dead"; p.locked = true;
   // คอนเนอร์ RK800 (สกิลติดตัว 3 ปัญญาประดิษฐ์): จองคิวฟื้นคืนชีพอีก 10 เทิร์น (ไม่ใช่การกันตาย — ตกรอบจริงก่อน)
   CHAR_HOOKS.conner.onDeath(engine, p);
@@ -1579,6 +1581,9 @@ function activeSkillMusic() {
   // อิสึกะ ชิโด (characters/shido.js): เพลง shido_theme เล่นค้างตลอดที่ Sandalphon ยังอยู่
   const bestShido = CHAR_HOOKS.shido.activeMusic(engine);
   if (bestShido) return bestShido;
+  // เท็นโนจิ โคทาโร่ (characters/kotarou.js): เพลง kotarou_theme คลอตลอดเทิร์นที่ถูกย้อนกลับมา
+  const bestKotarou = CHAR_HOOKS.kotarou.activeMusic(engine);
+  if (bestKotarou) return bestKotarou;
   // เข้ามาเลย (แบทแมน patch 2.2.7): เพลง bat_ben_theme เล่นค้างตลอดที่ล่อเป้าอยู่
   let bestBat = null;
   for (const p of alivePlayers()) {
@@ -1957,6 +1962,7 @@ function resetCombat(p) {
   p.armorLocked = false; // Beat Mode: กันตายแล้วเกราะจะไม่ฟื้นคืน
   p.beatSaved = false;   // Beat Mode: กันตายได้ครั้งเดียวต่อเกม (คล้าย Focus Sash)
   p.skillUsedRound = false; // ใช้สกิลได้ 1 อันต่อเทิร์น
+  CHAR_HOOKS.kotarou.resetMatch(p); // เท็นโนจิ โคทาโร่: โหมดสับราง/อาวุธ/หนี้เลือด/พลังโจมตีถาวร
   // ---------- ร้านค้ามายา + เศรษฐกิจเหรียญ (patch 2.2 full) ----------
   p.gold = 0;        // เหรียญสะสม (เพดาน 30)
   p.inventory = [];  // ของที่ซื้อจากร้านค้า รอใช้ (รวมปืนหน่วย GUTS Select — หายทุกแมตช์ใหม่)
@@ -2533,6 +2539,8 @@ function buildStateFor(viewerId) {
         cayenne: p.characterId === "cayenne" ? CHAR_HOOKS.cayenne.publicState(p) : undefined,
         // ไดจิ: การ์ดที่ถือ / เกราะที่สวม / โควตาการ์ดไซเบอร์ / การ์ดที่ตัดเก็บไว้ (ข้อมูลสนาม ทุกคนเห็นได้)
         daichi: p.characterId === "daichi" ? CHAR_HOOKS.daichi.publicState(p) : undefined,
+        // เท็นโนจิ โคทาโร่: โหมดสับราง / อาวุธที่หลอม / พลังโจมตีถาวร / อัตราหลบ / หนี้เลือด (ข้อมูลสนาม ทุกคนเห็นได้)
+        kotarou: p.characterId === "kotarou" ? CHAR_HOOKS.kotarou.publicState(engine, p) : undefined,
         eijiDodge: p.characterId === "eiji" ? CHAR_HOOKS.eiji.dodgeChance(p) : undefined,        // % หลบหลีกรวมของเทิร์นนี้
         eijiOrdinal: p.characterId === "eiji" ? CHAR_HOOKS.eiji.ordinalStacks(p) : undefined,    // สแตค Ordinal Scale ที่กดไปแล้ว
         eijiOrdinalMax: p.characterId === "eiji" ? CHAR_HOOKS.eiji.ORDINAL_MAX : undefined,
@@ -2810,7 +2818,7 @@ function openShop() {
 function grantInventoryItem(p, item) {
   if (!p || !item || !item.type) return null;
   p.inventory = p.inventory || [];
-  const entry = { uid: `grant_${item.type}_${p.inventory.length}_${Date.now()}`, type: item.type, value: item.value, size: item.size, ammo: item.ammo };
+  const entry = { uid: `grant_${item.type}_${p.inventory.length}_${Date.now()}`, type: item.type, value: item.value, size: item.size, ammo: item.ammo, price: item.price || 0 };
   p.inventory.push(entry);
   return entry;
 }
@@ -2841,7 +2849,7 @@ function buyShopItem(id, itemId) {
   item.sold = true;
   item.soldTo = p.id;
   p.gold -= item.price;
-  p.inventory.push({ uid: `${item.id}_${p.inventory.length}_${Date.now()}`, type: item.type, value: item.value, size: item.size, ammo: item.ammo });
+  p.inventory.push({ uid: `${item.id}_${p.inventory.length}_${Date.now()}`, type: item.type, value: item.value, size: item.size, ammo: item.ammo, price: item.price });
   lastLog.push(`🛍️ ${p.name} ซื้อ ${shopItemName(item)} จากร้านค้ามายา (-${item.price} เหรียญ)`);
   // คอนเนอร์ (วิเคราะห์สถานการณ์): "ซื้อของ" เป็น 1 ใน 4 การกระทำที่คอนเนอร์ต้องคาดการณ์
   CHAR_HOOKS.conner.onShopBuy(engine, p);
@@ -3044,6 +3052,8 @@ function dealRound() {
     if (p.muimiForcedBustRound !== roundNumber) p.muimiForcedBustRound = 0;
     p.shield = 0;
     p.skillUsedRound = false; // เทิร์นใหม่ ใช้สกิลได้อีก 1 อัน
+    CHAR_HOOKS.kotarou.onRoundStart(engine, p);
+    CHAR_HOOKS.kotarou.collectDebt(engine, p); // ราคาของ "กลับไปแก้ไข" ถูกเก็บตอนขึ้นเทิร์นใหม่ (ทบได้ = ตายได้)
     // DoomGuy (patch 2.2 full): Quick Swap ใช้ได้อีก 1 ครั้งต่อเทิร์น
     if (p.characterId === "doomguy") p.doomQuickSwapUsed = false;
     if ((p.wouGuardCd || 0) > 0) p.wouGuardCd--; // ซาโตรุ (patch 2.0.8.3): คูลดาวน์ลบล้างลดลงทุกต้นเทิร์น (2 เทิร์นต่อการใช้)
@@ -3160,7 +3170,8 @@ function dealRound() {
     //  และจะไม่มีวันพังเลยถ้าโดนตีเบาๆ (สเปคระบุว่า "ขึ้นรถถาวรจนกว่ารถจะพัง" = ต้องพังได้จริง)
     if (!p.armorLocked && !((p.statuses.decay || 0) > 0) && !Seraph.noCombat() && roundNumber % 2 === 0
         && !CHAR_HOOKS.bat_ben.blocksArmorRegen(p)) {
-      healArmor(p, 1);
+      // เท็นโนจิ โคทาโร่ (rewrite): เลือดยังไม่เต็ม -> เกราะที่ควรฟื้นถูกเขียนทับเป็นเลือดแทน
+      if (!CHAR_HOOKS.kotarou.divertArmorRegen(engine, p)) healArmor(p, 1);
     }
     // คู่แฝดฮิซากาว่า: แฝดที่พักอยู่ฟื้นเกราะเองได้ตามจังหวะเดียวกัน แม้ไม่ได้ถูกควบคุมอยู่
     //  (เงื่อนไข "ผุพัง" คิดจากสถานะของแฝดคนนั้นเอง — ดู CHAR_HOOKS.hisakawa_sister.regenRestingArmor)
@@ -3807,6 +3818,10 @@ function useSkill(id, tier, targets, item) {
   //  พื้นฐาน: 2 ครั้ง/เทิร์น · รอง: ต้องอยู่ใน unite และสวมเกราะใบเดิมซ้ำไม่ได้ · ท่าไม้ตาย: กดซ้ำระหว่าง unite ไม่ได้
   const isDaichiPick = p.characterId === "daichi";
   if (isDaichiPick && !CHAR_HOOKS.daichi.canUseSkill(engine, p, tier)) return;
+  // ---------- เท็นโนจิ โคทาโร่ (characters/kotarou.js) ----------
+  //  ทั้งสามช่องต้องมีตัวเลือกจากหน้าจอมาด้วยเสมอ (โหมดสับราง / ไอเทม+ชนิดอาวุธ / แบบของท่าไม้ตาย)
+  const isKotarouPick = p.characterId === "kotarou";
+  if (isKotarouPick && !CHAR_HOOKS.kotarou.canUseSkill(engine, p, tier, item)) return;
   const isBrianPick = p.characterId === "brian";
   let brianTarget = null;
   if (isBrianPick) {
@@ -4044,6 +4059,7 @@ function useSkill(id, tier, targets, item) {
     cayMissileCast = tier === "ultimate";
   }
   if (isDaichiPick) flashSuffix = CHAR_HOOKS.daichi.applyInstantSkill(engine, p, tier) || flashSuffix;
+  if (isKotarouPick) flashSuffix = CHAR_HOOKS.kotarou.applyInstantSkill(engine, p, tier, item) || flashSuffix;
   if (isBatPick) flashSuffix = CHAR_HOOKS.bat_ben.applyInstantSkill(engine, p, tier) || flashSuffix;
   if (st === "batKarma") CHAR_HOOKS.bat_ben.activateKarma(engine, p);
   if (st === "batTaunt") CHAR_HOOKS.bat_ben.activateTaunt(engine, p);
@@ -4368,11 +4384,14 @@ function captureTurnSnapshot() {
 
 function clearTurnSnapshot() { turnSnapshot = null; clearSnapshotHistory(); }
 
-function restoreTurnSnapshot() {
+// skipId = ผู้เล่นที่ "ห้ามย้อน" (เท็นโนจิ โคทาโร่: กลับไปแก้ไข ย้อนทั้งสนามยกเว้นตัวเอง
+//  ไม่งั้นแต้มสกิล/ไอเทม/เลือดที่จ่ายไปจะถูกคืนมาหมด = กดท่านี้ฟรีไม่รู้จบ)
+function restoreTurnSnapshot(skipId) {
   const snap = turnSnapshot;
   turnSnapshot = null;
   if (!snap) return false;
   for (const [id, saved] of Object.entries(snap.players)) {
+    if (skipId && id === skipId) continue;
     const live = players[id];
     if (!live) continue; // ออกจากเกมไปแล้วระหว่างเทิร์น — ไม่ปลุกกลับ
     // ข้อมูลการเชื่อมต่อเป็นของ "ปัจจุบัน" เสมอ ห้ามย้อน ไม่งั้น reconnect/disconnect กลางเทิร์นจะพัง
@@ -4433,6 +4452,47 @@ function beginOverloadForceDraw() {
   startPhaseTimer(cardPhaseSeconds(), resolveRound);
   broadcastState();
   checkAllLocked();
+}
+
+// ---------- เท็นโนจิ โคทาโร่: แจกไพ่ใหม่ในเทิร์นเดิมหลังย้อนเวลา ----------
+//  โครงเดียวกับ beginOverloadForceDraw แต่ไม่ปลดเพดาน 21 และไม่แตะธงของ Overload
+//  ต้องเก็บสแนปช็อตใหม่ด้วย ไม่งั้นการย้อนครั้งที่ 2 ในเทิร์นเดียวกันจะไม่มีจุดให้ย้อนกลับ
+function beginKotarouRewindDraw() {
+  centralDeck = buildCentralDeck();
+  roundWinnerId = null;
+  roundTiedWin = false;
+  doomTieAttack = false;
+  anataMusicSeq = 0;
+  attackerId = null;
+
+  for (const p of Object.values(players)) {
+    if (!p.alive) { p.cards = []; p.locked = true; p.busted = false; continue; }
+    p.cards = [];
+    p.cardBonus = 0;
+    p.colorTrigger = { red: 0, blue: 0, green: 0, yellow: 0 };
+    p.statusAmt.cardAtkBonus = 0;
+    delete p.statuses.freecast; // ไพ่ Queen จากมือเดิมถูกย้อนทิ้งไปพร้อมไพ่
+    const initial = drawInitialCard(p);
+    if (initial) { p.cards.push(initial); onCardDrawn(p, initial); }
+    p.locked = (p.statuses.sleep || 0) > 0 || (p.statuses.stun || 0) > 0;
+    p.busted = false;
+    p.result = null;
+    p.isWinner = false;
+    p.isLoser = false;
+  }
+
+  captureTurnSnapshot(); // จุดย้อนของเทิร์นที่เขียนใหม่ (ย้อนซ้ำได้ หนี้ก็ทบตาม)
+  gameState = "PLAYING";
+  startPhaseTimer(cardPhaseSeconds(), resolveRound);
+  broadcastState();
+  checkAllLocked();
+}
+
+function triggerKotarouRewind(p) {
+  restoreTurnSnapshot(p.id); // ย้อนทั้งสนาม ยกเว้นตัวโคทาโร่เอง
+  queueCutscene(p, "kotarouRewind");
+  CHAR_HOOKS.kotarou.onRewound(engine, p);
+  runCutsceneQueue(beginKotarouRewindDraw);
 }
 
 function triggerOverloadForce() {
@@ -4594,6 +4654,8 @@ function resolveRound() {
     roundTiedWin = tied.length > 1; // เสมอแต้มกัน -> ยังได้แต้มสกิล/ท่าไม้ตายทำงานปกติ แต่ไม่มีเทิร์นโจมตี
     w.isWinner = true;
     w.result = "win";
+    // เท็นโนจิ โคทาโร่: ชนะในเทิร์นที่เขียนใหม่ -> หนี้เลือดถูกลบ · และอาร์มโควตาโจมตีของกรงเล็บ
+    CHAR_HOOKS.kotarou.onRoundWon(engine, w);
     // เทเปา (characters/tepeu.js): รีเซ็ตเคาน์เตอร์แพ้ติดกัน + สมองอันชาญฉลาด
     CHAR_HOOKS.tepeu.onRoundWin(engine, w, combatants);
     // คอนเนอร์ RK800 (สกิลติดตัว 1 สืบสวน): การชนะการจั่ว = ความเครียด +1
@@ -4823,6 +4885,12 @@ function afterSummary() {
   if (Seraph.noCombat()) { beginSeraphPlacePhase(); return; }
   // คอนเนอร์ RK800 (สกิลติดตัว 2): ระหว่างการไล่ล่า ทุกเทิร์นเหลือแค่ จั่ว -> สรุปแต้ม ไม่มีเฟสโจมตีเลย
   if (CHAR_HOOKS.conner.chaseActive(engine)) { endTurn(); return; }
+  // ---------- เท็นโนจิ โคทาโร่ (กลับไปแก้ไข) ----------
+  //  ต้องอยู่ตรงนี้: รู้ผู้ชนะแล้ว แต่ยังไม่เข้าเฟสโจมตี ตรงตามสเปก "จะยังไม่เริ่ม phase โจมตี แต่จะย้อนเทิร์น"
+  {
+    const rewinder = CHAR_HOOKS.kotarou.rewindCandidate(engine, roundWinnerId);
+    if (rewinder) { triggerKotarouRewind(rewinder); return; }
+  }
   // ไบรอัน (สกิลรอง หลีกทางไป): พุ่งชนคนที่แต้มสูงสุดที่มากกว่าเรา — วีดีโอก่อน แล้วค่อยลงความเสียหาย
   //  ทำที่นี่ (หลังรู้แต้มทุกคนแล้ว ก่อนเข้าเฟสโจมตี) เพราะเงื่อนไขคือ "คนที่แต้มมากกว่าเรา"
   {
@@ -5186,6 +5254,8 @@ function doAttack(byId, targetId) {
   if (CHAR_HOOKS.ippo.tryAttackDodge(engine, attacker, target)) return;
   // โปรดิวเซอร์ (Tsubasa 283 ของคาโฮะ): หลบหลีก 40%
   if (CHAR_HOOKS.producer_lumi.tryAttackDodge(engine, attacker, target)) return;
+  // เท็นโนจิ โคทาโร่ (rewrite): ความจุพลังชีวิตที่หายไปทุก 1 หน่วย = หลบ +5% (สูงสุด 30%)
+  if (CHAR_HOOKS.kotarou.tryAttackDodge(engine, attacker, target)) return;
   // เอจิ สกิลติดตัว 1 (ผู้เล่นอันดับ 2): ผู้ชนะไปตีคนอื่นที่ไม่ใช่เอจิ -> 25% ขัดจังหวะแล้วสวนคืน
   if (CHAR_HOOKS.eiji.tryInterrupt(engine, attacker, target)) return;
 
@@ -5637,6 +5707,8 @@ function endTurn() {
   // คาเยนน์ "แน่จริงก็หลบสิ": ชุดกระสุนยังยิงไม่ครบ -> เปิดเฟสโจมตีครั้งถัดไปแทนการจบเทิร์น
   //  วางไว้บนสุดเพราะทุกทางจบหมัด (โดน/ถูกหลบ/ถูกสะท้อน/ถูกลบล้าง) ไหลมาจบที่ endTurn เหมือนกันหมด
   if (CHAR_HOOKS.cayenne.continueBarrage(engine)) return;
+  // เท็นโนจิ โคทาโร่ "กรงเล็บ": ยังเลือกโจมตีไม่ครบ 2 ครั้ง -> เปิดเฟสโจมตีอีกครั้งแทนการจบเทิร์น
+  if (CHAR_HOOKS.kotarou.continueClaw(engine)) return;
   // โปรดิวเซอร์ (luminous burst): ตาข่ายสำรอง — ถ้าหมัดที่ทำให้ครบ "ถูกหลบ" doAttack จะ return
   //  ตั้งแต่ด่านหลบ ไม่ผ่าน postAttackFollowup เลย รางวัลจึงไม่มีวันจ่าย (และ luminous มีการหลบ 40%
   //  ของคาโฮะติดมาด้วย จึงเกิดบ่อยมาก) · flushBurst เป็น idempotent เรียกซ้ำไม่มีผลข้างเคียง
@@ -5822,13 +5894,15 @@ function endTurn() {
     if (p.characterId === "kotone") gain += CHAR_HOOKS.kotone.extraSkillRegen(engine, p);
     if (p.characterId === "hisakawa_sister") gain += CHAR_HOOKS.hisakawa_sister.extraSkillRegen(p);
     if (p.characterId === "ignis") gain += CHAR_HOOKS.ignis.extraSkillRegen(engine, p);
-    addSkill(p, gain);
+    // เท็นโนจิ โคทาโร่ (สลับรากชีวิต): กลืนแต้มที่ควรฟื้นไปทำเป็นพลังชีวิตแทน
+    if (!CHAR_HOOKS.kotarou.divertSkillRegen(engine, p, gain)) addSkill(p, gain);
   }
   if (dayBonus) lastLog.push("☀️ จบเทิร์นช่วงกลางวัน — ทุกคนได้แต้มสกิลเพิ่ม +1");
   // ระบบเหรียญ (patch 2.2 full): จบเทิร์น +1 เหรียญให้ทุกคน (เพดาน 30 — เต็มแล้วไม่ได้เพิ่มจน spending ลดลง)
   if (!Seraph.active()) for (const p of alivePlayers()) {
     const goldGain = GOLD_PER_TURN + (p.characterId === "hisakawa_sister" ? CHAR_HOOKS.hisakawa_sister.extraGoldRegen(p) : 0) + (p.characterId === "ignis" ? CHAR_HOOKS.ignis.extraGoldRegen(engine, p) : 0);
-    addGold(p, goldGain);
+    // เท็นโนจิ โคทาโร่ (สลับพลังงาน): กลืนเหรียญที่ควรได้ไปทำเป็นแต้มสกิลแทน
+    if (!CHAR_HOOKS.kotarou.divertGoldGain(engine, p, goldGain)) addGold(p, goldGain);
   }
 
   // ชิวๆครับน้องๆ (Apple guy): จบเทิร์นได้แต้มสกิลเพิ่ม +1 จนกว่าจะถูกโจมตี
@@ -5884,6 +5958,21 @@ function endTurn() {
     let shidoRewound = false;
     for (const sp of Object.values(players)) {
       if (CHAR_HOOKS.shido.applyRewind(engine, sp)) shidoRewound = true;
+    }
+    // เท็นโนจิ โคทาโร่ (rewrite ข้อ 2): ตายแล้วได้เล่นเทิร์นนั้นใหม่ 1 ครั้งต่อเกม
+    //  ต้องอยู่ "ก่อน" เงื่อนไขจบเกมเหมือนของชิโด ไม่งั้นเกมจะประกาศผู้ชนะคนสุดท้ายทั้งที่อีกครู่เขาจะกลับมา
+    //  ย้อนเต็มรูป (รวมตัวเขาเอง) เพราะนี่คือการฟื้นคืนชีพ ไม่ใช่การจ่ายราคาเหมือนท่าไม้ตาย
+    const reviving = CHAR_HOOKS.kotarou.reviveTarget(engine);
+    if (reviving) {
+      reviving.kotarouRevivePending = false;
+      if (restoreTurnSnapshot()) {
+        reviving.kotarouRevived = true;        // ย้อนแล้วธง "ใช้ไปแล้ว" ต้องไม่ถูกย้อนตาม ไม่งั้นฟื้นได้ไม่จำกัด
+        reviving.kotarouThemeRound = roundNumber;
+        lastLog.push(`💫 ${reviving.name} rewrite — เทิร์นนี้ถูกเขียนใหม่ทั้งเทิร์น เขายังไม่จบลงตรงนี้`);
+        beginKotarouRewindDraw();
+        return;
+      }
+      lastLog.push(`💫 ${reviving.name} rewrite — ไม่มีจุดย้อนให้กลับไป การฟื้นคืนชีพล้มเหลว`);
     }
 
     const stillAlive = alivePlayers();

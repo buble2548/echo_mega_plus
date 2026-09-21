@@ -1,6 +1,6 @@
 ﻿// ============================================================
 //  ระบบเสียง ECHO + master volume
-//  - เพลง/เอฟเฟกต์ใช้ค่าตรงจากหลอด · วีดีโอและเสียงลูปใช้ curve ยกกำลังสอง
+//  - ทุกแหล่งเสียง (เพลง/เอฟเฟกต์/วีดีโอ/ลูป) ผ่าน masterGain() ตัวเดียวกัน สัดส่วนความดังจึงคงที่ทุกตำแหน่งหลอด
 //  - เพลงเล่นต่อจากจุดเดิมเฉพาะ "ในแมตช์เดียวกัน" — เริ่มเกมใหม่รีเซ็ตทั้งหมด (resetMusicPositions)
 //  - เพลงสกิล/ท่าไม้ตาย: ส่ง seq มาด้วย ถ้า seq เปลี่ยน (เปิดท่าใหม่ / ถูกทับด้วยเพลงเดียวกัน
 //    ของอีกคน) เพลงจะเริ่มใหม่จากต้น
@@ -137,6 +137,7 @@ const FILES = {
   cayenne_theme: "/characters/cayenne/cayenne_theme.m4a", // เพลงประจำร่างเกพาร์ด (ขึ้นหลังวีดีโอแปลงร่าง)
   cayenne_gun: "/characters/cayenne/gun_sound.mp3",       // เสียงโจมตีปกติในร่างเกพาร์ด
   daichi_theme: "/characters/daichi/daichi_theme.mp3",    // ไดจิ โอโซระ: เพลงระหว่าง unite
+  kotarou_theme: "/characters/kotarou/kotarou_theme.mp3", // เท็นโนจิ โคทาโร่: เพลงในเทิร์นที่ถูกย้อนกลับมา
   // ---------- SE.RA.PH Moon Cell (โหมดผจญภัย) — ดู SERAPH_SCENES.md §6 ----------
   //  แต่ละเพลงจำตำแหน่งของตัวเอง · วันดวลวันที่ 7 ใช้ seq ของรอบเพื่อเริ่มจากต้น
   sc_day: "/mooncell/theme/day1-4.mp3",
@@ -177,7 +178,6 @@ const MUSIC_POSITION_GROUPS = {
   //  แล้วเพลงใหม่ที่ยังไม่โหลด metadata จะมี duration = NaN -> seek เลยจุดจบเพลง = เงียบสนิท
 };
 
-// เพลงใช้ระดับเต็มก่อนคูณ master: ค่าเริ่มต้น 0.8 ได้เสียง 0.8 แทน 0.8 × 0.8² = 0.512
 const MUSIC_BASE = 1;
 const SFX_BASE = 0.85;
 const CLICK_BASE = 0.55;
@@ -194,7 +194,7 @@ const MUSIC_TRACK_SCALE = {
 let musicDuck = 1;
 let loopSfx = null; // ลูปเสียงเฉพาะกิจที่เล่นอยู่ (ดู startLoopSfx ท้ายไฟล์)
 function trackVolume(name) {
-  return Math.min(1, MUSIC_BASE * (MUSIC_TRACK_SCALE[name] ?? 1) * masterVolume * musicDuck);
+  return Math.min(1, MUSIC_BASE * (MUSIC_TRACK_SCALE[name] ?? 1) * masterGain() * musicDuck);
 }
 
 // ---------- master volume (จำค่าไว้ใน localStorage) ----------
@@ -205,18 +205,21 @@ try {
 } catch {}
 const volListeners = new Set();
 
-// curve ยกกำลังสอง: หูคนรับรู้ความดังแบบ log — ทำให้เลื่อนหลอดแล้วรู้สึกเปลี่ยนจริง
-const vcurve = () => masterVolume * masterVolume;
+// ทุกแหล่งเสียงต้องผ่าน curve เดียวกัน ไม่งั้นสัดส่วนความดังจะเพี้ยนไปตามตำแหน่งหลอด
+//  (ก่อนหน้านี้เพลง/เอฟเฟกต์คูณ masterVolume ตรงๆ แต่วีดีโอกับลูปเสียงคูณ masterVolume² —
+//   ที่หลอด 0.8 เพลงได้ 0.80 แต่วีดีโอได้ 0.51 และยิ่งหรี่หลอดยิ่งถ่างออกจากกัน)
+//  เลขชี้กำลัง 1.6 อยู่กึ่งกลาง: หรี่แล้วรู้สึกเปลี่ยนจริง แต่ไม่ทำให้เพลงเบาลงมากเหมือนยกกำลังสอง
+export function masterGain() { return Math.pow(masterVolume, 1.6); }
 
 export function getMasterVolume() { return masterVolume; }
-export function videoVolume() { return VIDEO_BASE * vcurve(); } // ให้ <video> ใช้ (ผ่าน curve เดียวกัน)
+export function videoVolume() { return VIDEO_BASE * masterGain(); } // ให้ <video> ใช้ (ผ่าน curve เดียวกัน)
 export function onVolumeChange(fn) { volListeners.add(fn); return () => volListeners.delete(fn); }
 export function setMasterVolume(v) {
   masterVolume = Math.max(0, Math.min(1, v));
   try { localStorage.setItem("echo_vol", String(masterVolume)); } catch {}
   if (currentMusic) getMusic(currentMusic).volume = trackVolume(currentMusic);
-  if (loopSfx) loopSfx.volume = SFX_BASE * vcurve(); // ลูปเสียงเฉพาะกิจต้องตามหลอดเสียงด้วย
-  for (const [a, base] of activeSfx) a.volume = base * masterVolume;
+  if (loopSfx) loopSfx.volume = SFX_BASE * masterGain(); // ลูปเสียงเฉพาะกิจต้องตามหลอดเสียงด้วย
+  for (const [a, base] of activeSfx) a.volume = base * masterGain();
   volListeners.forEach((fn) => fn(masterVolume));
 }
 
@@ -334,25 +337,68 @@ export function resetMusicPositions() {
   for (const k of Object.keys(musicSeq)) delete musicSeq[k];
   currentMusic = null;
 }
-// คืน element ที่เล่นอยู่ ให้ผู้เรียกหยุดเองได้ (เช่น เพลงประกอบคัตซีนที่ต้องหยุดตอนฉากจบ)
-export function playSfx(name) {
-  if (!FILES[name]) return null;
+// สร้าง <audio> ใหม่ทุกครั้งที่เล่น = ต้องต่อ resource + ถอดรหัสเสียงใหม่ทุกครั้ง
+//  เสียงคลิกดังแทบทุกการกด จึงเห็นเป็นอาการกระตุกสะสม -> เก็บ element ที่เล่นจบแล้วไว้ใช้ซ้ำ
+const sfxPool = new Map(); // ชื่อเสียง -> element ที่ว่างอยู่
+const POOL_PER_SOUND = 4;  // เสียงเดียวกันซ้อนกันเกินนี้แทบไม่เกิด — ที่เกินปล่อยให้ GC เก็บ
+let playSeq = 0;
+
+function takeVoice(name) {
+  const idle = sfxPool.get(name);
+  if (idle && idle.length) {
+    const a = idle.pop();
+    a._echoIdle = false;
+    try { a.currentTime = 0; } catch { /* ยังโหลดไม่เสร็จ: เล่นจากต้นอยู่แล้ว */ }
+    return a;
+  }
   const a = new Audio(FILES[name]);
-  const base = name === "action_button" ? CLICK_BASE : SFX_BASE;
-  a.volume = base * masterVolume;
-  activeSfx.set(a, base);
-  const release = () => activeSfx.delete(a);
+  a.preload = "auto";
+  const release = () => {
+    activeSfx.delete(a);
+    if (a._echoIdle) return; // ปล่อยคืนไปแล้ว (ended กับ pause ยิงต่อกันได้)
+    a._echoIdle = true;
+    const pool = sfxPool.get(name);
+    if (!pool) sfxPool.set(name, [a]);
+    else if (pool.length < POOL_PER_SOUND) pool.push(a);
+  };
   a.addEventListener("ended", release);
   a.addEventListener("pause", release);
   a.addEventListener("error", release);
-  a.play().then(() => { if (!activeSfx.has(a)) a.pause(); }).catch(release);
   return a;
 }
-export function stopSfx(a) {
+
+// โหลดเสียงที่ใช้บ่อยไว้ล่วงหน้า — ครั้งแรกที่เล่นคือครั้งที่กระตุกที่สุด (ต่อเน็ต + ถอดรหัส)
+export function prewarmSfx(names) {
+  for (const name of names) {
+    if (!FILES[name] || sfxPool.has(name)) continue;
+    const a = takeVoice(name);
+    a._echoIdle = true;
+    sfxPool.set(name, [a]);
+    try { a.load(); } catch { /* เบราว์เซอร์บางตัวห้ามโหลดก่อนมี gesture */ }
+  }
+}
+
+// คืน element ที่เล่นอยู่ ให้ผู้เรียกหยุดเองได้ (เช่น เพลงประกอบคัตซีนที่ต้องหยุดตอนฉากจบ)
+export function playSfx(name) {
+  if (!FILES[name]) return null;
+  const a = takeVoice(name);
+  const base = name === "action_button" ? CLICK_BASE : SFX_BASE;
+  a.volume = base * masterGain();
+  a._echoPlay = ++playSeq;
+  activeSfx.set(a, base);
+  a.play().then(() => { if (!activeSfx.has(a)) a.pause(); }).catch(() => {
+    activeSfx.delete(a);
+  });
+  return a;
+}
+// playId: กันสั่งหยุด element ที่ถูกรีไซเคิลไปใช้กับเสียงอื่นแล้ว (ดู sfxPlayId)
+export function stopSfx(a, playId) {
   if (!a) return;
+  if (playId !== undefined && a._echoPlay !== playId) return;
   activeSfx.delete(a);
   a.pause();
 }
+export function sfxPlayId(a) { return a ? a._echoPlay : undefined; }
 export function clickSound() { playSfx("action_button"); }
 
 // ---------- ลูปเสียงเฉพาะกิจ (ช่องอิสระ ไม่ยุ่งกับ BGM หลัก) ----------
@@ -365,7 +411,7 @@ export function startLoopSfx(name) {
   stopLoopSfx();
   const a = new Audio(FILES[name]);
   a.loop = true;
-  a.volume = SFX_BASE * vcurve();
+  a.volume = SFX_BASE * masterGain();
   loopSfx = a;
   musicDuck = DUCK_LEVEL;
   if (currentMusic) getMusic(currentMusic).volume = trackVolume(currentMusic);

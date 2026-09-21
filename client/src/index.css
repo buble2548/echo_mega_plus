@@ -1387,3 +1387,244 @@ body {
   animation: acRing 2s cubic-bezier(0.2, 0.8, 0.3, 1) both;
 }
 .dc-text { animation: acText 2s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* ===== การ์ดผู้เล่น: แผ่นป้ายทรงเฉพาะตัว (ยอดแหลมกลาง มุมบนเฉียง มุมล่างตัด) =====
+   ไม่ใช้สี่เหลี่ยมมุมมนสำเร็จรูป — รูปทรงวาดด้วย clip-path เส้นเดียวกันทั้งขอบทองและแผ่นใน
+   ขอบทอง = ตัวการ์ดเอง / แผ่นใน = .pc-plate ที่ inset เข้ามา 3px จึงเหลือขอบทองรอบรูป */
+.pc-card {
+  --pc-shape: polygon(
+    0 26px, 17px 9px,
+    40% 9px, 45.5% 0, 54.5% 0, 60% 9px,
+    calc(100% - 17px) 9px, 100% 26px,
+    100% calc(100% - 20px), calc(100% - 15px) 100%,
+    15px 100%, 0 calc(100% - 20px)
+  );
+  position: relative;
+  padding: 3px;
+  clip-path: var(--pc-shape);
+  background: linear-gradient(152deg, #ffe9a8 0%, var(--p-frame-color, #6d2f83) 34%, #c9992f 68%, #4a2a12 100%);
+  filter: drop-shadow(0 14px 22px rgba(0, 0, 0, 0.85));
+}
+/* clip-path ตัด outline ทิ้ง ตัวที่ยังมีชีวิตจึงเต้นด้วยความสว่างของขอบทองแทน */
+.pc-card-live { animation: pcPlateBreathe 3.4s ease-in-out infinite; }
+@keyframes pcPlateBreathe {
+  0%, 100% { filter: drop-shadow(0 14px 22px rgba(0, 0, 0, 0.85)) brightness(1); }
+  50% { filter: drop-shadow(0 14px 26px rgba(0, 0, 0, 0.85)) brightness(1.22); }
+}
+.pc-plate {
+  position: absolute;
+  inset: 3px;
+  clip-path: var(--pc-shape);
+  background:
+    repeating-linear-gradient(118deg, rgba(232, 191, 90, 0.05) 0 1px, transparent 1px 8px),
+    linear-gradient(158deg, rgba(41, 24, 61, 0.98), rgba(8, 4, 14, 0.99));
+}
+.pc-inner { position: relative; padding: 13px 11px 9px; }
+
+/* ยอดตราบนสุด: เพชรทองคร่อมรอยหยักของรูปทรง พร้อมเส้นทองสองข้าง */
+.pc-crest {
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  width: 54px;
+  height: 27px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.9));
+}
+
+/* เส้นคั่นแนวตั้งระหว่างรูปกับค่าสถานะ มีเพชรคั่นกลาง */
+.pc-rule {
+  position: relative;
+  flex: 0 0 auto;
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 2px;
+  background: linear-gradient(180deg, transparent, rgba(232, 191, 90, 0.75) 22%, rgba(232, 191, 90, 0.75) 78%, transparent);
+}
+.pc-rule-gem {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 0 4px rgba(232, 191, 90, 0.9));
+}
+
+.pc-main { display: flex; gap: 9px; align-items: stretch; }
+.pc-por {
+  position: relative;
+  flex: 0 0 auto;
+  width: 76px;
+  height: 94px;
+  overflow: hidden;
+  /* รูปก็ไม่ใช่สี่เหลี่ยม — มุมบนซ้ายกับล่างขวาถูกเฉือน ให้รับกับรูปทรงของแผ่นป้าย */
+  clip-path: polygon(0 11px, 11px 0, 100% 0, 100% calc(100% - 11px), calc(100% - 11px) 100%, 0 100%);
+  background: linear-gradient(135deg, #9b4f96, #7d3a78);
+  box-shadow: inset 0 0 0 1px rgba(232, 191, 90, 0.4);
+}
+.pc-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 5px; justify-content: center; }
+.pc-name-text {
+  font-family: var(--font-av-thai);
+  font-weight: 800;
+  font-size: 0.92rem;
+  line-height: 1.34;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+}
+
+/* แถววัดค่า — เลือดกับเกราะแยกกันด้วยไอคอน ตัวเลข และรูปทรงช่อง ไม่ใช่แค่สี
+   (ผู้เล่นรายงานว่าเกจสีล้วนดูไม่ออกว่าอันไหนคืออะไร) */
+.sr { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.sr-ico { width: 15px; height: 15px; flex: 0 0 auto; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.85)); }
+.sr-sp-label {
+  flex: 0 0 auto;
+  width: 15px;
+  font-size: 0.56rem;
+  font-weight: 900;
+  color: var(--av-gold-mid, #e8bf5a);
+  text-align: center;
+}
+.sr-track { display: flex; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.sr-cell { flex: 1 1 0; min-width: 2px; height: 11px; background: rgba(255, 255, 255, 0.09); }
+.sr-num {
+  flex: 0 0 auto;
+  font-family: var(--font-av-display);
+  font-size: 0.74rem;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  min-width: 34px;
+  text-align: right;
+}
+.sr-max { opacity: 0.55; font-size: 0.84em; }
+
+/* หลอดต่อเนื่อง: ใช้เมื่อเพดานสูงจนช่องแยกแคบเกินกว่าจะนับไหว
+   ขีดแบ่งทุกหน่วยยังวาดทับอยู่ (--n = จำนวนหน่วยรวมส่วนเกินเพดาน) จึงยังนับได้ถ้าอยากนับ */
+.sr-solid { position: relative; height: 11px; overflow: hidden; background: rgba(255, 255, 255, 0.09); }
+.sr-fill { position: absolute; top: 0; bottom: 0; left: 0; }
+.sr-solid::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 calc(100% / var(--n, 8) - 1px),
+    rgba(0, 0, 0, 0.7) calc(100% / var(--n, 8) - 1px) calc(100% / var(--n, 8))
+  );
+}
+.sr[data-kind="hp"] .sr-solid { border-radius: 999px; }
+.sr[data-kind="ar"] .sr-solid { clip-path: polygon(0 0, 100% 0, 100% 58%, 50% 100%, 0 58%); }
+
+/* เลือด = แคปซูลมน · เกราะ = ทรงโล่ปลายแหลมลง — ต่างกันแม้มองเป็นภาพขาวดำ */
+.sr[data-kind="hp"] .sr-cell { border-radius: 999px; }
+.sr[data-kind="ar"] .sr-cell { clip-path: polygon(0 0, 100% 0, 100% 58%, 50% 100%, 0 58%); }
+.sr[data-kind="sp"] .sr-cell { clip-path: polygon(26% 0, 100% 0, 74% 100%, 0 100%); height: 8px; }
+.sr-hp { background: linear-gradient(180deg, #ff9aa3, #bf2038); box-shadow: 0 0 6px rgba(255, 96, 118, 0.75); }
+.sr-ar { background: linear-gradient(180deg, #a9d8ff, #3b82c4); filter: drop-shadow(0 0 4px rgba(90, 160, 230, 0.85)); }
+.sr-tmp { background: linear-gradient(180deg, #ffe9a8, #c9992f); box-shadow: 0 0 6px rgba(232, 191, 90, 0.8); }
+.sr-sp { background: linear-gradient(90deg, #ffe9a8, #c9992f); filter: drop-shadow(0 0 3px rgba(232, 191, 90, 0.9)); }
+.sr-off { background: rgba(255, 255, 255, 0.11); }
+
+/* ขนาดใหญ่สำหรับแผงตัวเอง — พื้นที่แถวล่างเหลือเยอะ ปล่อยให้ยืดได้เต็มที่ */
+.sr-big { gap: 9px; }
+.sr-big .sr-ico { width: 23px; height: 23px; }
+.sr-big .sr-cell { min-width: 22px; height: 19px; }
+.sr-big .sr-num { font-size: 1.12rem; min-width: 62px; }
+.sr-big .sr-solid { height: 19px; }
+.sr-big .sr-track { flex: 0 1 auto; gap: 3px; }
+
+/* แถบสถานะ: จองที่ไว้ตลอดแม้ยังว่าง ความสูงการ์ดจึงไม่กระตุกตอนสถานะมา/ไป
+   เส้นคั่นจางหัวท้ายพร้อมเพชรกลาง วาดจาก gradient ล้วน */
+.pc-foot {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  max-height: 52px;
+  overflow: hidden;
+  margin-top: 8px;
+  padding-top: 9px;
+}
+.pc-foot::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(232, 191, 90, 0.55) 18%, rgba(232, 191, 90, 0.55) 82%, transparent);
+}
+.pc-foot::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  transform: translateX(-50%) rotate(45deg);
+  background: var(--av-gold-mid, #e8bf5a);
+  box-shadow: 0 0 5px rgba(232, 191, 90, 0.9);
+}
+
+.pc-ready {
+  font-family: var(--font-av-thai);
+  font-size: 0.64rem;
+  font-weight: 900;
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: #06210f;
+  background: linear-gradient(120deg, #8ff0b5, #21a95a);
+  box-shadow: 0 3px 12px -2px rgba(33, 169, 90, 0.9);
+}
+
+.pc-extra { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+.pc-extra-inline { justify-content: flex-start; }
+.pc-extra-chip {
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+  background: rgba(6, 3, 12, 0.8);
+  border: 1px solid rgba(232, 191, 90, 0.28);
+}
+
+/* ===== แผงตัวเอง: รูปซึมจางหลังแผง ไม่กินช่องของตัวเอง ===== */
+.self-panel { position: relative; }
+.self-bleed {
+  position: absolute;
+  left: -22px;
+  top: -18px;
+  bottom: -12px;
+  width: 210px;
+  z-index: 0;
+  opacity: 0.26;
+  pointer-events: none;
+  filter: saturate(0.8) contrast(1.06);
+  -webkit-mask-image: radial-gradient(72% 76% at 28% 46%, #000 26%, transparent 76%);
+  mask-image: radial-gradient(72% 76% at 28% 46%, #000 26%, transparent 76%);
+}
+.self-content { position: relative; z-index: 1; }
+.self-name {
+  text-align: left;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.16s ease, color 0.16s ease;
+}
+.self-name:hover { color: var(--av-gold-lit, #ffe9a8); border-bottom-color: rgba(232, 191, 90, 0.7); }
+.self-vitals { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+
+/* ฝาแฝดฮิซากาวะ: กล่องค่าของแต่ละคน — ทรงเฉือนมุมให้เข้าชุดกับแผ่นป้ายใบอื่น */
+.twin-vital {
+  clip-path: polygon(0 9px, 9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%);
+  border-radius: 0;
+}

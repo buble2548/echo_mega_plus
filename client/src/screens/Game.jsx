@@ -1,4 +1,5 @@
 import { GUTS_AMMO_INFO, shopInfoOf } from "../data/shop";
+import { useTick, TickSeconds } from "../tickStore";
 import { PERMANENT_STATUS_KEYS } from "../data/permanentStatus";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -9,7 +10,7 @@ import ArenaBackdrop from "../components/ArenaBackdrop";
 import { RoundBanner, CycleScene } from "../components/BattleScenes";
 import { AvModal, AvButton } from "../components/avalon";
 import { socket } from "../socket";
-import { clickSound, playSfx, stopSfx, startLoopSfx, stopLoopSfx, playCutsceneVideo, suspendMusic, DOOM_WEAPON_SOUNDS } from "../audio";
+import { clickSound, playSfx, stopSfx, sfxPlayId, startLoopSfx, stopLoopSfx, playCutsceneVideo, suspendMusic, DOOM_WEAPON_SOUNDS } from "../audio";
 
 const P_DISPLAY = "var(--font-p-display)";
 const TEAM_COLORS = { A: "#22d3ee", B: "#f97316", C: "#a3e635" };
@@ -509,7 +510,8 @@ function TransformAnnounce({ cs }) {
     if (!cs.voice) return undefined;
     const releaseMusic = suspendMusic();
     const voice = playSfx(cs.voice);
-    return () => { stopSfx(voice); releaseMusic(); };
+    const voiceId = sfxPlayId(voice);
+    return () => { stopSfx(voice, voiceId); releaseMusic(); };
   }, [cs.id, cs.voice]);
   const red = cs.kind === "rachan";
   return (
@@ -550,7 +552,8 @@ function SkillFlash({ f }) {
 
 // ---------- โหมดประหยัด (patch 2.0.6): ข้ามวีดีโอคัตซีน — แจ้งเตือนแทน แต่ยังรอเวลาเท่าวีดีโอจริง ----------
 //  ผู้เล่นที่เปิดโหมดนี้จะเห็นแค่ว่าใครเปิดท่าไม้ตาย/สกิลอะไร พร้อมนับถอยหลังรอคนอื่นดูวีดีโอจบ
-function CutsceneSkipNotice({ cs, timeLeft }) {
+function CutsceneSkipNotice({ cs }) {
+  const timeLeft = useTick();
   return (
     <div className="fixed top-[32%] left-1/2 -translate-x-1/2 z-40 pointer-events-none px-3 max-w-full">
       <div className="pop-in flex items-center gap-3 bg-black/85 rounded-2xl px-4 py-2.5 border-2 text-hard" style={{ borderColor: cs.color }}>
@@ -809,12 +812,12 @@ function SummaryTiers({ winners, losers, compact }) {
 }
 
 // overlay ที่ใช้ร่วมกันทั้ง layout มือถือและจอใหญ่ (อนิเมชันตีกัน/ประกาศเปลี่ยนร่าง/แจ้งเตือนคัตซีน/สกิลแฟลช/แบนเนอร์กลางวันคืน)
-function OverlayLayer({ phase, attack, csAnnounce, csSkipped, timeLeft, flash, notice, cycleFx, overloadForce, bylethCourse, onOpenBylethCourse }) {
+function OverlayLayer({ phase, attack, csAnnounce, csSkipped, flash, notice, cycleFx, overloadForce, bylethCourse, onOpenBylethCourse }) {
   return (
     <>
       {phase === "ATTACKING" && attack && <AttackFx key={attack.id} a={attack} />}
       {csAnnounce && <TransformAnnounce key={csAnnounce.id} cs={csAnnounce} />}
-      {csSkipped && <CutsceneSkipNotice key={csSkipped.id} cs={csSkipped} timeLeft={timeLeft} />}
+      {csSkipped && <CutsceneSkipNotice key={csSkipped.id} cs={csSkipped} />}
       {flash && <SkillFlash key={flash.id} f={flash} />}
       {notice && <TransformNotice key={notice.id} n={notice} />}
       {overloadForce && <OverloadForceBadge />}
@@ -905,12 +908,12 @@ const SLOTS = {
   1: [[8, 50]],
   2: [[9, 22], [9, 78]],
   3: [[9, 17], [6, 50], [9, 83]],
-  4: [[9, 18], [9, 82], [44, 11], [44, 89]],
-  5: [[9, 17], [6, 50], [9, 83], [50, 11], [50, 89]],
+  4: [[9, 18], [9, 82], [44, 13], [44, 87]],
+  5: [[9, 17], [6, 50], [9, 83], [50, 13], [50, 87]],
   // patch 2.8 (ช่องผู้เล่นที่ 7): 6 คนอื่น — แถวบน 4 ใบ + ข้างละ 1 ใบ
   //  แถวบนคู่กลางวางที่ 38/62% (ขอบในสุด 44.2/55.8%) จึงเว้นช่องกองการ์ดกลางไว้ทั้งแนวนอน
   //  และ top 4% ทำให้ปลายล่างของการ์ดยังอยู่เหนือกองการ์ดที่เริ่มต้นที่ 40% อีกชั้นหนึ่ง
-  6: [[7, 15], [4, 38], [4, 62], [7, 85], [50, 9], [50, 91]],
+  6: [[7, 15], [4, 38], [4, 62], [7, 85], [50, 12], [50, 88]],
 };
 
 // เอฟเฟครอบการ์ด: Beat Mode = สายฟ้าเขียว (ถาวร) / สวมเกราะราชัน = โกลว์แดง
@@ -1032,7 +1035,7 @@ function TwinPortraitCards({ p, size = "md", className = "" }) {
     mini: { wrap: "gap-1", card: "w-10 h-14", name: "text-[8px]" },
     sm: { wrap: "gap-1.5", card: "w-14 h-16", name: "text-[9px]" },
     table: { wrap: "gap-2", card: "w-20 h-28 sm:w-24 sm:h-32", name: "text-[10px] sm:text-xs" },
-    md: { wrap: "gap-2", card: "w-16 h-[5.5rem] sm:w-20 sm:h-28", name: "text-[10px]" },
+    md: { wrap: "gap-2.5", card: "w-[5.5rem] h-[7.5rem] sm:w-24 sm:h-32", name: "text-[11px] sm:text-xs" },
   }[size] || {
     wrap: "gap-2",
     card: "w-[4.8rem] h-28 sm:w-[5.6rem] sm:h-36",
@@ -1625,7 +1628,7 @@ function TwinVitals({ p, compact = false }) {
   if (!twins.length) return null;
   const max = compact ? 3 : 4;
   return (
-    <div className={`grid grid-cols-2 gap-1.5 ${compact ? "w-full" : "mt-1.5 max-w-[22rem]"}`}>
+    <div className={`grid grid-cols-2 ${compact ? "gap-1.5 w-full" : "gap-3 mt-2 max-w-[30rem]"}`}>
       {twins.map((t) => {
         const twinP = {
           ...p,
@@ -1642,11 +1645,12 @@ function TwinVitals({ p, compact = false }) {
         return (
           <div
             key={t.key}
-            className={`min-w-0 rounded-lg border bg-black/35 px-2 py-1.5 ${!t.alive ? "opacity-55 grayscale" : ""}`}
+            className={`twin-vital min-w-0 border bg-black/35 ${compact ? "px-2 py-1.5" : "px-3 py-2.5"} ${!t.alive ? "opacity-55 grayscale" : ""}`}
             style={{ borderColor: t.active ? p.color : "rgba(255,255,255,.18)" }}
           >
-            <LifeBar p={twinP} sm />
-            <div className="max-h-[24px] overflow-hidden">
+            <StatRow big={!compact} kind="hp" value={twinP.hp} max={twinP.maxHp} />
+            <StatRow big={!compact} kind="ar" value={twinP.armor} max={twinP.maxArmor} />
+            <div className={`${compact ? "max-h-[24px]" : "max-h-[30px]"} overflow-hidden`}>
               <StatusChips p={twinP} left compact max={max} />
             </div>
           </div>
@@ -2066,27 +2070,178 @@ function InventoryModal({ me, players, gameState, roundNumber, onPickGunAmmo, on
   );
 }
 
+// ---------- แถววัดค่า: ไอคอน + ช่องนับหน่วย + ตัวเลข ----------
+//  สีอย่างเดียวแยกเลือดกับเกราะไม่ออก จึงใช้สัญญาณซ้อนกันสามชั้น:
+//   1) ไอคอนนำหน้าแถว (หัวใจ / โล่)  2) ตัวเลขจริงท้ายแถว (3/6)
+//   3) รูปทรงของช่อง — เลือดเป็นแคปซูลมน เกราะเป็นทรงโล่ปลายแหลม (มองเห็นต่างแม้ภาพขาวดำ)
+function HeartGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" className="sr-ico" aria-hidden="true">
+      <path d="M12 21s-8-5.2-8-10.4A4.6 4.6 0 0 1 12 7a4.6 4.6 0 0 1 8 3.6C20 15.8 12 21 12 21Z" fill="#ff8a94" stroke="#5c0f1d" strokeWidth="1.4" />
+    </svg>
+  );
+}
+function ShieldGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" className="sr-ico" aria-hidden="true">
+      <path d="M12 2 21 6v6c0 5-9 10-9 10S3 17 3 12V6Z" fill="#8ec5ff" stroke="#0e2c4c" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+// เกินจำนวนนี้แล้วช่องแต่ละช่องจะแคบกว่า ~4px = นับไม่ออก เปลี่ยนไปใช้หลอดต่อเนื่องที่มีขีดแบ่งหน่วยแทน
+//  เพดานจริงในเกมโตได้เกินค่าพื้นฐานเยอะ: ผู้วิงวอนเกราะ 5 · แบทแมนบนรถ 7 · ฮิคารุ MonsterLive +2
+//  · เกราะสวมวิญญาณ/ยุคทอง +1 ต่อชั้น · และเลือดชั่วคราว/เกราะศรัทธายังต่อท้ายหลอดอีก
+const SEG_LIMIT = 9;
+const SEG_LIMIT_BIG = 14;
+
+function StatRow({ kind, value, max, extra = 0, extraLabel, big }) {
+  // ทาคุมิ ฟุจิวาระ: ถึงจะมองไม่เห็น แต่ฉันยังอยู่ — ค่าถูกซ่อนเป็น null
+  if (max == null) {
+    return (
+      <div className={`sr ${big ? "sr-big" : ""}`} title="ถูกซ่อน (ถึงจะมองไม่เห็น แต่ฉันยังอยู่)">
+        {kind === "hp" ? <HeartGlyph /> : <ShieldGlyph />}
+        <span className="sr-num">🌑 ???</span>
+      </div>
+    );
+  }
+  const total = max + extra;
+  const label = `${kind === "hp" ? "พลังชีวิต" : "เกราะ"} ${value}/${max}${extra > 0 && extraLabel ? ` · ${extraLabel} ${extra}` : ""}`;
+  const icon = kind === "hp" ? <HeartGlyph /> : <ShieldGlyph />;
+  const num = <span className="sr-num">{value}<span className="sr-max">/{max}</span></span>;
+
+  // หลอดต่อเนื่อง: ขีดแบ่งทุกหน่วยยังวาดอยู่ จึงนับได้เหมือนเดิมถ้าอยากนับ
+  if (total > (big ? SEG_LIMIT_BIG : SEG_LIMIT)) {
+    return (
+      <div className={`sr ${big ? "sr-big" : ""}`} data-kind={kind} title={label}>
+        {icon}
+        <span className="sr-track sr-solid" style={{ "--n": total }}>
+          <span className={`sr-fill sr-${kind}`} style={{ width: `${(Math.min(value, max) / total) * 100}%` }} />
+          {extra > 0 && (
+            <span className="sr-fill sr-tmp" style={{ left: `${(max / total) * 100}%`, width: `${(extra / total) * 100}%` }} />
+          )}
+        </span>
+        {num}
+      </div>
+    );
+  }
+
+  const cells = [];
+  for (let i = 0; i < max; i++) cells.push(i < value ? kind : "off");
+  for (let i = 0; i < extra; i++) cells.push("tmp"); // ส่วนเกินเพดาน (เลือดชั่วคราว / เกราะศรัทธา) ต่อท้ายเป็นช่องสีทอง
+  return (
+    <div className={`sr ${big ? "sr-big" : ""}`} data-kind={kind} title={label}>
+      {icon}
+      <span className="sr-track">
+        {cells.map((c, i) => <span key={i} className={`sr-cell sr-${c}`} />)}
+      </span>
+      {num}
+    </div>
+  );
+}
+
+// แต้มสกิล: แถวเดียวกันกับเลือด/เกราะ มีป้าย SP นำหน้าและตัวเลขท้ายแถวเหมือนกัน
+function SpRow({ p, big }) {
+  // ซาโตรุ / ทาคุมิ: แต้มสกิลถูกซ่อนจากผู้เล่นอื่น
+  if (p.skillPoints < 0) {
+    return <div className={`sr ${big ? "sr-big" : ""}`} title="แต้มสกิลถูกซ่อน"><span className="sr-sp-label">SP</span><span className="sr-num">🌩️ ???</span></div>;
+  }
+  return (
+    <div className={`sr ${big ? "sr-big" : ""}`} data-kind="sp" title={`แต้มสกิล ${p.skillPoints}/${p.maxSkill}`}>
+      <span className="sr-sp-label">SP</span>
+      <span className="sr-track">
+        {Array.from({ length: p.maxSkill }, (_, i) => (
+          <span key={i} className={`sr-cell ${i < p.skillPoints ? "sr-sp" : "sr-off"}`} />
+        ))}
+      </span>
+      <span className="sr-num">{p.skillPoints}<span className="sr-max">/{p.maxSkill}</span></span>
+    </div>
+  );
+}
+
+// ค่าที่ไม่ได้นับเป็นหน่วยเต็มของเกจ (โล่ชั่วคราว/เกราะศรัทธา/เลือดโปรดิวเซอร์) — ชิปเล็กใต้การ์ด
+function VitalExtras({ p, className = "" }) {
+  const bits = [];
+  if (p.shield > 0) bits.push(["sh", `+🛡️${p.shield}`, "#7fd4ff", `โล่ชั่วคราว ${p.shield}`]);
+  if (p.lumiProducerHp != null && !p.lumiIdolDown) bits.push(["pr", `🎧${p.lumiProducerHp}`, "#ff8ad0", `โปรดิวเซอร์เหลือพลังชีวิต ${p.lumiProducerHp}/${p.lumiProducerMax}`]);
+  if (!bits.length) return null;
+  return (
+    <div className={`pc-extra ${className}`}>
+      {bits.map(([k, t, c, title]) => (
+        <span key={k} className="pc-extra-chip" style={{ color: c }} title={title}>{t}</span>
+      ))}
+    </div>
+  );
+}
+
+// ---------- ลวดลายแผ่นป้าย: ยอดตราบนสุด + เส้นคั่นมีเพชรกลาง ----------
+//  รูปทรงตัวการ์ดเป็น clip-path เฉพาะตัว (ยอดแหลมกลาง มุมบนเฉียง มุมล่างตัด) ไม่ใช่สี่เหลี่ยมมนสำเร็จรูป
+function PlaqueCrest() {
+  return (
+    <svg className="pc-crest" viewBox="0 0 40 20" aria-hidden="true">
+      <path d="M20 1.5 26.5 8 20 14.5 13.5 8Z" fill="#ffe9a8" stroke="#6b4d11" strokeWidth="0.8" />
+      <path d="M20 5.2 23 8 20 10.8 17 8Z" fill="#8a5f10" opacity="0.75" />
+      <path d="M1.5 16.5 H15" stroke="#c9992f" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M25 16.5 H38.5" stroke="#c9992f" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+function PlaqueRule() {
+  return (
+    <span className="pc-rule" aria-hidden="true">
+      <svg viewBox="0 0 8 8" className="pc-rule-gem"><path d="M4 0 8 4 4 8 0 4Z" fill="#e8bf5a" /></svg>
+    </span>
+  );
+}
+
 // ผู้เล่นคนอื่นรอบโต๊ะ — picked = ถูกเลือกเป้าหมาย ANATA WAAAAAAAA แล้ว
 //  คลิกตอนไม่ได้เลือกเป้า = เปิดหน้าต่างดูสถานะของคนนั้น (onInspect)
-// การ์ดผู้เล่นแบบใหม่: รูป+ชื่อรวมเป็นชิ้นเดียว (ป้ายชื่อซ้อนไล่เฉดทับขอบล่างรูป แบบโปสเตอร์นักแสดง)
-// แทนที่รูปกับป้ายชื่อแยกลอยกันคนละชิ้นแบบเดิม
+// การ์ดแนวนอน: รูปซ้าย · ชื่อ/เลือด/เกราะ/แต้มสกิลเรียงเป็นแถวทางขวา · สถานะเป็นแถบล่างในกล่องเดียวกัน
+//  แบบแนวตั้งที่เกจขนาบสองข้างอ่านยาก (ต้องเทียบสีเอาเองว่าเสาไหนคือเลือด) — แถวมีไอคอนกับตัวเลขกำกับชัดกว่า
 function OtherPlayer({ p, phase, slot, targetable, onAttack, picked, onInspect, hostRef }) {
   const summary = phase === "SUMMARY";
+  const twin = p.hisakawa;
   return (
     <div
       ref={hostRef}
-      className={`absolute -translate-x-1/2 flex flex-col items-center gap-1.5 ${p.hisakawa ? "w-52 sm:w-60" : "w-28"}`}
+      className={`absolute -translate-x-1/2 flex flex-col items-center gap-1.5 ${twin ? "w-52 sm:w-60" : "w-[236px]"}`}
       style={{ top: `${slot[0]}%`, left: `${slot[1]}%` }}
     >
       <div
         onClick={targetable ? () => { clickSound(); onAttack(p.id); } : () => { clickSound(); onInspect(p.id); }}
-        className={`p-target-wrap relative ${p.hisakawa ? "w-44 h-28 sm:w-52 sm:h-32" : "p-player-frame w-24 h-28 sm:w-28 sm:h-32"} -rotate-2 ${p.alive && !p.hisakawa ? "p-player-frame-live" : ""} ${!p.alive ? "opacity-40 grayscale" : ""} ${targetable ? "cursor-crosshair" : "cursor-pointer"}`}
+        className={`p-target-wrap relative ${twin ? "w-44 h-28 sm:w-52 sm:h-32" : "pc-card w-full"} ${p.alive && !twin ? "pc-card-live" : ""} ${!p.alive ? "opacity-40 grayscale" : ""} ${targetable ? "cursor-crosshair" : "cursor-pointer"}`}
         title={targetable ? undefined : "แตะเพื่อดูสถานะ"}
         style={{ "--p-frame-color": p.color }}
       >
-        <div className="absolute inset-0">
-          {p.hisakawa ? <TwinPortraitCards p={p} size="table" className="w-full h-full" /> : <Portrait p={p} className="w-full h-full" rounded="" />}
-        </div>
+        {twin ? (
+          <div className="absolute inset-0"><TwinPortraitCards p={p} size="table" className="w-full h-full" /></div>
+        ) : (
+          <>
+            <span className="pc-plate" aria-hidden="true" />
+            <PlaqueCrest />
+            <div className="pc-inner">
+              <div className="pc-main">
+                <div className="pc-por">
+                  <Portrait p={p} className="w-full h-full" rounded="" />
+                </div>
+                <PlaqueRule />
+                <div className="pc-info">
+                  <div className="pc-name-text">
+                    {p.name}{!p.connected && <span className="ml-1 text-[10px] text-echo-hp">•offline</span>}
+                  </div>
+                  <StatRow kind="hp" value={p.hp} max={p.maxHp} extra={p.tempHp || 0} extraLabel="เลือดชั่วคราว" />
+                  <StatRow kind="ar" value={p.armor} max={p.maxArmor} extra={p.supFaith || 0} extraLabel="เกราะศรัทธา" />
+                  <SpRow p={p} />
+                </div>
+              </div>
+              {/* แถบสถานะ: จองที่ไว้ตลอดแม้ยังว่าง ไม่งั้นความสูงการ์ดกระตุกทุกครั้งที่สถานะมา/ไป */}
+              <div className="pc-foot">
+                <VitalExtras p={p} className="pc-extra-inline" />
+                <StatusChips p={p} left compact max={8} />
+              </div>
+            </div>
+          </>
+        )}
         <TeamBadge teamId={p.teamId} className="absolute -top-3 -right-3 z-20" />
         {targetable && <TargetLock />}
         {targetable && (
@@ -2098,21 +2253,16 @@ function OtherPlayer({ p, phase, slot, targetable, onAttack, picked, onInspect, 
         {!p.alive && <span className="absolute inset-0 grid place-items-center text-3xl z-10">💀</span>}
         {p.isWinner && summary && <span className="absolute -top-2 -right-2 text-xl z-10">👑</span>}
         {phase === "PLAYING" && p.locked && p.alive && (
-          <span className="absolute top-1 right-1 bg-emerald-600 rounded-full w-5 h-5 grid place-items-center text-xs z-10">✓</span>
+          <span className="pc-ready absolute -top-2 right-1.5 z-10" title="พร้อมแล้ว">✓ พร้อม</span>
         )}
-        {/* ป้ายชื่อ: ไล่เฉดทับขอบล่างรูป ให้เป็นชิ้นเดียวกับตัวการ์ด */}
-        {!p.hisakawa && (
-        <div className="absolute inset-x-0 bottom-0 pt-6 pb-1 px-1.5" style={{ background: "linear-gradient(180deg,transparent,rgba(0,0,0,.92) 55%)" }}>
-          <div className="text-xs sm:text-sm font-black text-white text-center truncate" style={{ fontFamily: P_DISPLAY }}>
-            {p.name}{!p.connected && <span className="ml-1 text-[10px] text-echo-hp">•offline</span>}
-          </div>
+      </div>
+      {twin && (
+        <div className="flex flex-col items-center gap-1 w-full">
+          <TwinVitals p={p} compact />
+          <Stats p={p} center hideLife />
         </div>
-        )}
-      </div>
-      <div className="rounded-xl px-2.5 py-1.5 flex flex-col items-center gap-1 w-full">
-        {p.hisakawa ? <TwinVitals p={p} compact /> : <Stats p={p} center />}
-        {p.hisakawa && <Stats p={p} center hideLife />}
-      </div>
+      )}
+      {!twin && <ConnorStressBar p={p} />}
       {/* ใบโปรโมทสินค้า (Apple guy): แต้มการ์ดถูกเปิดเผยให้ทุกคนเห็นแม้ยังไม่เปิดไพ่ */}
       {/* connorScanned: คอนเนอร์กด "วิเคราะห์สถานการณ์" -> เห็นแต้มของคนนี้ตั้งแต่ยังไม่เปิดไพ่ (เห็นคนเดียว) */}
       {(summary || (p.statuses?.promo || 0) > 0 || p.connorScanned) && p.score !== null && (
@@ -2120,7 +2270,6 @@ function OtherPlayer({ p, phase, slot, targetable, onAttack, picked, onInspect, 
           {p.busted ? "แตก!" : `${p.score} แต้ม`}{p.connorScanned && !summary ? " 🧠" : ""}
         </div>
       )}
-      {!p.hisakawa && <StatusChips p={p} compact max={6} />}
     </div>
   );
 }
@@ -2944,6 +3093,147 @@ function LumiIdolModal({ me, onPick, onClose }) {
 }
 
 // ---------- ไบรอัน: กดกุญแจรถซ้ำ -> เลือกดับเครื่อง หรือ เพิ่มพลัง ----------
+// ---------- เท็นโนจิ โคทาโร่: หน้าจอเลือกของทั้งสามช่อง ----------
+//  ทั้งสามสกิลของเขาเป็น "ทางแยก" หมด จึงใช้โมดัลตัวเดียวสลับเนื้อหาตาม tier
+//  แทนที่จะแยกเป็นสามคอมโพเนนต์ที่โครงเหมือนกันเป๊ะ
+function KotarouModal({ me, tier, onPick, onClose }) {
+  const k = me?.kotarou || {};
+  const [kind, setKind] = useState("sword"); // ใช้เฉพาะสกิลรอง
+  const items = me?.inventory || [];
+
+  if (tier === "basic") {
+    const cur = k.mode || "off";
+    const opts = [
+      { key: "life", icon: "🩸", name: "สลับรากชีวิต", desc: "แต้มสกิลที่ควรฟื้นทุกเทิร์น จะไปฟื้นพลังชีวิตแทน — ระหว่างนี้แต้มสกิลไม่ฟื้นเลย" },
+      { key: "energy", icon: "⚡", name: "สลับพลังงาน", desc: "เหรียญที่ควรได้ทุกเทิร์น จะไปเป็นแต้มสกิลแทน — ระหว่างนี้ไม่ได้เหรียญ" },
+      { key: "off", icon: "⭕", name: "ปิดการใช้งาน", desc: "คลายรางทั้งหมด กลับไปรับทรัพยากรตามปกติ" },
+    ];
+    return (
+      <AvModal label="เขียนทับใหม่" title="จะสับรางอะไรไปเข้าไหน" width="min(32rem, 94vw)" onClose={onClose}>
+        <>
+          <div className="text-xs mb-3" style={{ color: "rgba(239,230,245,.62)" }}>
+            คงอยู่ข้ามเทิร์นจนกว่าจะเปลี่ยนเอง · แต้มสกิลเหลือ 0 เมื่อไหร่ รางจะคลายกลับอัตโนมัติ
+          </div>
+          <div className="flex flex-col gap-2">
+            {opts.map((o) => (
+              <button
+                key={o.key}
+                disabled={cur === o.key}
+                onClick={() => { clickSound(); onPick({ mode: o.key }); }}
+                className={`av-item text-left transition ${cur === o.key ? "opacity-45 cursor-not-allowed" : "hover:brightness-125"}`}
+              >
+                <div className="av-heading text-sm">
+                  {o.icon} {o.name}
+                  {cur === o.key && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded" style={{ background: "var(--av-gold-mid)", color: "#1f1604" }}>ใช้อยู่</span>}
+                </div>
+                <div className="text-xs leading-snug mt-1" style={{ color: "rgba(239,230,245,.62)" }}>{o.desc}</div>
+              </button>
+            ))}
+          </div>
+        </>
+      </AvModal>
+    );
+  }
+
+  if (tier === "secondary") {
+    return (
+      <AvModal label="แปรเปลี่ยน" title="เผาของในกระเป๋าเป็นอาวุธ" width="min(34rem, 94vw)" onClose={onClose}>
+        <>
+          <div className="text-xs mb-3" style={{ color: "rgba(239,230,245,.62)" }}>
+            เสียพลังชีวิต 1 หน่วย · ไอเทมที่เลือกจะหายถาวร · อาวุธเดิม (ถ้ามี) จะถูกเขียนทับ
+          </div>
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            {[
+              { key: "sword", icon: "🗡️", name: "ดาบแห่งจิตใจ", desc: "โจมตีปกติ = ราคาไอเทม (สูงสุด 4) แทนดาเมจพื้นฐาน" },
+              { key: "claw", icon: "🐾", name: "กรงเล็บ", desc: "โจมตีปกติเลือกเป้าได้ 2 ครั้ง · ของราคา 6+ ได้ดาเมจ +1 (รวมไม่เกิน 3)" },
+            ].map((w) => (
+              <button
+                key={w.key}
+                onClick={() => { clickSound(); setKind(w.key); }}
+                className={`av-item text-left transition ${kind === w.key ? "" : "opacity-55"}`}
+                style={kind === w.key ? { borderLeftColor: "var(--av-gold-mid)" } : undefined}
+              >
+                <div className="av-heading text-sm">{w.icon} {w.name}</div>
+                <div className="text-[11px] leading-snug mt-1" style={{ color: "rgba(239,230,245,.62)" }}>{w.desc}</div>
+              </button>
+            ))}
+          </div>
+          <div className="av-label mb-1.5" style={{ fontSize: "0.62rem" }}>เลือกของที่จะเผา</div>
+          {items.length === 0 ? (
+            <div className="av-label py-6 text-center" style={{ color: "rgba(239,230,245,.4)" }}>ไม่มีของในกระเป๋า</div>
+          ) : (
+            <div className="flex flex-col gap-2 max-h-[46vh] overflow-y-auto">
+              {items.map((it) => {
+                const info = shopInfoOf(it);
+                const price = Number(it.price) || 0;
+                const out = kind === "sword" ? `ดาบพลัง ${Math.min(4, price)}` : price >= 6 ? "กรงเล็บ +1" : "กรงเล็บ";
+                return (
+                  <button
+                    key={it.uid}
+                    onClick={() => { clickSound(); onPick({ kind, uid: it.uid }); }}
+                    className="av-item flex items-center gap-3 text-left transition hover:brightness-125"
+                  >
+                    <ItemIcon info={info} className="text-2xl h-10 w-10" />
+                    <div className="min-w-0 flex-1">
+                      <div className="av-heading text-sm">{info.label(it)}</div>
+                      <div className="text-xs" style={{ color: "rgba(239,230,245,.62)" }}>ราคา {price} เหรียญ</div>
+                    </div>
+                    <span className="av-label shrink-0" style={{ fontSize: "0.62rem", color: "var(--av-gold-lit)" }}>→ {out}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </>
+      </AvModal>
+    );
+  }
+
+  // ท่าไม้ตาย
+  const rewindOk = !!k.canRewind && !k.armed;
+  const overdriveOk = !!k.canOverdrive;
+  return (
+    <AvModal label="เขียนทับ/เริ่มใหม่" title="จะเขียนทับอะไร" width="min(32rem, 94vw)" onClose={onClose}>
+      <>
+        <div className="flex flex-col gap-2">
+          <button
+            disabled={!rewindOk}
+            onClick={() => { clickSound(); onPick({ mode: "rewind" }); }}
+            className={`av-item text-left transition ${rewindOk ? "hover:brightness-125" : "opacity-45 cursor-not-allowed"}`}
+          >
+            <div className="av-heading text-sm">⏪ กลับไปแก้ไข</div>
+            <div className="text-xs leading-snug mt-1" style={{ color: "rgba(239,230,245,.62)" }}>
+              ถ้าตอนสรุปผลไม่ได้เป็นผู้ชนะ เวลาจะย้อนกลับไปต้นเทิร์นทั้งสนามแล้วเล่นใหม่ (ยังไม่เข้าเฟสโจมตี)
+              · ราคาคือพลังชีวิต 4 หน่วยที่จะถูกเก็บตอนขึ้นเทิร์นถัดไป และทบทุกครั้งที่ย้อนซ้ำ
+              · ถ้าชนะในเทิร์นที่เขียนใหม่ หนี้จะถูกลบ · ถ้าชนะอยู่แล้วท่าจะถูกยกเลิก เสียแค่แต้มสกิล
+            </div>
+            {!rewindOk && (
+              <div className="text-[11px] mt-1.5" style={{ color: "#e06a78" }}>
+                ⚠️ {k.armed ? "เขียนทับเทิร์นนี้ไว้แล้ว" : "ต้องมีพลังชีวิตมากกว่า 4 หน่วย"}
+              </div>
+            )}
+          </button>
+          <button
+            disabled={!overdriveOk}
+            onClick={() => { clickSound(); onPick({ mode: "overdrive" }); }}
+            className={`av-item text-left transition ${overdriveOk ? "hover:brightness-125" : "opacity-45 cursor-not-allowed"}`}
+          >
+            <div className="av-heading text-sm">🔥 ทุ่มสุดตัว</div>
+            <div className="text-xs leading-snug mt-1" style={{ color: "rgba(239,230,245,.62)" }}>
+              ลดความจุพลังชีวิตตัวเอง 2 หน่วยถาวร แลกกับพลังโจมตี +1 ถาวร (สะสมได้เรื่อยๆ)
+              · ความจุที่หายไปทุก 1 หน่วยยังเพิ่มอัตราหลบหลีก 5% ด้วย
+            </div>
+            <div className="text-[11px] mt-1.5" style={{ color: "rgba(239,230,245,.5)" }}>
+              ตอนนี้ พลังโจมตี +{k.power || 0} · หลบหลีก {k.dodge || 0}%
+            </div>
+            {!overdriveOk && <div className="text-[11px] mt-1.5" style={{ color: "#e06a78" }}>⚠️ ความจุพลังชีวิตเหลือ 1 หน่วยแล้ว</div>}
+          </button>
+        </div>
+      </>
+    </AvModal>
+  );
+}
+
 function BrianKeyModal({ me, onPick, onClose }) {
   const boosted = !!me.brianBoost;
   return (
@@ -3252,7 +3542,8 @@ function KaiOverhaulSlot({ me }) {
 
 // ---------- กองการ์ดกลางจอ: การ์ดคว่ำซ้อนกันเล็กน้อย ไม่ต้องมีอาร์ตใหม่ ----------
 //  onClick (ถ้ามี) เปิดสมุดการ์ด (DeckLedgerModal) — ต้องเปิด pointer-events เฉพาะจุดนี้เอง เพราะ wrapper รอบนอก (โลโก้/กึ่งกลางจอ) เป็น pointer-events-none ทั้งแถบ
-function BoardTimer({ seconds, phaseKey }) {
+function BoardTimer({ phaseKey }) {
+  const seconds = useTick();
   const [max, setMax] = useState(seconds || 1);
   useEffect(() => { setMax(Math.max(1, seconds || 1)); /* เฟสใหม่ -> เริ่มนับเพดานใหม่ */ // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phaseKey]);
@@ -3446,7 +3737,8 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
   const [nanayaSel, setNanayaSel] = useState(false);  // นานายะ ชิกิ: โหมดเลือกเป้าหมาย อันนี้ของนายรึเปล่า (เลือกตัวเองไม่ได้)
   const [tpSel, setTpSel] = useState(false);          // เทเปา: โหมดเลือกเป้าหมาย นายเป็นคนทำตัวเองนะ (เลือกตัวเองไม่ได้)
   const [lumiIdolOpen, setLumiIdolOpen] = useState(false); // โปรดิวเซอร์: โมดัลเลือกไอดอล
-  const [brianKeyOpen, setBrianKeyOpen] = useState(false);   // ไบรอัน: หน้าต่างเลือก ดับเครื่อง/เพิ่มพลัง (กดกุญแจรถซ้ำ)
+  const [brianKeyOpen, setBrianKeyOpen] = useState(false);
+  const [kotarouOpen, setKotarouOpen] = useState(null); // เท็นโนจิ โคทาโร่: tier ที่กำลังเปิดหน้าจอเลือกอยู่   // ไบรอัน: หน้าต่างเลือก ดับเครื่อง/เพิ่มพลัง (กดกุญแจรถซ้ำ)
   const [brianSel, setBrianSel] = useState(false);           // ไบรอัน: โหมดเลือกเป้าหมายของ "การแข่งที่มีเดิมพัน"
   const [connorPredictOpen, setConnorPredictOpen] = useState(false); // คอนเนอร์: โมดัลวิเคราะห์สถานการณ์ (เลือกเป้าหมาย + เรียงลำดับ)
   const [supSel, setSupSel] = useState(null);                // ผู้วิงวอน: tier ที่กำลังรอจิ้มเป้าหมาย (ทั้งสามช่อง เลือกตัวเองได้)
@@ -3900,6 +4192,8 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
       if (me?.brianN2O) { socket.emit("useSkill", { tier: "ultimate" }); setSkillOpen(false); return; }
       setBrianSel(true); setSkillOpen(false); return;
     }
+    // เท็นโนจิ โคทาโร่: ทั้งสามช่องเป็นทางแยก ต้องเลือกจากหน้าจอก่อนเสมอ
+    if (ch?.id === "kotarou") { setKotarouOpen(tier); setSkillOpen(false); return; }
     // คอนเนอร์: สกิลพื้นฐานเปิดโมดัลคาดการณ์ (เลือกเป้าหมาย + เรียงลำดับในหน้าต่างเดียว)
     if (tier === "basic" && ch?.id === "conner") { setConnorPredictOpen(true); setSkillOpen(false); return; }
     if ((tier === "secondary" || tier === "ultimate") && ch?.id === "conner") { setConnorSel(tier); setSkillOpen(false); return; }
@@ -4041,6 +4335,11 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
     setLumiIdolOpen(false);
   };
   // ไบรอัน: เลือกดับเครื่อง/เพิ่มพลัง -> ส่ง item ไปกับสกิลพื้นฐาน
+  // เท็นโนจิ โคทาโร่: ตัวเลือกจากหน้าจอถูกส่งไปเป็น item ให้ canUseSkill/applyInstantSkill ฝั่ง server ตัดสิน
+  const pickKotarou = (choice) => {
+    socket.emit("useSkill", { tier: kotarouOpen, item: choice });
+    setKotarouOpen(null);
+  };
   const pickBrianKey = (mode) => {
     socket.emit("useSkill", { tier: "basic", item: mode });
     setBrianKeyOpen(false);
@@ -4218,6 +4517,9 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
     if (brianKeyOpen && (phase !== "PLAYING" || done)) setBrianKeyOpen(false);
   }, [brianKeyOpen, phase, done]);
   useEffect(() => {
+    if (kotarouOpen && (phase !== "PLAYING" || done)) setKotarouOpen(null);
+  }, [kotarouOpen, phase, done]);
+  useEffect(() => {
     // ช่องแรกของโปรดิวเซอร์ก็ไม่กินโควตาสกิลเช่นกัน — เช็คแค่เฟส/ล็อกมือ
     if (lumiIdolOpen && (phase !== "PLAYING" || done)) setLumiIdolOpen(false);
   }, [lumiIdolOpen, phase, done]);
@@ -4332,7 +4634,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
         <div className="shrink-0 flex flex-col items-center gap-1 pt-2 px-14 min-h-[40px]">
           {(phase === "PLAYING" || phase === "ATTACK") && (
             <div className="p-chip text-base font-bold text-white bg-black/55 px-5 py-1 border-b-2" style={{ borderColor: "var(--color-p-accent-bright)" }}>
-              <span>{state.oberonBg ? "🌑" : nightNow ? "🌙" : "☀️"} รอบที่ {state.roundNumber} · ⏱️ {state.timeLeft} วิ</span>
+              <span>{state.oberonBg ? "🌑" : nightNow ? "🌙" : "☀️"} รอบที่ {state.roundNumber} · ⏱️ <TickSeconds /> วิ</span>
             </div>
           )}
           {state.oberonBg && (
@@ -4744,7 +5046,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
         {drawCall > 0 && <DrawCall key={drawCall} />}
 
         {/* ---------- overlay ที่ใช้ร่วมกับจอคอม ---------- */}
-        <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} timeLeft={state.timeLeft} flash={flash} notice={notice} cycleFx={cycleFx} overloadForce={state.overloadForce} bylethCourse={state.bylethFieldFx} onOpenBylethCourse={() => setBylethInfoOpen(true)} />
+        <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} flash={flash} notice={notice} cycleFx={cycleFx} overloadForce={state.overloadForce} bylethCourse={state.bylethFieldFx} onOpenBylethCourse={() => setBylethInfoOpen(true)} />
         <FlyingCardsLayer flights={cardFlights} onDone={removeCardFlight} />
         {state.yunaFieldFx === "beatbark" && <div className="field-fx-beatbark" />}
         {state.bylethFieldFx && <div className={`field-fx-byleth-${state.bylethFieldFx}`} />}
@@ -4788,6 +5090,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
         />
         {lumiIdolOpen && me && <LumiIdolModal me={me} onPick={pickLumiIdol} onClose={() => { clickSound(); setLumiIdolOpen(false); }} />}
         {brianKeyOpen && me && <BrianKeyModal me={me} onPick={pickBrianKey} onClose={() => { clickSound(); setBrianKeyOpen(false); }} />}
+        {kotarouOpen && me && <KotarouModal me={me} tier={kotarouOpen} onPick={pickKotarou} onClose={() => { clickSound(); setKotarouOpen(null); }} />}
         {connorPredictOpen && me && <ConnorPredictModal me={me} players={state.players} onSubmit={submitConnorPredict} onClose={() => { clickSound(); setConnorPredictOpen(false); }} />}
         {yuiSongOpen && me && <YuiSongModal me={me} onPick={pickYuiSong} onClose={() => setYuiSongOpen(false)} />}
       </div>
@@ -4828,7 +5131,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
             <div className="av-label" style={{ fontSize: "0.64rem", letterSpacing: "0.34em" }}>รอบที่</div>
             <div className="av-title leading-none" style={{ fontSize: "2rem" }}>{state.roundNumber}</div>
           </div>
-          <BoardTimer seconds={state.timeLeft} phaseKey={`${phase}-${state.roundNumber}`} />
+          <BoardTimer phaseKey={`${phase}-${state.roundNumber}`} />
         </div>
       )}
       {/* ราตรีกลืนกิน: ป้ายค้างระหว่างฉากหลังโอเบรอนมีผล (จนกว่าจะหมดกลางคืน) */}
@@ -5045,18 +5348,35 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
                 whitespace-nowrap ทั้งหมด -> พอกดสกิลแล้วมีป้ายโผล่เพิ่ม (bylethNextDraw/หลักสูตร)
                 กลุ่มนี้กว้างขึ้นแต่ย่อไม่ได้ ดันกลุ่มขวาทะลุออกนอกกรอบ DESIGN_W ที่ overflow-hidden
                 = แถวล่างหักพัง ต้องปล่อยให้ย่อได้ (ไม่มี shrink-0) + min-w-0 ให้ flex-wrap ทำงานจริง */}
-            <div className="flex items-start gap-2 min-w-0">
-              <button
-                onClick={() => { clickSound(); setShowChar(true); }}
-                className="shrink-0"
-                style={{ "--p-frame-color": me.color }}
-                title="รายละเอียดตัวละคร"
-              >
-                {me.hisakawa ? <TwinPortraitCards p={me} size="md" /> : <Portrait p={me} className="w-24 h-24 sm:w-28 sm:h-28 rounded-full p-player-frame" rounded="rounded-full" />}
-              </button>
-              <div className="min-w-0">
+            <div className="self-panel flex items-start gap-2 min-w-0 mb-5 sm:mb-9">
+              {/* ผู้เล่นรู้อยู่แล้วว่าหยิบตัวไหนมา รูปจึงไม่ต้องกินช่องของตัวเองถึง 112px
+                  ปล่อยให้ซึมจางอยู่หลังแผงแทน — ยังเห็นตัวละคร แต่ที่ว่างคืนให้เลือด/เกราะ/สถานะ
+                  (ฝาแฝดฮิซากาวะยังใช้การ์ดคู่: ต้องแยกให้ออกว่านากิหรือฮายาเตะกำลังยืนหน้า) */}
+              {me.hisakawa ? (
+                <button
+                  onClick={() => { clickSound(); setShowChar(true); }}
+                  className="shrink-0"
+                  style={{ "--p-frame-color": me.color }}
+                  title="รายละเอียดตัวละคร"
+                >
+                  <TwinPortraitCards p={me} size="md" />
+                </button>
+              ) : (
+                <div className="self-bleed" aria-hidden="true" style={{ "--p-frame-color": me.color }}>
+                  <Portrait p={me} className="w-full h-full" rounded="" />
+                </div>
+              )}
+              <div className="self-content min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap min-w-0 max-w-[26rem]">
-                  <div className="font-black text-lg sm:text-xl text-hard truncate max-w-[9rem] sm:max-w-[12rem]" style={{ fontFamily: P_DISPLAY }}>{me.character.name}</div>
+                  <button
+                    type="button"
+                    onClick={() => { clickSound(); setShowChar(true); }}
+                    className="self-name font-black text-2xl sm:text-3xl text-hard truncate max-w-[13rem] sm:max-w-[18rem]"
+                    style={{ fontFamily: P_DISPLAY }}
+                    title="รายละเอียดตัวละคร"
+                  >
+                    {me.character.name}
+                  </button>
                   <TeamBadge teamId={me.teamId} />
                   <DoomChargeBadge me={me} ch={ch} />
                   <TakutoStarBadge me={me} ch={ch} />
@@ -5070,27 +5390,21 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
                 {isEiji && <EijiOrdinalButton me={me} usable={eijiOrdinalUsable} onPress={useEijiOrdinal} className="w-14 h-11 shrink-0 mt-1" />}
                 {me.hisakawa ? (
                   <TwinVitals p={me} />
-                ) : me.maxHp == null ? (
-                  // ทาคุมิ ฟุจิวาระ: ถึงจะมองไม่เห็น แต่ฉันยังอยู่ ทำงานอยู่ — HP/เกราะ/โล่ถูกซ่อนแม้ของตัวเอง
-                  <div className="text-lg sm:text-xl font-black text-hard opacity-80 mt-1.5" title="ถูกซ่อน (ถึงจะมองไม่เห็น แต่ฉันยังอยู่)">🌑 ???</div>
                 ) : (
-                  <>
-                    <div className="flex items-center gap-1 text-xl sm:text-2xl leading-none text-hard mt-1.5">
-                      {Array.from({ length: me.maxHp }, (_, i) => (i < me.hp ? "❤️" : "🖤")).join("")}
-                      {me.tempHp > 0 && <span className="text-xs text-echo-gold font-bold ml-1">💛{me.tempHp}</span>}
-                    </div>
-                    <div className="flex items-center gap-1 mt-1.5">
-                      {Array.from({ length: me.maxArmor }, (_, i) => <Shield key={i} on={i < me.armor} size={22} />)}
-                      {me.shield > 0 && <span className="text-xs text-echo-cyan font-bold ml-1">+🛡️{me.shield}</span>}
-                    </div>
-                  </>
+                  // ใช้แถวไอคอน+ตัวเลขชุดเดียวกับการ์ดคู่ต่อสู้ — เลือดกับเกราะแยกออกจากกันได้
+                  //  ด้วยไอคอน ตัวเลข และรูปทรงช่อง ไม่ต้องอาศัยสีอย่างเดียวเหมือนเกจแบบก่อน
+                  <div className="self-vitals mt-1.5">
+                    <StatRow big kind="hp" value={me.hp} max={me.maxHp} extra={me.tempHp || 0} extraLabel="เลือดชั่วคราว" />
+                    <StatRow big kind="ar" value={me.armor} max={me.maxArmor} extra={me.supFaith || 0} extraLabel="เกราะศรัทธา" />
+                    <VitalExtras p={me} className="pc-extra-inline" />
+                  </div>
                 )}
                 {/* สถานะ — ไอคอนเห็นได้เลยไม่ต้องกดดู (กฎข้อ 1) กดเพื่อดูรายละเอียด+เวลาคงเหลือเต็ม
                     จำกัดไม่เกิน 2 แถวเสมอ (max-h + clip) ห้ามขยายสูงขึ้นไปดันของอย่างอื่น — เยอะกว่านั้นให้กดดูเพิ่มเอา */}
                 <button
                   type="button"
                   onClick={() => { clickSound(); setStatusViewId(me.id); }}
-                  className="p-status-click flex items-start mt-2 -ml-1 px-1 py-0.5 max-w-[11rem] sm:max-w-[15rem] max-h-[54px] overflow-hidden"
+                  className="p-status-click flex items-start mt-2.5 -ml-1 px-1 py-0.5 max-w-[19rem] sm:max-w-[30rem] max-h-[64px] overflow-hidden"
                   title="แตะเพื่อดูรายละเอียดสถานะ+เวลาคงเหลือ"
                 >
                   {me.hisakawa ? <span className="text-xs opacity-60 text-hard whitespace-nowrap">แตะดูสถานะรวม</span>
@@ -5260,7 +5574,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
       {drawCall > 0 && <DrawCall key={drawCall} />}
 
       {/* ---------- overlay ที่ใช้ร่วมกับมือถือ ---------- */}
-      <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} timeLeft={state.timeLeft} flash={flash} notice={notice} cycleFx={cycleFx} overloadForce={state.overloadForce} bylethCourse={state.bylethFieldFx} onOpenBylethCourse={() => setBylethInfoOpen(true)} />
+      <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} flash={flash} notice={notice} cycleFx={cycleFx} overloadForce={state.overloadForce} bylethCourse={state.bylethFieldFx} onOpenBylethCourse={() => setBylethInfoOpen(true)} />
       <FlyingCardsLayer flights={cardFlights} onDone={removeCardFlight} />
       {state.yunaFieldFx === "beatbark" && <div className="field-fx-beatbark" />}
       {state.bylethFieldFx && <div className={`field-fx-byleth-${state.bylethFieldFx}`} />}

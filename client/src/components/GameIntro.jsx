@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { AvScene } from "./avalon";
 
-function IntroPortrait({ p, className, style }) {
+function IntroPortrait({ p, className, style, bare = false }) {
   const [broken, setBroken] = useState(false);
   const introImg = p.character?.img || p.img;
   return (
-    <div className={`relative overflow-hidden ${className}`} style={{ background: `linear-gradient(150deg, ${p.color}, var(--av-void))`, ...style }}>
+    <div
+      className={`relative overflow-hidden ${className}`}
+      style={bare ? style : { background: `linear-gradient(150deg, ${p.color}, var(--av-void))`, ...style }}
+    >
       {introImg && !broken ? (
         <img src={introImg} alt="" className="absolute inset-0 w-full h-full object-cover" onError={() => setBroken(true)} />
       ) : (
@@ -17,13 +20,20 @@ function IntroPortrait({ p, className, style }) {
   );
 }
 
+const EMBERS = Array.from({ length: 26 }, () => ({
+  x: Math.random() * 100,
+  s: 2 + Math.random() * 4,
+  d: Math.random() * 2.4,
+  t: 2.6 + Math.random() * 2.4,
+}));
+
 export default function GameIntro({ players, onDone }) {
   const ordered = useMemo(() => [...players].sort((a, b) => a.position - b.position), [players]);
   const [index, setIndex] = useState(-1);
   const [outro, setOutro] = useState(false);
 
   const perMs = Math.max(620, Math.min(1000, Math.round(4200 / Math.max(1, ordered.length))));
-  const finaleMs = 1800;
+  const finaleMs = 2900;
 
   useEffect(() => {
     const timers = [];
@@ -101,33 +111,92 @@ export default function GameIntro({ players, onDone }) {
       {outro && <span className="av-reveal-bloom" />}
 
       {isLineup && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-12 px-10">
-          <span className="av-intro-halo" />
-          <div className="av-title av-title-thai av-unfurl text-6xl" style={{ animationDuration: "0.9s" }}>
-            เริ่มการประลอง
-          </div>
-          <div className="flex flex-wrap justify-center gap-8 max-w-6xl">
-            {ordered.map((p, i) => (
-              <div
-                key={p.id}
-                className={`flex flex-col items-center gap-3 ${outro ? "av-lineup-out" : "av-lineup-item"}`}
-                style={{
-                  animationDelay: outro ? `${i * 0.03}s` : `${i * 0.08}s`,
-                  "--ox": `${(i - (ordered.length - 1) / 2) * 26}vw`,
-                  "--oy": `${-18 - (i % 2) * 14}vh`,
-                }}
-              >
-                <div className="relative" style={{ transform: `rotate(${(i % 2 ? 1 : -1) * 2.5}deg)` }}>
-                  <span
-                    className="av-portrait-plate"
-                    style={{ background: `linear-gradient(135deg, var(--av-gold-mid), ${p.color} 50%, var(--av-royal))` }}
-                  />
-                  <IntroPortrait p={p} className="w-28 h-36 rounded-lg" />
+        <div className={`gi-finale absolute inset-0 overflow-hidden${outro ? " gi-finale-out" : ""}`}>
+          {/* ลำแสงแผ่จากศูนย์กลาง — พื้นของฉากทั้งหมด */}
+          <span className="gi-rays" aria-hidden="true" />
+
+          {/* ตราพิธีวาดตัวเอง: วงนอกหมุนตามเข็ม วงในหมุนสวน เส้นถูกวาดด้วย stroke-dashoffset */}
+          <svg className="gi-sigil" viewBox="0 0 400 400" aria-hidden="true">
+            <g className="gi-sigil-spin">
+              <circle className="gi-draw gi-draw-1" cx="200" cy="200" r="186" />
+              <circle className="gi-ring-dash" cx="200" cy="200" r="172" />
+            </g>
+            <g className="gi-sigil-spin-rev">
+              <circle className="gi-draw gi-draw-2" cx="200" cy="200" r="132" />
+              <path className="gi-draw gi-draw-3" d="M200 74 309 263 91 263Z" />
+              <path className="gi-draw gi-draw-4" d="M200 326 91 137 309 137Z" />
+              {[0, 60, 120, 180, 240, 300].map((deg) => (
+                <path
+                  key={deg}
+                  className="gi-rune"
+                  d="M200 44 L208 56 200 68 192 56Z"
+                  transform={`rotate(${deg} 200 200)`}
+                />
+              ))}
+            </g>
+          </svg>
+
+          {/* แถวผู้ท้าชิง: ครึ่งตัวเรียงเป็นส่วนโค้ง ขอบละลายด้วย mask จึงไม่เป็นกล่องสักใบ */}
+          <div className="gi-stage">
+            {ordered.map((p, i) => {
+              const n = ordered.length;
+              const off = n === 1 ? 0 : i / (n - 1) - 0.5;
+              const depth = 1 - Math.abs(off) * 0.82;
+              return (
+                <div
+                  key={p.id}
+                  className="gi-bust"
+                  style={{
+                    left: `calc(50% + ${off * 74}%)`,
+                    zIndex: 10 + Math.round(depth * 40),
+                    "--d": depth.toFixed(3),
+                    "--tilt": `${off * 7}deg`,
+                    "--lift": `${(0.5 - Math.abs(off)) * 7}vh`,
+                    animationDelay: `${0.42 + Math.abs(off) * 0.55}s`,
+                  }}
+                >
+                  <span className="gi-beam" style={{ background: `linear-gradient(180deg, transparent, ${p.color}66 46%, transparent)` }} />
+                  <span className="gi-ghost-no">{p.position}</span>
+                  <span className="gi-bust-img">
+                    <IntroPortrait bare p={p} className="w-full h-full" />
+                  </span>
+                  <span className="gi-bust-name" style={{ "--pc": p.color }}>{p.name}</span>
                 </div>
-                <span className="av-chip av-chip-gold">P{p.position}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
+
+          {/* คมดาบฟาดผ่านจอ แล้วคลื่นกระแทกแผ่ออกพร้อมชื่อฉาก */}
+          <span className="gi-slash" aria-hidden="true" />
+          <span className="gi-shock" aria-hidden="true" />
+
+          <div className="gi-title-wrap">
+            <svg className="gi-wing gi-wing-l" viewBox="0 0 120 26" aria-hidden="true">
+              <path d="M118 13 H46" />
+              <path d="M46 13 32 5" />
+              <path d="M46 13 32 21" />
+              <path d="M28 13 6 13" />
+              <path d="M20 13 14 7 8 13 14 19Z" className="gi-wing-gem" />
+            </svg>
+            <div className="gi-title">เริ่มการประลอง</div>
+            <svg className="gi-wing gi-wing-r" viewBox="0 0 120 26" aria-hidden="true">
+              <path d="M2 13 H74" />
+              <path d="M74 13 88 5" />
+              <path d="M74 13 88 21" />
+              <path d="M92 13 114 13" />
+              <path d="M100 13 106 7 112 13 106 19Z" className="gi-wing-gem" />
+            </svg>
+          </div>
+          <div className="gi-sub">ผู้ท้าชิง {ordered.length} คน ณ สนามประลองอาวาลอน</div>
+
+          {/* ประกายทองลอยขึ้น */}
+          {EMBERS.map((e, i) => (
+            <span
+              key={i}
+              className="gi-ember"
+              style={{ left: `${e.x}%`, width: e.s, height: e.s, animationDelay: `${e.d}s`, animationDuration: `${e.t}s` }}
+            />
+          ))}
         </div>
       )}
     </AvScene>

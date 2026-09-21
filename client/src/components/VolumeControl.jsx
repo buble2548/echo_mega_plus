@@ -1,10 +1,13 @@
-import { useState } from "react";
-import { getMasterVolume, setMasterVolume, clickSound } from "../audio";
+import { useEffect, useState } from "react";
+import { getMasterVolume, setMasterVolume, onVolumeChange, clickSound } from "../audio";
 import { AvButton } from "./avalon";
 
 export default function VolumeControl() {
   const [open, setOpen] = useState(false);
   const [vol, setVol] = useState(getMasterVolume());
+
+  // ค่าหลอดอาจถูกเปลี่ยนจากที่อื่น (หรือคืนค่าจาก localStorage) — ต้องตามให้ทัน
+  useEffect(() => onVolumeChange(setVol), []);
 
   const change = (v) => { setVol(v); setMasterVolume(v); };
   const icon = vol === 0 ? "🔇" : vol < 0.5 ? "🔉" : "🔊";

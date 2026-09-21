@@ -15,7 +15,8 @@ const brianImg = require("./brian").IMG;   // ไบรอัน (GT-R34): เ�
 const lumiChar = require("./producer_lumi"); // โปรดิวเซอร์ (luminous): เหตุผลเดียวกัน
 const muimiImg = require("./muimi").IMG;   // มุยมิ: ใช้ path รูปจาก hook กลาง
 const cayChar = require("./cayenne");
-const daichiChar = require("./daichi");     // ไดจิ โอโซระ: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร      // คาเยนน์ ซูซูชิโระ: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร
+const daichiChar = require("./daichi");
+const kotarouChar = require("./kotarou"); // เท็นโนจิ โคทาโร่: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร     // ไดจิ โอโซระ: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร      // คาเยนน์ ซูซูชิโระ: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร
 const BAT_CAR_IMG = "/characters/bat_ben/bat_update/bat_ben_car.webp";
 const BAT_SHOT_IMG = "/characters/bat_ben/bat_update/skill1.2/bat_ben_skill1.2.jpg";
 const BAT_GUN_IMG = "/characters/bat_ben/bat_update/skill2.2/bat_ben_skill2.2.png";
@@ -23,6 +24,12 @@ const BAT_DOOM_IMG = "/characters/bat_ben/bat_update/skill3.2/bat_ben_skill3.2.p
 
 module.exports = function buildTransforms(img) {
   return {
+    // ---------- เท็นโนจิ โคทาโร่ (patch 4.1 new) ----------
+    //  ทุกคลิปคิวเองจากโค้ด จึงต้อง afterReveal: false (ไม่งั้นลูปกลางใน afterResolve() จะไล่หาสถานะชื่อเดียวกับคีย์แล้วเล่นซ้ำ)
+    //  เพลง kotarou_theme มาจาก activeMusic ของตัวละคร (คลอตลอดเทิร์นที่ย้อนมา) ไม่ใช่ฟิลด์ music ตรงนี้
+    kotarouRewind:       { img: kotarouChar.IMG.skill3, video: kotarouChar.VIDEO.rewind,        title: "กลับไปแก้ไข", label: "เขียนทับ/เริ่มใหม่", seconds: 16, music: null, afterReveal: false },
+    kotarouOverdrive:    { img: kotarouChar.IMG.skill3, video: kotarouChar.VIDEO.overdrive,     title: "ทุ่มสุดตัว",   label: "เขียนทับ/เริ่มใหม่", seconds: 3,  music: null, afterReveal: false, noIntro: true },
+    kotarouOverdriveLast:{ img: kotarouChar.IMG.skill3, video: kotarouChar.VIDEO.overdriveLast, title: "ทุ่มสุดตัว",   label: "ครั้งสุดท้าย",       seconds: 4,  music: null, afterReveal: false, noIntro: true },
     // มุยมิ: ครั้งแรกเล่นคลิปเต็ม 23.803 วิ ครั้งถัดไปเล่นคลิปสั้น 11.078 วิ
     // ปัดขึ้นเผื่อเวลาตัดฉากเพื่อให้วิดีโอเล่นจบครบ และ queueCutscene ทำให้เล่นทุกครั้งที่กด
     muimiUltimateFull:  { img: muimiImg.skill3, video: "/characters/muimi/muimi_skill3.mp4",       title: "ดาบสะบั้นหอคอยสวรรค์", label: "ปล่อยท่าไม้ตาย", seconds: 24, music: "muimi", afterReveal: false },

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { publishTick } from "./tickStore";
 import { socket } from "./socket";
-import { playMusic, playSfx, stopMusic, resetMusicPositions, DOOM_WEAPON_SOUNDS } from "./audio";
+import { playMusic, playSfx, stopMusic, resetMusicPositions, prewarmSfx, DOOM_WEAPON_SOUNDS } from "./audio";
 import { musicForState, createPhaseSoundTracker } from "./audioPolicy";
 import Splash from "./screens/Splash";
 import Setup from "./screens/Setup";
@@ -28,6 +29,9 @@ function saveSessionToken(token) {
 export default function App() {
   const [stage, setStage] = useState("splash"); // splash | setup | character | connected
   const [state, setState] = useState(null);
+
+  // เสียงที่ดังบ่อยที่สุดในเกม: โหลดไว้ตั้งแต่เปิดหน้า ไม่ให้ไปสะดุดกลางแมตช์
+  useEffect(() => { prewarmSfx(["action_button", "change_cutscene", "trun_change", "buy_something", "sc_noti", "sc_noti2", "sc_glitch"]); }, []);
   const curtainRef = useRef(null); // ม่านเปลี่ยนฉาก — ควบคุมจังหวะปิด/เปิดจอตอนสลับหน้า
   // กันดับเบิ้ลคลิก/กดรัวบนปุ่มนำทาง (ถัดไป/ยืนยัน/ย้อนกลับ) ไม่ให้ยิงคำสั่งเปลี่ยนฉากซ้อนกัน
   const navLockRef = useRef(false);
@@ -92,11 +96,14 @@ export default function App() {
         setShowIntro(true);
       }
       prevGameStateRef.current = s.gameState;
-      setState(s);
+      publishTick(s.timeLeft);
+      // timeLeft ไม่เก็บใน state: ดู tickStore.js
+      const { timeLeft: _tick, ...rest } = s;
+      setState(rest);
     };
     // ตัวเลขนับถอยหลังรายวินาที: server ส่งมาแค่ตัวเลข (ไม่ใช่ state ตัวเต็ม) เพื่อประหยัด bandwidth
-    //  -> แปะทับลงใน state ก้อนเดิม จอที่อ่าน state.timeLeft อยู่แล้วทำงานเหมือนเดิมทุกจุด
-    const onTick = (t) => setState((s) => (s && s.timeLeft !== t ? { ...s, timeLeft: t } : s));
+    //  -> ส่งเข้า store แยก ไม่แตะ state ก้อนกระดาน จอจึงไม่ต้อง reconcile ใหม่ทุกวินาที
+    const onTick = (t) => publishTick(t);
     const onRoster = (r) => setRoster(r);
     const onPositions = (t) => setTaken(t);
     const onTakenChars = (list) => setTakenChars(Array.isArray(list) ? list : []);
