@@ -246,9 +246,12 @@ module.exports = {
     const price = priceOfEntry(entry);
     list.splice(idx, 1); // ไอเทมถูกเผาทิ้ง ไม่ว่าอาวุธจะออกมาแรงแค่ไหน
 
-    engine.dealDirect(p, TRANSMUTE_HP_COST); // ราคาของการเขียนทับคือเลือดตัวเอง เสมอ
+    // ราคาที่ตัวเองจ่ายต้องจ่ายจริงเสมอ — ไม่งั้นด่านหลบหลีกของเขาเองจะกินมันไป (หลอมฟรีได้ถึง 30%)
+    p._statusDamage = true;
+    engine.dealDirect(p, TRANSMUTE_HP_COST);
+    p._statusDamage = false;
     if (kind === "sword") {
-      const dmg = Math.min(SWORD_DMG_MAX, price);
+      const dmg = Math.max(1, Math.min(SWORD_DMG_MAX, price));
       p.kotarouWeapon = { kind: "sword", price, dmg };
       engine.log(`🗡️ ${p.name} แปรเปลี่ยน · ดาบแห่งจิตใจ — หลอมของราคา ${price} เหรียญ ได้ดาบพลัง ${dmg} หน่วย (เสียพลังชีวิต ${TRANSMUTE_HP_COST})`);
     } else {
@@ -403,9 +406,10 @@ module.exports = {
   // ============================================================
   //  สกิลติดตัว 2 — ฟื้นคืนชีพ (1 ครั้งต่อเกม) โดยเล่นเทิร์นนั้นใหม่
   // ============================================================
+  //  แค่ "จอง" ไว้เฉยๆ ยังไม่กินโควตา — ถ้ามีคนอื่นชุบเขาก่อน (Longing ของยูนะ) สิทธิ์นี้ต้องยังอยู่
+  //  โควตาถูกกินตอนที่ย้อนเทิร์นจริงเท่านั้น (ดู endTurn ใน server.js)
   onDeath(engine, p) {
-    if (!isKotarou(p) || p.kotarouRevived) return false;
-    p.kotarouRevived = true;
+    if (!isKotarou(p) || p.kotarouRevived || p.kotarouRevivePending) return false;
     p.kotarouRevivePending = true;
     engine.log(`💫 ${p.name} rewrite — ร่างที่ถูกเขียนทับไม่ยอมจบลงตรงนี้ เทิร์นนี้จะถูกเล่นใหม่`);
     return true;

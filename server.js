@@ -788,6 +788,10 @@ let attackerId = null;
 let roundWinnerId = null;
 let roundTiedWin = false;  // ผู้ชนะได้จากการเสมอแต้ม -> ไม่มีเทิร์นโจมตีรอบนี้
 let doomTieAttack = false; // DoomGuy สกิลติดตัว: เสมอแต้มแล้วโรลติด -> ได้เป็นผู้ชนะและได้โจมตีรอบนี้
+// เท็นโนจิ โคทาโร่ — ตาข่ายกันลูป: ไม่ว่าจะเกิดจากทางไหน เทิร์นเดียวต้องย้อนได้ไม่เกินจำนวนนี้
+//  (ปกติย้อนได้แค่ 2 ครั้งอยู่แล้วก่อนหนี้เลือดจะฆ่าเขา — เกินกว่านี้แปลว่ามีอะไรผิดปกติ)
+const KOTAROU_REWIND_MAX_PER_ROUND = 3;
+let kotarouRewindsThisRound = 0;
 let overloadForceActive = false; // สนามพิเศษมีผลเฉพาะเทิร์นที่สุ่มติด
 let overloadForceSeq = 0;        // เริ่มวิดีโอและเพลงใหม่ทุกครั้งที่เกิด
 let overloadForceCount = 0;      // ครั้งที่เกิดในแมตช์
@@ -3053,7 +3057,6 @@ function dealRound() {
     p.shield = 0;
     p.skillUsedRound = false; // เทิร์นใหม่ ใช้สกิลได้อีก 1 อัน
     CHAR_HOOKS.kotarou.onRoundStart(engine, p);
-    CHAR_HOOKS.kotarou.collectDebt(engine, p); // ราคาของ "กลับไปแก้ไข" ถูกเก็บตอนขึ้นเทิร์นใหม่ (ทบได้ = ตายได้)
     // DoomGuy (patch 2.2 full): Quick Swap ใช้ได้อีก 1 ครั้งต่อเทิร์น
     if (p.characterId === "doomguy") p.doomQuickSwapUsed = false;
     if ((p.wouGuardCd || 0) > 0) p.wouGuardCd--; // ซาโตรุ (patch 2.0.8.3): คูลดาวน์ลบล้างลดลงทุกต้นเทิร์น (2 เทิร์นต่อการใช้)
@@ -3312,8 +3315,12 @@ function dealRound() {
     lastLog.push(night ? "🌙 ราตรีมาเยือน — สุ่มสกิลพื้นฐาน/สกิลรองแพงขึ้น +1 ทุกเทิร์น" : "☀️ ฟ้าสางแล้ว — จบเทิร์นได้แต้มสกิลเพิ่ม +1");
   }
 
+  kotarouRewindsThisRound = 0; // ตัวนับกันลูปของโคทาโร่ เริ่มใหม่ทุกเทิร์นจริง
   captureTurnSnapshot(); // จุดย้อนเวลาของเทิร์นนี้ (เอฟเฟกต์ต้นเทิร์นทำงานครบแล้ว ยังไม่มีใครกดอะไร)
   pushSnapshotHistory();  // เก็บใบเดียวกันเข้าประวัติย้อนหลัง 6 เทิร์น (ท่าไม้ตายของชิโดย้อนกลับไปหยิบ)
+  // เท็นโนจิ โคทาโร่: ราคาของ "กลับไปแก้ไข" ถูกเก็บตอนขึ้นเทิร์นใหม่ (ทบได้ = ตายได้)
+  //  ต้องอยู่ "หลัง" จุดย้อนเวลาเสมอ ไม่งั้นการฟื้นคืนชีพจะย้อนกลับไปเจอเขาในสภาพที่ตายไปแล้ว
+  for (const p of Object.values(players)) CHAR_HOOKS.kotarou.collectDebt(engine, p);
   gameState = "PLAYING";
   startPhaseTimer(cardPhaseSeconds(), resolveRound);
   if (cutsceneQueue.length) { pausePlayingForCutscene(); return; }
@@ -4386,7 +4393,7 @@ function clearTurnSnapshot() { turnSnapshot = null; clearSnapshotHistory(); }
 
 // skipId = ผู้เล่นที่ "ห้ามย้อน" (เท็นโนจิ โคทาโร่: กลับไปแก้ไข ย้อนทั้งสนามยกเว้นตัวเอง
 //  ไม่งั้นแต้มสกิล/ไอเทม/เลือดที่จ่ายไปจะถูกคืนมาหมด = กดท่านี้ฟรีไม่รู้จบ)
-function restoreTurnSnapshot(skipId) {
+function restoreTurnSnapshot(skipId, keepOncePerGame) {
   const snap = turnSnapshot;
   turnSnapshot = null;
   if (!snap) return false;
@@ -4402,6 +4409,10 @@ function restoreTurnSnapshot(skipId) {
     for (const k of Object.keys(live)) delete live[k];
     Object.assign(live, structuredClone(saved), keep);
   }
+  // ธง "ใช้ไปแล้ว" ของยูนะเป็นสิทธิ์ครั้งเดียวต่อเกม — การย้อนเทิร์นในเทิร์นเดียวกันต้องไม่คืนให้
+  //  ไม่งั้นเกิดลูป: โคทาโร่ตาย -> Longing ชุบ -> ย้อนเทิร์น -> ธงถูกคืน -> ตาย -> Longing ชุบอีก วนไม่จบ
+  //  (ท่าไม้ตายของชิโดย้อนไป 5 เทิร์นผ่าน applySnapshot คนละทาง จึงยังคืนได้ตามเดิม)
+  const keepYuna = keepOncePerGame ? { yunaLongingUsed, yunaPity } : null;
   roundSkills = snap.roundSkills;
   shopItems = snap.shopItems;
   kaiOverhaulSlots = snap.kaiOverhaulSlots;
@@ -4409,6 +4420,11 @@ function restoreTurnSnapshot(skipId) {
     cycleShift, nightResetPending, oberonDevour, dayForceUntil, transformCounter,
     yunaLongingUsed, yunaWindowEnd, yunaEffect, yunaTargetId, yunaLongingPendingId, yunaPity,
   } = snap.g);
+  if (keepYuna) {
+    yunaLongingUsed = keepYuna.yunaLongingUsed || yunaLongingUsed;
+    yunaPity = keepYuna.yunaPity;
+    yunaLongingPendingId = null; // คิวชุบที่ค้างอยู่เป็นของ "อนาคตที่ถูกลบทิ้ง" แล้ว
+  }
   lastAttack = null;
   return true;
 }
@@ -4489,7 +4505,12 @@ function beginKotarouRewindDraw() {
 }
 
 function triggerKotarouRewind(p) {
-  restoreTurnSnapshot(p.id); // ย้อนทั้งสนาม ยกเว้นตัวโคทาโร่เอง
+  if (kotarouRewindsThisRound >= KOTAROU_REWIND_MAX_PER_ROUND) {
+    lastLog.push(`⏪ ${p.name} เขียนทับซ้ำเกินกว่าที่เทิร์นเดียวจะรับไหว — เวลาเดินหน้าต่อ`);
+    return false;
+  }
+  kotarouRewindsThisRound++;
+  restoreTurnSnapshot(p.id, true); // ย้อนทั้งสนาม ยกเว้นตัวโคทาโร่เอง และไม่คืนสิทธิ์ครั้งเดียวต่อเกมของคนอื่น
   queueCutscene(p, "kotarouRewind");
   CHAR_HOOKS.kotarou.onRewound(engine, p);
   runCutsceneQueue(beginKotarouRewindDraw);
@@ -4896,7 +4917,7 @@ function afterSummary() {
   //  ต้องอยู่ตรงนี้: รู้ผู้ชนะแล้ว แต่ยังไม่เข้าเฟสโจมตี ตรงตามสเปก "จะยังไม่เริ่ม phase โจมตี แต่จะย้อนเทิร์น"
   {
     const rewinder = CHAR_HOOKS.kotarou.rewindCandidate(engine, roundWinnerId);
-    if (rewinder) { triggerKotarouRewind(rewinder); return; }
+    if (rewinder && triggerKotarouRewind(rewinder)) return;
   }
   // ไบรอัน (สกิลรอง หลีกทางไป): พุ่งชนคนที่แต้มสูงสุดที่มากกว่าเรา — วีดีโอก่อน แล้วค่อยลงความเสียหาย
   //  ทำที่นี่ (หลังรู้แต้มทุกคนแล้ว ก่อนเข้าเฟสโจมตี) เพราะเงื่อนไขคือ "คนที่แต้มมากกว่าเรา"
@@ -5974,14 +5995,23 @@ function endTurn() {
     const reviving = CHAR_HOOKS.kotarou.reviveTarget(engine);
     if (reviving) {
       reviving.kotarouRevivePending = false;
-      if (restoreTurnSnapshot()) {
+      // มีคนอื่นชุบเขากลับมาก่อนแล้ว (Longing ของยูนะทำงานก่อนจุดนี้) — ไม่ต้องย้อนทับ
+      //  และห้ามกินโควตาฟื้นคืนชีพของเขาไปฟรีๆ ด้วย
+      if (reviving.alive) {
+        lastLog.push(`💫 ${reviving.name} ถูกชุบกลับมาก่อนแล้ว — rewrite ยังเก็บสิทธิ์ฟื้นคืนชีพไว้ใช้ครั้งหน้า`);
+      } else if (kotarouRewindsThisRound >= KOTAROU_REWIND_MAX_PER_ROUND) {
+        lastLog.push(`💫 ${reviving.name} เทิร์นนี้ถูกเขียนใหม่มามากพอแล้ว — การฟื้นคืนชีพไม่ทำงาน`);
+      } else if (restoreTurnSnapshot(null, true)) {
+        kotarouRewindsThisRound++;
         reviving.kotarouRevived = true;        // ย้อนแล้วธง "ใช้ไปแล้ว" ต้องไม่ถูกย้อนตาม ไม่งั้นฟื้นได้ไม่จำกัด
+        reviving.kotarouDebt = 0;              // ย้อนกลับมาพร้อมหนี้เดิม = ตายซ้ำทันทีที่ขึ้นเทิร์น ฟื้นไปก็ไร้ความหมาย
         reviving.kotarouThemeRound = roundNumber;
         lastLog.push(`💫 ${reviving.name} rewrite — เทิร์นนี้ถูกเขียนใหม่ทั้งเทิร์น เขายังไม่จบลงตรงนี้`);
         beginKotarouRewindDraw();
         return;
+      } else {
+        lastLog.push(`💫 ${reviving.name} rewrite — ไม่มีจุดย้อนให้กลับไป การฟื้นคืนชีพล้มเหลว`);
       }
-      lastLog.push(`💫 ${reviving.name} rewrite — ไม่มีจุดย้อนให้กลับไป การฟื้นคืนชีพล้มเหลว`);
     }
 
     const stillAlive = alivePlayers();

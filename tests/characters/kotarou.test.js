@@ -269,8 +269,34 @@ test('ฟื้นคืนชีพทำงานครั้งเดีย�
   const { K } = setup();
   assert.equal(kotarou.onDeath(engine, K), true);
   assert.equal(kotarou.revivePending(engine), true);
-  K.kotarouRevivePending = false; // จำลองว่า endTurn ย้อนเทิร์นไปแล้ว
+  // endTurn ย้อนเทิร์นจริง = ตรงนั้นแหละที่โควตาถูกกิน
+  K.kotarouRevivePending = false;
+  K.kotarouRevived = true;
   assert.equal(kotarou.onDeath(engine, K), false, 'ครั้งที่สองต้องไม่ทำงาน');
+});
+
+// ยูนะ (Longing) ชุบเขากลับมาก่อนที่ endTurn จะถึงคิวย้อนเทิร์น — สิทธิ์ของ rewrite ต้องไม่ถูกกินไปฟรีๆ
+test('onDeath แค่จองสิทธิ์ ยังไม่กินโควตา — คนอื่นชุบก่อนแล้วสิทธิ์ต้องยังอยู่', () => {
+  const { K } = setup();
+  kotarou.onDeath(engine, K);
+  assert.equal(K.kotarouRevived, false, 'ตอนตายยังไม่ควรกินโควตา');
+
+  // จำลองว่ามีคนชุบให้ก่อน แล้ว endTurn เคลียร์ธงทิ้งโดยไม่ย้อน
+  K.alive = true;
+  K.kotarouRevivePending = false;
+  assert.equal(K.kotarouRevived, false, 'ถูกชุบด้วยวิธีอื่นแล้ว สิทธิ์ต้องยังอยู่');
+  assert.equal(kotarou.onDeath(engine, K), true, 'ตายครั้งต่อไปยังต้องจองได้');
+});
+
+// หนี้เลือดถูกเก็บ "หลัง" จุดย้อนเวลาเสมอ ไม่งั้นย้อนกลับไปจะเจอเขาในสภาพที่ตายไปแล้ว
+test('ลำดับใน dealRound: เก็บหนี้เลือดหลัง captureTurnSnapshot()', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', 'server.js'), 'utf8');
+  const snapAt = src.indexOf('captureTurnSnapshot(); // จุดย้อนเวลาของเทิร์นนี้');
+  const debtAt = src.indexOf('CHAR_HOOKS.kotarou.collectDebt(engine, p)');
+  assert.ok(snapAt > 0 && debtAt > 0, 'หาจุดอ้างอิงใน server.js ไม่เจอ');
+  assert.ok(debtAt > snapAt, 'เก็บหนี้เลือดก่อนบันทึกจุดย้อนเวลา = ฟื้นคืนชีพย้อนกลับไปเจอศพ');
 });
 
 // ---------------------------------------------------------------- ด่านกดสกิล
@@ -311,4 +337,74 @@ test('เพลงประจำตัวดังเฉพาะเทิร�
   assert.deepEqual(kotarou.activeMusic(engine), { music: kotarou.THEME_MUSIC, at: engine.roundNumber });
   engine.setRoundNumber(engine.roundNumber + 1);
   assert.equal(kotarou.activeMusic(engine), null, 'ขึ้นเทิร์นใหม่แล้วต้องกลับไปเพลงปกติ');
+});
+
+// ---------------------------------------------------------------- กันลูปเวลาเจอยูนะ
+// โคทาโร่ตาย -> Longing ชุบ -> ย้อนเทิร์น -> ถ้าสแนปช็อตคืนธง "ใช้ไปแล้ว" ของยูนะ
+// เขาก็ตายแล้วถูกชุบใหม่วนไม่จบ · การย้อนในเทิร์นเดียวกันต้องไม่คืนสิทธิ์ครั้งเดียวต่อเกมของใคร
+test('ย้อนเทิร์นต้องไม่คืนสิทธิ์ Longing ของยูนะ และมีเพดานกันลูป', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', 'server.js'), 'utf8');
+
+  assert.match(src, /restoreTurnSnapshot\(p\.id, true\)/, 'ท่าไม้ตายต้องขอเก็บธงครั้งเดียวต่อเกมไว้');
+  assert.match(src, /restoreTurnSnapshot\(null, true\)/, 'การฟื้นคืนชีพต้องขอเก็บธงครั้งเดียวต่อเกมไว้');
+  assert.match(src, /keepOncePerGame \? \{ yunaLongingUsed, yunaPity \}/, 'ต้องกันธงของยูนะไม่ให้ถูกย้อน');
+
+  const cap = /const KOTAROU_REWIND_MAX_PER_ROUND = (\d+);/.exec(src);
+  assert.ok(cap, 'ต้องมีเพดานจำนวนครั้งที่ย้อนได้ต่อเทิร์น');
+  assert.ok(Number(cap[1]) >= 2 && Number(cap[1]) <= 5, `เพดาน ${cap && cap[1]} ครั้งไม่สมเหตุสมผล`);
+  assert.match(src, /kotarouRewindsThisRound = 0;/, 'ตัวนับต้องถูกรีเซ็ตทุกเทิร์นจริง');
+});
+
+// ---------------------------------------------------------------- ตรวจกลไกรวม
+// ค่าใช้จ่ายที่ตัวเองจ่ายไหลผ่าน dealDirect -> adjustIncomingDamage ซึ่งมีด่านหลบของเขาเองอยู่
+// ถ้าไม่กันไว้ เขาจะ "หลบ" ค่าใช้จ่ายของตัวเองได้ถึง 30% = หลอมอาวุธฟรี
+test('ค่าใช้จ่ายที่ตัวเองจ่าย หลบไม่ได้ (หลอมอาวุธ)', () => {
+  const { K } = setup();
+  // ความจุ 3 (หลบ 20%) — ใช้เพดาน 30% ไม่ได้ เพราะความจุจะเหลือ 1 ซึ่งล็อกสกิลรองไว้อยู่แล้ว
+  K.maxHpPenalty = 4;
+  K.hp = 3;
+  K.inventory = [bagItem('i1', 4)];
+  Math.random = () => 0;              // ทุกโรลหลบต้องสำเร็จถ้าปล่อยให้หลบได้
+  const before = K.hp;
+  kotarou.transmute(engine, K, 'i1', 'sword');
+  assert.equal(K.hp, before - kotarou.TRANSMUTE_HP_COST, 'ต้องเสียเลือดจริง ห้ามหลบค่าใช้จ่ายตัวเอง');
+});
+
+// ของที่ได้มาฟรีไม่มีราคา -> ดาบดาเมจ 0 ซึ่งแย่กว่าไม่กดอะไรเลย ทั้งที่จ่ายไปแล้วทั้งแต้มและเลือด
+test('ดาบจากของไม่มีราคา ยังต้องไม่แย่กว่าหมัดเปล่า', () => {
+  const { K, A } = setup();
+  K.inventory = [{ uid: 'free', type: 'heal', value: 1, size: 'small' }]; // ไม่มี price
+  kotarou.transmute(engine, K, 'free', 'sword');
+  assert.ok(computeAttackBase(engine, K, A).base >= 1, 'ดาเมจดาบต้องไม่ต่ำกว่า 1');
+});
+
+// อาวุธอยู่จนกว่าจะได้โจมตี และกรงเล็บต้องครบ 2 หมัดก่อนถึงสลาย
+test('อาวุธสลายหลังโจมตี · กรงเล็บรอครบ 2 หมัด', () => {
+  const { K } = setup();
+  K.inventory = [bagItem('i1', 2)];
+  kotarou.transmute(engine, K, 'i1', 'sword');
+  assert.ok(kotarou.weaponOf(K), 'ดาบต้องยังอยู่ก่อนโจมตี');
+  assert.equal(kotarou.canTransmute(engine, K), false, 'ถืออาวุธอยู่ต้องหลอมซ้ำไม่ได้');
+  kotarou.consumeWeaponOnAttack(engine, K);
+  assert.equal(kotarou.weaponOf(K), null, 'ดาบต้องสลายหลังโจมตี');
+
+  K.inventory = [bagItem('i2', 2)];
+  kotarou.transmute(engine, K, 'i2', 'claw');
+  kotarou.onRoundWon(engine, K);
+  assert.equal(K.kotarouClawLeft, 2);
+  kotarou.consumeWeaponOnAttack(engine, K);
+  assert.ok(kotarou.weaponOf(K), 'กรงเล็บยังเหลือหมัดที่ 2 ต้องไม่สลาย');
+  K.kotarouClawLeft = 1;                  // continueClaw เปิดเฟสโจมตีครั้งที่ 2 ไปแล้ว
+  kotarou.consumeWeaponOnAttack(engine, K);
+  assert.equal(kotarou.weaponOf(K), null, 'ครบ 2 หมัดแล้วต้องสลาย');
+});
+
+// สูตรอัตราหลบอิงความจุพื้นฐานที่เขียนไว้ในโมดูลเอง ถ้า MAX_HP ฝั่ง engine ขยับ ตัวเลขจะเพี้ยนเงียบๆ
+test('ความจุพื้นฐานในโมดูลต้องตรงกับ MAX_HP ของ engine', () => {
+  const { K } = setup();
+  K.maxHpPenalty = 0;
+  assert.equal(engine.maxHpOf(K), kotarou.KOTAROU_MAX_HP, 'ค่าความจุพื้นฐานไม่ตรงกัน — สูตรหลบหลีกจะเพี้ยน');
+  assert.equal(kotarou.capacityLost(engine, K), 0);
 });
