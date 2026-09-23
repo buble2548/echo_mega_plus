@@ -40,6 +40,7 @@ const {
   statusAmtOf,
   applyBuff: rawApplyBuff,
   applyDebuff: rawApplyDebuff,
+  stripLatestBuff,
   setTurnsNoRefresh,
   applySpellburden: rawApplySpellburden,
   resistActive,
@@ -1504,6 +1505,7 @@ function displayImg(p, unmasked) {
   if (p.characterId === "daisuke") { const kimg = CHAR_HOOKS.daisuke.displayImg(p); if (kimg) return kimg; }
   if (p.characterId === "yaguruma") { const yimg = CHAR_HOOKS.yaguruma.displayImg(p); if (yimg) return yimg; }
   if (p.characterId === "kagami") { const gimg = CHAR_HOOKS.kagami.displayImg(p); if (gimg) return gimg; }
+  if (p.characterId === "tsurugi") { const simg = CHAR_HOOKS.tsurugi.displayImg(p); if (simg) return simg; }
   // โอเบรอน: ร่างสลับตามช่วงเวลากลางวัน/กลางคืนเสมอ
   // โอเบรอน (characters/oberon.js)
   if (p.characterId === "oberon") {
@@ -2043,7 +2045,8 @@ function resetCombat(p) {
   CHAR_HOOKS.oberon.resetCombat(p); // โอเบรอน: คูลดาวน์/ฝันร้าย/ร่างฝูงแมลง/เปลือกจอมหลอกลวง/แรงสะท้อนรุ่งอรุณ
   CHAR_HOOKS.daisuke.resetCombat(p); // คาซามะ ไดสุเกะ: โหมด CAST OFF/PUT ON / Clock Up / ไรเดอร์ชูต
   CHAR_HOOKS.yaguruma.resetCombat(p);
-  CHAR_HOOKS.kagami.resetCombat(p); // คากามิ อาราตะ: โหมด CAST OFF/PUT ON / Clock Up / ชาร์จ Rider Kick
+  CHAR_HOOKS.kagami.resetCombat(p);
+  CHAR_HOOKS.tsurugi.resetCombat(p); // คามิชิโร่ ซึรุงิ: โหมด CAST OFF/PUT ON / Clock Up / จังหวะดาบ Rider Slash
   p.sleepFresh = false; // หลับไหล: เทิร์นที่เพิ่งโดนกล่อมยังไม่เริ่มนับ/ยังโจมตีได้
   p.curseHitRound = 0;  // "คำสาป": เทิร์นล่าสุดที่คำสาปกินเลือดไป (1 ครั้ง/เทิร์น)
   p.appleItem = "drink"; // Apple guy: ของส่งมอบที่เลือกอยู่ (ค่าเริ่มต้น เครื่องดื่มชูกำลัง)
@@ -2553,6 +2556,7 @@ function buildStateFor(viewerId) {
         daisuke: p.characterId === "daisuke" ? CHAR_HOOKS.daisuke.publicState(p) : undefined,
         yaguruma: p.characterId === "yaguruma" ? CHAR_HOOKS.yaguruma.publicState(p) : undefined,
         kagami: p.characterId === "kagami" ? CHAR_HOOKS.kagami.publicState(p) : undefined,
+        tsurugi: p.characterId === "tsurugi" ? CHAR_HOOKS.tsurugi.publicState(p) : undefined,
         appleItem: p.appleItem || "drink", // Apple guy: ของส่งมอบที่เลือกอยู่
         appleAtk: p.appleAtkBuffs ? p.appleAtkBuffs.length : 0, // Apple guy: บัฟพลังโจมตีจากการมอบของ (ซ้อนทับได้สูงสุด 2 หน่วย)
         appleGiveUses: p.appleGiveUses != null ? p.appleGiveUses : CHAR_HOOKS.appleguy.GIVE_USES, // Apple guy: จำนวนใช้ เอาไปสิ คงเหลือ
@@ -2840,7 +2844,8 @@ function startMatch() {
   const daisukeIntro = CHAR_HOOKS.daisuke.maybeQueueIntro(engine);
   const yagurumaIntro = CHAR_HOOKS.yaguruma.maybeQueueIntro(engine);
   const kagamiIntro = CHAR_HOOKS.kagami.maybeQueueIntro(engine);
-  if (connerIntro || miyakoIntro || daisukeIntro || yagurumaIntro || kagamiIntro) {
+  const tsurugiIntro = CHAR_HOOKS.tsurugi.maybeQueueIntro(engine);
+  if (connerIntro || miyakoIntro || daisukeIntro || yagurumaIntro || kagamiIntro || tsurugiIntro) {
     // พักคิวไว้ก่อนจนกว่าฉากเปิดตัวผู้เล่นจะจบ — อยู่ในเฟส CUTSCENE แต่ยังไม่มีคลิป
     //  (cutsceneInfo = null -> client วาดกระดานปกติไว้ใต้ม่าน GameIntro ซึ่งบังอยู่แล้ว)
     cutsceneInfo = null;
@@ -3229,6 +3234,7 @@ function dealRound() {
     CHAR_HOOKS.daisuke.onRoundStartTick(engine, p); // ค่าแต้มสกิลของ Clock Up + การฟื้นฟูของ PUT ON
     CHAR_HOOKS.yaguruma.onRoundStartTick(engine, p);
     CHAR_HOOKS.kagami.onRoundStartTick(engine, p);
+    CHAR_HOOKS.tsurugi.onRoundStartTick(engine, p);
 
     // ---------- ซาโตรุ อาเคฟุ (patch 2.0.8.2): ดาเมจต่อเนื่องทุก 2 เทิร์น ----------
     //  สิ่งแปลกปลอม (Obla Di, Obla Da): ดาเมจ 1 / [Calamity]: ดาเมจตามเลเวล — ทำงานตอนเวลาคงเหลือเป็นเลขคี่
@@ -3832,6 +3838,8 @@ function useSkill(id, tier, targets, item) {
   if (isYagurumaPick && !CHAR_HOOKS.yaguruma.canUseSkill(engine, p, tier)) return;
   const isKagamiPick = p.characterId === "kagami";
   if (isKagamiPick && !CHAR_HOOKS.kagami.canUseSkill(engine, p, tier)) return;
+  const isTsurugiPick = p.characterId === "tsurugi";
+  if (isTsurugiPick && !CHAR_HOOKS.tsurugi.canUseSkill(engine, p, tier)) return;
   const isOberonPick = p.characterId === "oberon";
   if (isOberonPick && !CHAR_HOOKS.oberon.canUseSkill(engine, p, tier)) return;
   const oberonNight = isOberonPick && isNightRound(roundNumber);
@@ -4122,9 +4130,10 @@ function useSkill(id, tier, targets, item) {
   if (isDaisukePick) flashSuffix = CHAR_HOOKS.daisuke.applyInstantSkill(engine, p, tier) || flashSuffix;
   if (isYagurumaPick) flashSuffix = CHAR_HOOKS.yaguruma.applyInstantSkill(engine, p, tier) || flashSuffix;
   if (isKagamiPick) flashSuffix = CHAR_HOOKS.kagami.applyInstantSkill(engine, p, tier) || flashSuffix;
+  if (isTsurugiPick) flashSuffix = CHAR_HOOKS.tsurugi.applyInstantSkill(engine, p, tier) || flashSuffix;
   // ไรเดอร์ Zect: กด Clock Up/Clock Over กลางเฟสจั่วไพ่ — ต้องแก้เวลาที่เหลือตอนนี้
   //  ก่อนที่ pausePlayingForCutscene() จะอ่าน timeLeft ไปเก็บไว้คืนหลังคลิปจบ
-  if ((isDaisukePick || isYagurumaPick || isKagamiPick) && tier === "secondary") syncClockUpPhaseTime();
+  if ((isDaisukePick || isYagurumaPick || isKagamiPick || isTsurugiPick) && tier === "secondary") syncClockUpPhaseTime();
   // ---------- โทโนะ ชิกิ: มีดพับประจำตระกูล — เลือกระดับสกิลติดตัว 1-5 (กดเปลี่ยนกี่ครั้งก็ได้) (characters/tohno.js) ----------
   if (isTohnoPick) {
     flashSuffix = CHAR_HOOKS.tohno.applyBasicPick(engine, p, item);
@@ -5461,6 +5470,7 @@ function doAttack(byId, targetId) {
   if (CHAR_HOOKS.daisuke.tryAttackDodge(engine, attacker, target)) return;
   if (CHAR_HOOKS.yaguruma.tryAttackDodge(engine, attacker, target)) return;
   if (CHAR_HOOKS.kagami.tryAttackDodge(engine, attacker, target)) return;
+  if (CHAR_HOOKS.tsurugi.tryAttackDodge(engine, attacker, target)) return;
   // เท็นโนจิ โคทาโร่ (rewrite): ความจุพลังชีวิตที่หายไปทุก 1 หน่วย = หลบ +5% (สูงสุด 30%)
   if (CHAR_HOOKS.kotarou.tryAttackDodge(engine, attacker, target)) return;
   // เอจิ สกิลติดตัว 1 (ผู้เล่นอันดับ 2): ผู้ชนะไปตีคนอื่นที่ไม่ใช่เอจิ -> 25% ขัดจังหวะแล้วสวนคืน
@@ -5560,6 +5570,8 @@ function doAttack(byId, targetId) {
   // หอกผู้พิชิต (สึงาชิ ทาคุโตะ patch 2.2.5): ทับดาเมจทั้งหมดด้วยค่าคงที่ 5 หน่วย (เหนือกว่าทุกโบนัส/ดีบัฟที่คำนวณมาข้างบน)
   const takutoLanceAtk = attacker.characterId === "takuto" && (attacker.statuses.lance || 0) > 0;
   if (takutoLanceAtk) dmg = TAKUTO_LANCE_DMG;
+  // Rider Slash (คามิชิโร่ ซึรุงิ): จังหวะที่สองเป็นแผลเล็กๆ คงที่ 1 เสมอ ไม่คิดโบนัสใดๆ — พิษต่างหากคือส่วนที่แท้จริง
+  if (CHAR_HOOKS.tsurugi.slashSecondHit(attacker)) dmg = CHAR_HOOKS.tsurugi.SLASH2_DMG;
   if (CHAR_HOOKS.escanor.adjustOutgoingDamage) dmg = CHAR_HOOKS.escanor.adjustOutgoingDamage(engine, attacker, target, dmg);
   if (attacker.characterId === "satoru") dmg = 0; // ซาโตรุ: โจมตีธรรมดาดาเมจ 0 แล้วติด ObLa หลังโจมตี
   // เอจิ (characters/eiji.js): ดาบแห่งความทรงจำ — โอกาสคูณดาเมจ 2 เท่า (คิดท้ายสุดเพื่อให้คูณยอดสุทธิจริง)
@@ -5596,10 +5608,13 @@ function doAttack(byId, targetId) {
   const daisukeRiderFired = CHAR_HOOKS.daisuke.riderArmed(attacker);
   const yagurumaStingFired = CHAR_HOOKS.yaguruma.stingArmed(attacker);
   const kagamiKickFired = CHAR_HOOKS.kagami.kickArmed(attacker);
+  const tsurugiSlashFired = CHAR_HOOKS.tsurugi.slashArmed(attacker);
   CHAR_HOOKS.daisuke.stripArmorOnAttack(engine, attacker, target);
   CHAR_HOOKS.yaguruma.stripResistOnAttack(engine, attacker, target); // Rider Sting: เจาะ "ต้านสถานะ" ก่อน ดีบัฟที่ตามมาจึงติด
   // Rider Kick (// คากามิ อาราตะ): เป้าหมายกาง "ต้านสถานะ" ไว้ -> แลกดีบัฟทั้งชุดเป็นหมัดทะลุเกราะเพดาน 3
   const kagamiKickPierce = CHAR_HOOKS.kagami.prepareKickOnAttack(engine, attacker, target);
+  // Rider Slash (คามิชิโร่ ซึรุงิ): จังหวะแรกปาดบัฟล่าสุดทิ้งก่อนหมัดจะลง
+  CHAR_HOOKS.tsurugi.prepareSlashOnAttack(engine, attacker, target);
   const hpBefore = target.hp;
   const armorBefore = target.armor;
   const shieldBefore = target.shield;
@@ -5635,6 +5650,8 @@ function doAttack(byId, targetId) {
   CHAR_HOOKS.eiji.onAttackLanded(engine, attacker, target);
   // Rider Kick (// คากามิ อาราตะ): ฝัง "ช็อต" + "ชา" แล้วล้างการชาร์จทิ้ง (หมัดทะลุเกราะไม่ฝังดีบัฟ)
   CHAR_HOOKS.kagami.resolveKickOnAttack(engine, attacker, target, kagamiKickPierce);
+  // Rider Slash (คามิชิโร่ ซึรุงิ): จบจังหวะแรก -> ตั้งธงรอจังหวะสอง / จบจังหวะสอง -> ฝังพิษแล้วปิดชุด
+  CHAR_HOOKS.tsurugi.resolveSlashOnAttack(engine, attacker, target);
   // ฮารุกะ (characters/haruka.js): โอเมก้า — การโจมตีปกติแปะ "เลือดไหล" ให้เป้าหมาย 2 หน่วย
   const harukaBleedApplied = CHAR_HOOKS.haruka.onAttackLanded(engine, attacker, target);
   // มุยมิ: ดาบเก่าๆ/ดาบสะบั้นฟื้นฟูเมื่อโจมตีปกติ และใจที่ไม่ยอมแพ้ยืดเวลาท่าไม้ตาย
@@ -5875,7 +5892,7 @@ function doAttack(byId, targetId) {
   //  / อย่าอยู่เลย แกน่ะ! (ริต้า เบอร์นัล patch 2.1.6) / ฉันยัง...มองเห็นอยู่!!! กันตาย + อย่างนายน่ะ จะไปเข้าใจอะไร (สึงาชิ ทาคุโตะ patch 2.2.4):
   //  เล่นวีดีโอที่ค้างคิวก่อน แล้วค่อยขึ้นสรุปความเสียหาย
   //  (ปกติทุกท่าอื่นจะขึ้นสรุปความเสียหายก่อนแล้วค่อยเล่นวีดีโอค้างคิวตอนจบ — ท่าเหล่านี้กลับลำดับเฉพาะตัว)
-  if ((storiumAtk || phenexPurgeAtk || miyakoUltAtk || triggerMultiAtk || triggerZeperionAtk || escanorAttackVideoQueued || (beatSaveFired && target.characterId === "takuto") || takutoUlt2VideoQueued || eijiSwordFx.videoQueued || harukaPunishFx.videoQueued || (harukaCounterFx && harukaCounterFx.videoQueued) || (danCounterFx && danCounterFx.videoQueued) || (yuiCounterFx && yuiCounterFx.videoQueued) || batGunFired || daisukeRiderFired || yagurumaStingFired || kagamiKickFired) && cutsceneQueue.length) runCutsceneQueue(showAttackFx);
+  if ((storiumAtk || phenexPurgeAtk || miyakoUltAtk || triggerMultiAtk || triggerZeperionAtk || escanorAttackVideoQueued || (beatSaveFired && target.characterId === "takuto") || takutoUlt2VideoQueued || eijiSwordFx.videoQueued || harukaPunishFx.videoQueued || (harukaCounterFx && harukaCounterFx.videoQueued) || (danCounterFx && danCounterFx.videoQueued) || (yuiCounterFx && yuiCounterFx.videoQueued) || batGunFired || daisukeRiderFired || yagurumaStingFired || kagamiKickFired || tsurugiSlashFired) && cutsceneQueue.length) runCutsceneQueue(showAttackFx);
   else showAttackFx();
 }
 
@@ -5935,6 +5952,9 @@ function endTurn() {
   if (CHAR_HOOKS.cayenne.continueBarrage(engine)) return;
   // เท็นโนจิ โคทาโร่ "กรงเล็บ": ยังเลือกโจมตีไม่ครบ 2 ครั้ง -> เปิดเฟสโจมตีอีกครั้งแทนการจบเทิร์น
   if (CHAR_HOOKS.kotarou.continueClaw(engine)) return;
+  // คามิชิโร่ ซึรุงิ "Rider Slash": ฟันไปแค่จังหวะเดียว -> เปิดเฟสโจมตีอีกครั้งแทนการจบเทิร์น
+  //  อยู่ตรงนี้เพราะหมัดที่ "ถูกหลบ" return ตั้งแต่ด่านหลบ ไม่ผ่าน postAttackFollowup — สเปคบอกว่าถูกหลบก็ต้องได้ตีจังหวะสอง
+  if (CHAR_HOOKS.tsurugi.continueSlash(engine)) return;
   // โปรดิวเซอร์ (luminous burst): ตาข่ายสำรอง — ถ้าหมัดที่ทำให้ครบ "ถูกหลบ" doAttack จะ return
   //  ตั้งแต่ด่านหลบ ไม่ผ่าน postAttackFollowup เลย รางวัลจึงไม่มีวันจ่าย (และ luminous มีการหลบ 40%
   //  ของคาโฮะติดมาด้วย จึงเกิดบ่อยมาก) · flushBurst เป็น idempotent เรียกซ้ำไม่มีผลข้างเคียง
@@ -6810,6 +6830,7 @@ const engine = {
   applyDebuff,
   applyPoison,     // "พิษร้าย" (สถานะ Universal): ดาเมจ 1/เทิร์น + พลังโจมตี -1 (เคารพต้านสถานะผิดปกติ)
   tickPoison,
+  stripLatestBuff, // ปาดบัฟล่าสุดของเป้าหมายทิ้ง 1 ตัว (Rider Slash) — ทะเบียนบัฟอยู่ที่ _universal_status.js
   applyShock,      // "ช็อต" (สถานะ Universal): จุดเดียวที่ทุกตัวละครใช้ใส่สถานะนี้ (เคารพต้านสถานะผิดปกติ)
   tickShock,       // โรลต้นเทิร์น 15% -> สตั้น (เช็ค resist ตอนโรล ไม่ใช่ตอนแปะ)
   poisonAtkPenalty, // พลังโจมตีที่หายไปจากพิษ — computeAttackBase อ่านคู่กับ "อ่อนแอ"

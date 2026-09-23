@@ -1507,8 +1507,8 @@ function statusEntries(p, full) {
     out.push({ key: "muimiUltCd", v: p.muimiUltCd, icon: "⏳", label: `ดาบสะบั้นพักฟื้น ${p.muimiUltCd} เทิร์น`, cls: "bg-white/20", desc: "ดาบสะบั้นหมดเวลาแล้ว — ต้องรอให้ครบ 5 เทิร์นจึงใช้ดาบสะบั้นหอคอยสวรรค์ซ้ำได้ (ตัวเลขนี้ขึ้นทับบนการ์ดสกิลด้วย) · คุณเห็นอยู่คนเดียว" });
   }
   // คาซามะ ไดสุเกะ: โหมด / Clock Up / ไรเดอร์ชูต (ข้อมูลสนาม ทุกคนเห็นได้)
-  if (p.daisuke || p.yaguruma || p.kagami) {
-    const d = p.daisuke || p.yaguruma || p.kagami;
+  if (p.daisuke || p.yaguruma || p.kagami || p.tsurugi) {
+    const d = p.daisuke || p.yaguruma || p.kagami || p.tsurugi;
     out.push(d.cassOff
       ? { key: "daisukeMode", v: 1, icon: "⚡", label: "CAST OFF", cls: "bg-echo-hp", desc: "ปลดเกราะทิ้ง: พลังโจมตีพื้นฐาน +1 แต่เกราะจะไม่ฟื้นอีกเลย — เป็นเงื่อนไขปลดล็อก Clock Up และ Rider Shooting" }
       : { key: "daisukeMode", v: 1, icon: "🛡️", label: `PUT ON ${d.putOnTurns}/${d.putOnEvery}`, cls: "bg-echo-armor", desc: "สวมเกราะอยู่: เกราะฟื้นได้ตามปกติ และครบ 3 เทิร์นเมื่อไรจะฟื้นพลังชีวิต +2 — กดสกิลรอง/ท่าไม้ตายไม่ได้ในโหมดนี้" });
@@ -1516,6 +1516,7 @@ function statusEntries(p, full) {
     if (d.rider) out.push({ key: "daisukeRider", v: 1, icon: "🎯", label: "ไรเดอร์ชูต", cls: "bg-echo-gold text-gray-900", desc: "Rider Shooting เล็งไว้แล้ว: การโจมตีปกติครั้งถัดไปจะล้างเกราะเป้าหมาย 1 หน่วยก่อน แล้วจึงลงความเสียหาย (แรงขึ้น +1)" });
     if (d.charge > 0 && !d.kick) out.push({ key: "kagamiCharge", v: d.charge, icon: "⚡", label: `ชาร์จ Rider Kick ${d.charge}/${d.chargeMax}`, cls: "bg-echo-gold text-gray-900", desc: `Rider Kick ชาร์จไว้ ${d.charge} จาก ${d.chargeMax} ขั้น — การชาร์จค้างข้ามเทิร์นได้ ขั้นถัดไปใช้ ${d.nextCost} แต้ม` });
     if (d.kick) out.push({ key: "kagamiKick", v: 1, icon: "🦵", label: "ไรเดอร์คิ๊ก", cls: "bg-echo-gold text-gray-900", desc: "Rider Kick ชาร์จครบแล้ว: การโจมตีปกติครั้งถัดไปแรงขึ้น +1 แล้วฝัง \"ช็อต\" 5 เทิร์น + \"ชา\" 3 เทิร์น · ถ้าเป้าหมายมี \"ต้านสถานะผิดปกติ\" จะกลายเป็นหมัดทะลุเกราะแทน (เพดานรวม 3 หน่วย)" });
+    if (d.slash) out.push({ key: "tsurugiSlash", v: 1, icon: "🗡️", label: d.slashStep >= 1 ? `ไรเดอร์สแลช จังหวะ ${d.slashStep + 1}/${d.slashHits}` : "ไรเดอร์สแลช", cls: "bg-echo-magenta", desc: "Rider Slash ดาบพร้อมแล้ว: การโจมตีปกติครั้งถัดไปจะฟันสองจังหวะ — จังหวะแรกปาด \"บัฟล่าสุด\" ของเป้าหมายทิ้งแล้วลงดาเมจปกติ · จังหวะสองเลือกเป้าหมายใหม่ได้ ลงดาเมจตายตัว 1 พร้อม \"พิษร้าย\" 3 เทิร์น · จังหวะแรกถูกหลบก็ยังได้ตีจังหวะสอง" });
     if (d.sting) out.push({ key: "yagurumaSting", v: 1, icon: "🦂", label: "ไรเดอร์สติง", cls: "bg-echo-magenta", desc: "Rider Sting เล็งไว้แล้ว: การโจมตีปกติครั้งถัดไปจะล้าง \"ต้านสถานะผิดปกติ\" ของเป้าหมายก่อน แล้วจึงลงความเสียหาย (แรงขึ้น +1) พร้อมฝัง \"พิษร้าย\" 3 เทิร์น และ \"ผุพัง\" 2 เทิร์น" });
   }
   // อิปโป: อัตราหลบหลีกรวม + Dempsey Charge (ทุกคนเห็นได้ เป็นข้อมูลสนามเหมือน % หลบของเอจิ)
@@ -3973,8 +3974,8 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
   const veilLocked = isOberon && !!me?.statuses?.veil;
   // ---------- คาซามะ ไดสุเกะ ----------
   //  ไดสุเกะกับยากุรุมะใช้แกน Zect ตัวเดียวกัน เงื่อนไขปุ่มจึงคำนวณรวมทีเดียว
-  const dai = me?.daisuke || me?.yaguruma || me?.kagami || null;
-  const zectArmed = !!(me?.daisuke?.rider || me?.yaguruma?.sting || me?.kagami?.kick);  // ท่าไม้ตายอาร์มค้างอยู่
+  const dai = me?.daisuke || me?.yaguruma || me?.kagami || me?.tsurugi || null;
+  const zectArmed = !!(me?.daisuke?.rider || me?.yaguruma?.sting || me?.kagami?.kick || me?.tsurugi?.slash);  // ท่าไม้ตายอาร์มค้างอยู่
   const daisukeBasicLocked = !!dai && !!dai.clockUp;               // สลับโหมดระหว่าง Clock Up ไม่ได้
   //  กดเปิด Clock Up ต้อง CAST OFF และมีแต้มพอจ่ายค่าต่อเทิร์น (กดปิดทำได้เสมอ)
   const daisukeSecLocked = !!dai && (!dai.cassOff || (!dai.clockUp && (me?.skillPoints || 0) < 2));

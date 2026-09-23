@@ -31,7 +31,66 @@ function statusAmtOf(p, key) {
   return Math.max(0, (p.statusAmt && p.statusAmt[key]) || 0);
 }
 
+// ---------- ทะเบียนบัฟ (patch 4.5) ----------
+//  เกมมีรายการ DEBUFF_KEYS มานานแล้ว แต่ไม่เคยมีฝั่งบัฟ — Rider Slash ของซึรุงิต้องการ
+//  จึงทำขึ้นที่นี่ให้เป็นของกลาง ไม่ใช่ของตัวละครคนเดียว
+//  เก็บเฉพาะ "บัฟกลาง" ที่ใครก็ได้รับ — ไม่นับร่างแปลง/ฟอร์มประจำตัว (escanor*/trigger*/kotone*)
+//  เพราะพวกนั้นคือตัวตนของร่าง ไม่ใช่ของแถมที่ปาดทิ้งได้
+const BUFF_KEYS = [
+  "resist",    // ต้านสถานะผิดปกติ
+  "guard",     // คุ้มครอง
+  "fortune",   // โชคลาภ
+  "mend",      // เยียวยา
+  "might",     // เสริมพลัง (พลังโจมตี +N)
+  "empower",   // เสริมพลัง
+  "evade",     // หลบหลีก
+  "spellflow", // กระแสเวท (ค่าสกิลถูกลง)
+  "freecast",  // การ์ดราชินี
+  "veil",      // ม่านแห่งราตรี
+  "vortarmor", // เกราะราตรี
+  "absorb",    // Absorb
+  "awaken",    // ตื่นขึ้น
+  "golden",    // 777 (เวลาทอง)
+  "promo", "chill", "fiber", "tiger", // ของส่งมอบของ Apple guy
+];
+const BUFF_LABEL = {
+  resist: "ต้านสถานะผิดปกติ", guard: "คุ้มครอง", fortune: "โชคลาภ", mend: "เยียวยา",
+  might: "เสริมพลัง", empower: "เสริมพลัง", evade: "หลบหลีก", spellflow: "กระแสเวท",
+  freecast: "การ์ดราชินี", veil: "ม่านแห่งราตรี", vortarmor: "เกราะราตรี", absorb: "Absorb",
+  awaken: "ตื่นขึ้น", golden: "777", promo: "เปิดแต้ม", chill: "ชิวๆ", fiber: "เน็ตแรง", tiger: "เสือนอนกิน",
+};
+// ตัวนับลำดับ — เดินหน้าอย่างเดียวทั้งเกม จึงเทียบข้ามผู้เล่นได้
+let buffSeq = 0;
+
+// ปาด "บัฟล่าสุด" ทิ้งหนึ่งตัว — คืน { key, label } หรือ null ถ้าไม่มีบัฟเลย
+//  ลำดับตัดสิน: ตราเวลามากสุดก่อน -> เทิร์นเหลือมากสุด -> ชื่อคีย์ (กันผลสุ่มระหว่างเทสต์)
+//  บัฟที่ตัวละครเขียน p.statuses ตรงๆ จะไม่มีตราเวลา ถือเป็น "เก่ากว่า" ตัวที่ผ่าน applyBuff เสมอ
+function stripLatestBuff(p) {
+  if (!p || !p.statuses) return null;
+  let best = null;
+  for (const k of BUFF_KEYS) {
+    const turns = p.statuses[k] || 0;
+    if (!(turns > 0)) continue;
+    const at = (p.statusAt && p.statusAt[k]) || 0;
+    if (!best || at > best.at
+      || (at === best.at && (turns > best.turns || (turns === best.turns && k < best.key)))) {
+      best = { key: k, at, turns };
+    }
+  }
+  if (!best) return null;
+  delete p.statuses[best.key];
+  if (p.statusAmt) delete p.statusAmt[best.key];
+  if (p.statusAt) delete p.statusAt[best.key];
+  if (best.key === "evade") p.evadeStacks = []; // หลบหลีก: p.statuses.evade เป็นแค่เงาของ evadeStacks
+  return { key: best.key, label: BUFF_LABEL[best.key] || best.key };
+}
+
 function applyBuff(p, key, amount, turns) {
+  //  ประทับลำดับไว้เฉพาะบัฟ — Rider Slash ต้องรู้ว่าเป้าหมายเพิ่งได้บัฟไหนมาล่าสุด
+  if (BUFF_KEYS.includes(key)) {
+    p.statusAt = p.statusAt || {};
+    p.statusAt[key] = ++buffSeq;
+  }
   p.statuses[key] = Math.max(p.statuses[key] || 0, turns || 1);
   if (amount != null) {
     p.statusAmt = p.statusAmt || {};
@@ -449,6 +508,8 @@ module.exports = {
   NO_TICK_STATUS,
   statusAmtOf,
   applyBuff,
+  BUFF_KEYS,
+  stripLatestBuff,
   applyDebuff,
   setTurnsNoRefresh,
   applySpellburden,
