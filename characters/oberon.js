@@ -213,10 +213,11 @@ module.exports = {
     for (const o of Object.values(engine.players)) delete o.statuses.dawn; // ล้างยามฟ้าสางให้ทุกคน
     engine.setOberonDevour(engine.nextTransformCounter()); // ราตรีกลืนกิน: ฉากหลัง + เพลงประจำตัว
     engine.extendNight(); // ราตรีเริ่มนับใหม่เต็มรอบจากเทิร์นนี้
-    // วีดีโอประจำท่าย้ายตามผลมาด้วย — คลิปเดียวเท่านั้น (oberon_final_night.mp4)
-    //  ห้ามคิวราตรีกลืนกิน (oberon_changefill.mp4) ต่อท้ายที่นี่: สกิลรองจะกลายเป็นคลิป 34 วิรวด
-    //  ฉาก "ราตรีกลืนกิน" ยังขึ้นอยู่ดีผ่าน setOberonDevour ด้านบน ซึ่งเป็นฉากหลัง ไม่ใช่คัตซีน
+    // วีดีโอประจำท่าย้ายตามผลมาด้วยทั้งคู่ — เล่นเรียงกันตามลำดับเดิมของ Vortigern:
+    //  oberon_final_night.mp4 (ตัวท่า) แล้วต่อด้วย oberon_changefill.mp4 (ราตรีกลืนกิน)
+    //  ส่วนวีดีโอใหม่ oberon_skill3.2_update.mp4 เป็นของท่าไม้ตาย 2 เท่านั้น ห้ามมาปนตรงนี้
     engine.triggerCutscene(p, "oberonNightmare");
+    engine.triggerCutscene(p, "oberonChange");
     engine.log(`🌘 ${p.name} ${this.maskedSkillName(p, "secondary", "ฝันร้ายยามค่ำคืน")} — ราตรีกลืนกิน และราตรีจะดำเนินต่อไปจนกว่าจะถึงเช้า`);
   },
 

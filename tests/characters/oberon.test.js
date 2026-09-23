@@ -216,7 +216,7 @@ test('ฝันร้ายยามค่ำคืน: หลับเท่า
   assert.equal(A.statuses.dawn || 0, 0, 'ยามฟ้าสางถูกล้างหลังใช้');
   assert.equal(O.oberonNightmare, true);
   // วีดีโอประจำท่าย้ายตามผลมาด้วย: oberon_final_night.mp4 ก่อน แล้วค่อยราตรีกลืนกิน
-  assert.deepEqual(cuts, ['oberonNightmare'], 'สกิลรองเล่นคลิปเดียว ห้ามคิวซ้อนสองคลิป');
+  assert.deepEqual(cuts, ['oberonNightmare', 'oberonChange'], 'สกิลรอง 2 เล่นสองคลิปเรียงกัน: ตัวท่า แล้วราตรีกลืนกิน');
   engine.setCycleShift(0);
 });
 
