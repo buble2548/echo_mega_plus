@@ -17,6 +17,7 @@ const muimiImg = require("./muimi").IMG;   // มุยมิ: ใช้ path �
 const cayChar = require("./cayenne");
 const daichiChar = require("./daichi");
 const kotarouChar = require("./kotarou"); // เท็นโนจิ โคทาโร่: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร     // ไดจิ โอโซระ: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร      // คาเยนน์ ซูซูชิโระ: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร
+const daisukeChar = require("./daisuke"); // คาซามะ ไดสุเกะ: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร
 const BAT_CAR_IMG = "/characters/bat_ben/bat_update/bat_ben_car.webp";
 const BAT_SHOT_IMG = "/characters/bat_ben/bat_update/skill1.2/bat_ben_skill1.2.jpg";
 const BAT_GUN_IMG = "/characters/bat_ben/bat_update/skill2.2/bat_ben_skill2.2.png";
@@ -24,6 +25,15 @@ const BAT_DOOM_IMG = "/characters/bat_ben/bat_update/skill3.2/bat_ben_skill3.2.p
 
 module.exports = function buildTransforms(img) {
   return {
+    // ---------- คาซามะ ไดสุเกะ (patch 4.3 new) ----------
+    //  ทุกคลิปคิวเองจากโค้ด จึงต้อง afterReveal: false ทั้งหมด
+    //  daisukeIntro: เล่นครั้งเดียวตอนเริ่มแมตช์ — ไม่มีคำบรรยายตามสเปค (title/label ว่าง)
+    daisukeIntro:    { img: daisukeChar.IMG.base,    video: daisukeChar.VIDEO.intro,   title: "", label: "", seconds: 13, music: null, afterReveal: false },
+    daisukeCassOff:  { img: daisukeChar.IMG.skill1,  video: daisukeChar.VIDEO.cassOff, title: "CAST OFF", label: "ปลดเกราะทิ้ง", seconds: 10, music: null, afterReveal: false },
+    daisukePutOn:    { img: daisukeChar.IMG.putOn,   video: null,                      title: "PUT ON",  label: "สวมเกราะกลับ", seconds: 0,  music: null, afterReveal: false },
+    daisukeClockUp:  { img: daisukeChar.IMG.skill2,  video: daisukeChar.VIDEO.clockUp, title: "CLOCK UP", label: "หยุดเวลาทั้งสนาม", seconds: 8, music: null, afterReveal: false },
+    daisukeClockOver:{ img: daisukeChar.IMG.skill2,  video: null,                      title: "CLOCK OVER", label: "เวลาเดินต่อ", seconds: 0, music: null, afterReveal: false },
+    daisukeRider:    { img: daisukeChar.IMG.skill3,  video: daisukeChar.VIDEO.rider,   title: "RIDER SHOOTING", label: "ปล่อยท่าไม้ตาย", seconds: 12, music: null, afterReveal: false },
     // ---------- เท็นโนจิ โคทาโร่ (patch 4.1 new) ----------
     //  ทุกคลิปคิวเองจากโค้ด จึงต้อง afterReveal: false (ไม่งั้นลูปกลางใน afterResolve() จะไล่หาสถานะชื่อเดียวกับคีย์แล้วเล่นซ้ำ)
     //  เพลง kotarou_theme มาจาก activeMusic ของตัวละคร (คลอตลอดเทิร์นที่ย้อนมา) ไม่ใช่ฟิลด์ music ตรงนี้

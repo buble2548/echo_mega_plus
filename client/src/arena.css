@@ -798,3 +798,38 @@
   .oberon-collapse::before,
   .oberon-collapse::after { animation: none; }
 }
+
+/* ============================================================
+   คาซามะ ไดสุเกะ — CLOCK UP (เห็นเฉพาะผู้เล่นคนอื่น ไม่ใช่เจ้าของท่า)
+   บอกให้รู้ว่า "โลกหยุดแล้ว รอเขาอยู่" โดยไม่บังกระดานจนเล่นต่อไม่ได้
+   ขยับด้วย opacity/transform เท่านั้น — ชั้นนี้เปิดค้างได้นาน จึงห้ามใช้อะไรที่ repaint ทุกเฟรม
+   ============================================================ */
+.clockup-freeze {
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at 50% 50%, rgba(8, 20, 46, 0.18) 0%, rgba(4, 10, 26, 0.55) 100%);
+  animation: clockupPulse 2.4s ease-in-out infinite;
+}
+.clockup-freeze span {
+  font-weight: 900;
+  letter-spacing: 0.22em;
+  color: #9fd8ff;
+  text-shadow: 0 0 18px rgba(80, 180, 255, 0.85), 0 2px 0 #06101f;
+  background: rgba(3, 8, 20, 0.62);
+  border: 1px solid rgba(140, 210, 255, 0.45);
+  border-radius: 999px;
+  padding: 0.35rem 1.25rem;
+  font-size: clamp(0.85rem, 2.6vw, 1.35rem);
+  white-space: nowrap;
+}
+@keyframes clockupPulse {
+  0%, 100% { opacity: 0.82; }
+  50%      { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .clockup-freeze { animation: none; }
+}

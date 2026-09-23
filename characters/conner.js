@@ -424,6 +424,8 @@ module.exports = {
     engine.queueCutscene(conner, "connorArrest1");      // วีดีโอไล่ล่าเล่นทุกครั้ง ไม่ใช่ครั้งเดียวต่อเกม
     engine.log(`🏃 ${target.name} เลือก "ขัดขืน" — ${conner.name} เริ่มการไล่ล่า! (นับแต้มดวลกัน ${CHASE_ROUNDS} เทิร์น)`);
     engine.log(`🚨 ระหว่างการไล่ล่า ผู้เล่นคนอื่นถูกแช่ไว้ (ไพ่แตกทันที กดอะไรไม่ได้ แต่ไม่รับความเสียหาย) และไม่มีเทิร์นโจมตี`);
+    // คาซามะ ไดสุเกะ: การไล่ล่าตัดจังหวะ Clock Up ทิ้ง (การแช่สองชั้นซ้อนกันไม่ได้)
+    engine.CHAR_HOOKS.daisuke.cancelClockUpForChase(engine);
     this.freezeOutsiders(engine, conner);
     // ตอบเองระหว่างเฟสจั่วไพ่ = พักเฟสเล่นวีดีโอทันทีแล้วกลับมาจั่วต่อด้วยเวลาที่เหลือ
     // ตอบตอนหมดเวลา (resolveRound เรียกแทน) = ปล่อยให้ afterResolve กวาดคิววีดีโอไปเล่นตามลำดับปกติ
