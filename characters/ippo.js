@@ -3,7 +3,7 @@
 //  + สกิลติดตัว "ผู้ยืนหยัด"
 //
 //  นักมวยที่เล่นเกม "ยิ่งหลบได้ ยิ่งแรง" — อัตราหลบหลีกเป็นทรัพยากรหลักของตัวละคร
-//  ซ้อนทับได้ 3 ชั้น (ดู dodgeChance) และการหลบสำเร็จคือสิ่งที่ป้อนทุกอย่างให้เขา:
+//  ซ้อนทับได้ 2 ชั้น (ดู dodgeChance) และการหลบสำเร็จคือสิ่งที่ป้อนทุกอย่างให้เขา:
 //    · ผู้ยืนหยัด  -> หลบสำเร็จ = อัตราหลบ +10% (สูงสุด +20% · หายทันทีเมื่อโดนตี) + แต้มสกิล +1
 //    · Dempsey roll -> หลบสำเร็จ = สะสม Dempsey Charge +1 (สูงสุด 3)
 //  แล้วเทหมดหน้าตักตอนโจมตี: Dempsey Charge ทุก 1 หน่วย = โจมตีเพิ่ม 1 ครั้ง (สูงสุด 3)
@@ -41,7 +41,7 @@ const UPPER_ATK_BONUS = 1;       // balance 3.4.5: ระหว่างหม�
 // ---------- ท่าไม้ตาย Dempsey roll ----------
 const DEMPSEY_COOLDOWN = 4;
 const DEMPSEY_MAX = 3;           // Dempsey Charge สะสมสูงสุด (0/3)
-const DEMPSEY_DODGE_STEP = 10;   // 1 หน่วย -> อัตราหลบ +10% (สูงสุด 30% = 3 หน่วย)
+//  balance 4.3: Dempsey Charge ไม่ให้อัตราหลบอีกแล้ว — เหลือหน้าที่เดียวคือเพิ่มจำนวนครั้งโจมตี
 const DEMPSEY_MUSIC = "ippo_theme";
 
 const IMG = {
@@ -56,10 +56,11 @@ function standStacks(p) { return isIppo(p) ? Math.min(STAND_DODGE_MAX, p.ippoSta
 function chargeOf(p) { return isIppo(p) ? Math.min(DEMPSEY_MAX, p.ippoCharge || 0) : 0; }
 function dempseyOn(p) { return isIppo(p) && (p.statuses.ippoDempsey || 0) > 0; }
 
-// อัตราหลบหลีกรวมของตอนนี้ (%) — ฐาน 20 + ผู้ยืนหยัด (สูงสุด +20) + Dempsey Charge (สูงสุด +30)
+// อัตราหลบหลีกรวมของตอนนี้ (%) — ฐาน 30 + ผู้ยืนหยัด (สูงสุด +20) รวมเพดาน 50%
+//  balance 4.3: Dempsey Charge ไม่เกี่ยวกับอัตราหลบอีกแล้ว
 function dodgeChance(p) {
   if (!isIppo(p)) return 0;
-  return BASE_DODGE + standStacks(p) + chargeOf(p) * DEMPSEY_DODGE_STEP;
+  return BASE_DODGE + standStacks(p);
 }
 
 module.exports = {
@@ -80,7 +81,6 @@ module.exports = {
   UPPER_ATK_BONUS,
   DEMPSEY_COOLDOWN,
   DEMPSEY_MAX,
-  DEMPSEY_DODGE_STEP,
   dodgeChance,
   chargeOf,
   standStacks,
@@ -168,7 +168,7 @@ module.exports = {
     p.ippoCharge = 0;
     p.transformAt = engine.nextTransformCounter();
     engine.queueCutscene(p, "ippoDempsey"); // อัลติเมท.mp4
-    engine.log(`🥊 ${p.name} Dempsey roll — เข้าท่า! สะสม Dempsey Charge 0/${DEMPSEY_MAX} (หลบสำเร็จ +1 · ทุกหน่วยให้หลบหลีก +${DEMPSEY_DODGE_STEP}% และโจมตีเพิ่ม 1 ครั้ง) — หายทั้งก้อนเมื่อโจมตีสำเร็จ`);
+    engine.log(`🥊 ${p.name} Dempsey roll — เข้าท่า! สะสม Dempsey Charge 0/${DEMPSEY_MAX} (หลบสำเร็จ +1 · ทุกหน่วยให้โจมตีเพิ่ม 1 ครั้ง) — หายทั้งก้อนเมื่อโจมตีสำเร็จ`);
     return " — เข้าท่า Dempsey";
   },
 
@@ -230,9 +230,12 @@ module.exports = {
 
   // เรียกจาก adjustIncomingDamage() — หลบดาเมจจากสกิล (การโจมตีปกติจัดการที่ tryAttackDodge แล้ว)
   //  และเป็นจุดที่ "โดนตี = อัตราหลบสะสมของผู้ยืนหยัดหายทั้งหมด"
+  //  ข้อยกเว้น: ดาเมจจาก "ปืนที่เป็นไอเทม" (_itemDamage — Nursedessei Cannon) หลบไม่ได้
+  //  แต่ยังนับเป็น "โดนเต็มๆ" อยู่ดี — อัตราหลบสะสมของผู้ยืนหยัดจึงหายตามปกติ
   adjustIncomingDamage(engine, p, n, isNormalAttack) {
     if (!isIppo(p) || n <= 0) return n;
-    if (!isNormalAttack && !p._statusDamage && this.tryDodge(engine, p, "ความเสียหายจากสกิล")) return 0;
+    if (p._itemDamage) engine.log(`🔫 ${p.name} — กระสุนจากไอเทมหลบไม่ได้ — โดนเต็มๆ`);
+    if (!isNormalAttack && !p._statusDamage && !p._itemDamage && this.tryDodge(engine, p, "ความเสียหายจากสกิล")) return 0;
     // หลบไม่พ้น (หรือเป็นการโจมตีปกติที่หลุดด่าน tryAttackDodge มาแล้ว) = โดนเต็มๆ
     if (standStacks(p) > 0) {
       engine.log(`🧍 ${p.name} ผู้ยืนหยัด — โดนหมัดเข้าเต็มๆ อัตราหลบหลีกที่สะสมไว้ (+${standStacks(p)}%) หายหมด`);

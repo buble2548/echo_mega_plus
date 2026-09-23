@@ -1404,7 +1404,7 @@ const STATUS_INFO = {
   arjunaRevive: { icon: "🪔", label: "ฟื้นคืนชีพ", cls: "bg-echo-gold text-gray-900", desc: "ฟื้นคืนชีพ (ตะเกียงไฟที่ดับมอด): ตายระหว่างที่สถานะนี้ยังอยู่ จะฟื้นทันทีด้วยพลังชีวิต 1 หน่วย เกราะ 0 หน่วย — ใช้ได้ 1 ครั้งแล้วหายไป" },
   arjunaSlay:   { icon: "🔱", label: "สังหารโลกา", cls: "bg-echo-hp", desc: "สังหารโลกา: พลังโจมตี +1 และสร้างความเสียหายเพิ่มเติมตามจำนวนดีบัฟเสียที่เป้าหมายมีอยู่ 1 หน่วย ต่อ 1 ดีบัฟเสีย" },
   // ---------- มาคุโนะอุจิ อิปโป (patch 3.3 new) ----------
-  ippoDempsey: { icon: "🌀", label: "Dempsey roll", cls: "bg-echo-gold text-gray-900", desc: "Dempsey roll: ทุกครั้งที่หลบหลีกสำเร็จจะสะสม Dempsey Charge +1 (สูงสุด 3) · ทุก 1 หน่วยให้อัตราหลบหลีก +10% และโจมตีเพิ่มอีก 1 ครั้ง — บัฟหายไปทั้งก้อนทันทีที่โจมตีสำเร็จ" },
+  ippoDempsey: { icon: "🌀", label: "Dempsey roll", cls: "bg-echo-gold text-gray-900", desc: "Dempsey roll: ทุกครั้งที่หลบหลีกสำเร็จจะสะสม Dempsey Charge +1 (สูงสุด 3) · ทุก 1 หน่วยให้โจมตีเพิ่มอีก 1 ครั้ง — บัฟหายไปทั้งก้อนทันทีที่โจมตีสำเร็จ" },
   // ---------- ยุย โยชิโอกะ (patch 3.0 new) ----------
   yuiTaunt:   { icon: "\u{1F4E3}", label: "ปากแจ๋ว", cls: "bg-echo-magenta", desc: "ปากแจ๋ว: การโจมตีปกติของทุกคนถูกล่อมาที่ยุยตลอดเทิร์นนี้" },
   yuiWrestle: { icon: "\u{1F93C}", label: "นักมวยปล้ำ", cls: "bg-echo-armor", desc: "นักมวยปล้ำ: ความเสียหายที่ได้รับเบาลง 1 หน่วย และถ้าถูกโจมตีปกติจะจับทุ่มสวนคืน 2 หน่วย — สวนครบโควตาเมื่อไหร่สถานะจบทันทีแม้ยังไม่ครบเทิร์น (จำนวนครั้งที่เหลือแสดงเป็นตัวเลขบนป้าย)" },
@@ -1516,9 +1516,9 @@ function statusEntries(p, full) {
   }
   // อิปโป: อัตราหลบหลีกรวม + Dempsey Charge (ทุกคนเห็นได้ เป็นข้อมูลสนามเหมือน % หลบของเอจิ)
   if (p.character?.id === "ippo") {
-    out.push({ key: "ippoDodgeInfo", v: 1, icon: "💨", label: `หลบหลีก ${p.ippoDodge || 0}%`, cls: "bg-echo-cyan text-gray-900", desc: "อัตราหลบหลีกรวมของอิปโปตอนนี้ = ฐาน 20% + ผู้ยืนหยัด (สูงสุด +20% หายเมื่อโดนตี) + Dempsey Charge (+10% ต่อหน่วย สูงสุด +30%) · หลบได้ไม่จำกัดครั้งต่อเทิร์น" });
+    out.push({ key: "ippoDodgeInfo", v: 1, icon: "💨", label: `หลบหลีก ${p.ippoDodge || 0}%`, cls: "bg-echo-cyan text-gray-900", desc: "อัตราหลบหลีกรวมของอิปโปตอนนี้ = ฐาน 30% + ผู้ยืนหยัด (สูงสุด +20% หายเมื่อโดนตี) รวมเพดาน 50% · หลบได้ไม่จำกัดครั้งต่อเทิร์น · Dempsey Charge ไม่เกี่ยวกับอัตราหลบ" });
     if ((p.ippoCharge || 0) > 0) {
-      out.push({ key: "ippoChargeInfo", v: p.ippoCharge, icon: "🥊", label: `Dempsey Charge ${p.ippoCharge}/${p.ippoChargeMax || 3}`, cls: "bg-echo-gold text-gray-900", desc: "สะสมจากการหลบหลีกสำเร็จ — ทุก 1 หน่วยให้อัตราหลบหลีก +10% และโจมตีเพิ่มอีก 1 ครั้ง · เทหมดหน้าตักทันทีที่โจมตีสำเร็จ" });
+      out.push({ key: "ippoChargeInfo", v: p.ippoCharge, icon: "🥊", label: `Dempsey Charge ${p.ippoCharge}/${p.ippoChargeMax || 3}`, cls: "bg-echo-gold text-gray-900", desc: "สะสมจากการหลบหลีกสำเร็จ — ทุก 1 หน่วยให้โจมตีเพิ่มอีก 1 ครั้ง · เทหมดหน้าตักทันทีที่โจมตีสำเร็จ" });
     }
   }
   // ผู้วิงวอน: คลังคำวิงวอน + โควตาสกิล 2 ครั้ง/เทิร์น (ทุกคนเห็นได้ — ขั้นของคำวิงวอนเปลี่ยนพฤติกรรมทั้งสนาม)

@@ -258,6 +258,40 @@ test('Nursedessei Cannon: ปืนพังแม้เป้าหมายจ
   assert.equal(t.hp, 5); // ไม่โดนดาเมจ (ตกรอบไปแล้ว)
 });
 
+// ---------- อิปโป: ห้ามหลบปืนที่เป็นไอเทม ----------
+//  อัตราหลบเต็มเพดานของเขาคือ 50% (ฐาน 30 + ผู้ยืนหยัด 20) — Dempsey Charge ไม่ให้อัตราหลบแล้ว
+//  จึงล็อก Math.random ไว้ที่ 0 = โรลติดทุกครั้ง — ถ้ายังโดนแปลว่าด่านกันหลบทำงานจริง
+function mkIppoMaxDodge() {
+  const t = mkPlayer({ characterId: 'ippo', hp: 6, armor: 0 });
+  t.ippoStandDodge = 20;
+  t.ippoCharge = 3;
+  t.statuses.ippoDempsey = 1;
+  return t;
+}
+
+test('อิปโป: Nursedessei Cannon หลบไม่ได้ แม้อัตราหลบจะเต็มเพดาน', () => {
+  const p = mkPlayer();
+  giveGun(p);
+  const t = mkIppoMaxDodge();
+  assert.equal(engine.CHAR_HOOKS.ippo.dodgeChance(t), 50);
+  const rnd = Math.random;
+  Math.random = () => 0; // โรลต่ำสุด = หลบติดทุกครั้งถ้าหลบได้
+  try { engine.applyGutsBullet(p, { ammo: 'nurse' }, t); }
+  finally { Math.random = rnd; }
+  assert.equal(t.hp, 2, 'กระสุนไอเทมต้องเข้าเต็ม 4 หน่วย');
+  assert.equal(t.ippoStandDodge, 0, 'โดนเต็มๆ = อัตราหลบสะสมของผู้ยืนหยัดหาย');
+  assert.equal(t._itemDamage, false, 'ธงต้องถูกล้างหลังกระสุนลง ไม่งั้นจะค้างข้ามก้อนถัดไป');
+});
+
+test('อิปโป: ดาเมจจากสกิล (ไม่ใช่ไอเทม) ยังหลบได้ตามเดิม', () => {
+  const t = mkIppoMaxDodge();
+  const rnd = Math.random;
+  Math.random = () => 0;
+  try { engine.dealMixed(t, 4); }
+  finally { Math.random = rnd; }
+  assert.equal(t.hp, 6, 'ดาเมจสกิลต้องถูกหลบพ้น');
+});
+
 test('Ignis: ยิง Nursedessei ด้วย Black Sparklence แล้วปืนไม่หาย แต่ใช้ไม่ได้ 3 เทิร์น', () => {
   const p = mkPlayer({ characterId: 'ignis' });
   const t = mkPlayer();

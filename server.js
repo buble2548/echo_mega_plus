@@ -3097,7 +3097,11 @@ function applyGutsBullet(p, item, target) {
     if (applyDebuff(target, "chaa", null, GUTS_CHAA_TURNS)) lastLog.push(`⚡ Thunder Bullet — ${target.name} ติดสถานะ [สภาพชา] ${GUTS_CHAA_TURNS} เทิร์น (กดจั่ว 1 ครั้งได้ไพ่ 2 ใบ)`);
     else lastLog.push(`🛡️ Thunder Bullet — ${target.name} ต้านสถานะผิดปกติไว้ได้ ไม่ติด [สภาพชา]`);
   } else if (item.ammo === "nurse") {
+    // _itemDamage: ก้อนนี้มาจาก "ปืนที่เป็นไอเทม" ไม่ใช่สกิลของตัวละคร
+    //  อิปโป: ห้ามหลบปืนที่เป็นไอเทม — ดู characters/ippo.js adjustIncomingDamage
+    target._itemDamage = true;
     dealMixed(target, GUTS_NURSE_DMG);
+    target._itemDamage = false;
     lastLog.push(hasBlackSparklence(p)
       ? `☄️ Nursedessei Cannon — ${target.name} เสียหาย -${GUTS_NURSE_DMG} (ลดเกราะก่อน) และ Black Sparklence ของ ${p.name} ใช้งานไม่ได้ ${BLACK_SPARKLENCE_NURSE_COOLDOWN} เทิร์น!`
       : `☄️ Nursedessei Cannon — ${target.name} เสียหาย -${GUTS_NURSE_DMG} (ลดเกราะก่อน) และปืนของ ${p.name} พังหายไป!`);

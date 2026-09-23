@@ -196,7 +196,7 @@ test('Uper Cut: กดแล้วติดคูลดาวน์ 3 เทิ�
 });
 
 // ---------------------------------------------------------------- Dempsey roll
-test('Dempsey roll: หลบสำเร็จสะสม Charge (ตัน 3) · ทุกหน่วยให้หลบ +10%', () => {
+test('Dempsey roll: หลบสำเร็จสะสม Charge (ตัน 3) · Charge ไม่เกี่ยวกับอัตราหลบ', () => {
   const { i } = setup();
   ippo.applyDempsey(engine, i);
   assert.equal(ippo.dempseyActive(i), true);
@@ -208,8 +208,9 @@ test('Dempsey roll: หลบสำเร็จสะสม Charge (ตัน 3)
     for (let n = 0; n < 4; n++) ippo.tryDodge(engine, i, 'ทดสอบ');
   });
   assert.equal(ippo.chargeOf(i), ippo.DEMPSEY_MAX, 'ตันที่ 3 หน่วย');
-  // ฐาน + ผู้ยืนหยัดตัน + Charge เต็ม 3 หน่วย
-  assert.equal(ippo.dodgeChance(i), ippo.BASE_DODGE + ippo.STAND_DODGE_MAX + ippo.DEMPSEY_MAX * ippo.DEMPSEY_DODGE_STEP);
+  // balance 4.3: อัตราหลบมาจากฐาน + ผู้ยืนหยัดเท่านั้น — Charge ไม่เกี่ยวอีกแล้ว
+  assert.equal(ippo.dodgeChance(i), ippo.BASE_DODGE + ippo.STAND_DODGE_MAX);
+  assert.equal(ippo.DEMPSEY_DODGE_STEP, undefined, 'ค่าคงที่ถูกถอดออกแล้ว ไม่ควรเหลือค้าง');
 });
 
 test('Dempsey roll: โจมตีสำเร็จ -> เทหมดหน้าตัก บัฟหายทั้งก้อน + เล่นวีดีโอ', () => {
