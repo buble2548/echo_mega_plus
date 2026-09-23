@@ -30,6 +30,8 @@ test.after(() => {
 test.afterEach(() => {
   engine.clearPhaseTimer();
   Math.random = realRandom;
+  //  บางเทสต์คืน queueCutscene ของจริงเพื่อเช็คลำดับคิว — ต้องตั้ง stub กลับทุกครั้ง
+  engine.queueCutscene = (p, key) => { cuts.push(key); };
 });
 
 function mk(id, characterId, position) {
@@ -227,6 +229,34 @@ test('Clock Up กลางเทิร์น: เวลาต้องหยุ
   engine.useSkill(S.id, 'secondary');  // CLOCK OVER
   assert.equal(engine.buildStateFor(S.id).timeLeft, Y.CLOCK_UP_CARD_TIME,
     'กดปิดแล้วต้องไม่ค้างเวลาตาข่ายไว้ 90 วิ');
+  engine.clearPhaseTimer();
+});
+
+test('Rider Sting: วีดีโอเล่นก่อน แล้วค่อยขึ้นสรุปความเสียหาย', () => {
+  const { S, A } = setup();
+  //  สองเทสต์นี้ต้องใช้ queueCutscene ของจริง — stub ด้านบนไม่ได้เข้าคิวจริง
+  //  ทำให้ cutsceneQueue ว่าง แล้วลำดับที่กำลังวัดจะหายไปทั้งดุ้น
+  engine.queueCutscene = saved.queueCutscene;
+  engine.useSkill(S.id, 'basic');
+  engine.useSkill(S.id, 'ultimate');
+  engine.setGameState('ATTACK');
+  engine.setAttackerId(S.id);
+  engine.doAttack(S.id, A.id);
+  //  โดยปกติเกมจะขึ้นสรุป (ATTACKING) ก่อนแล้วค่อยเล่นวีดีโอค้างคิวตอนจบ
+  //  ท่านี้ต้องกลับลำดับ — ต้องเข้าเฟส CUTSCENE ทันทีหลังกดโจมตี
+  assert.equal(engine.gameState, 'CUTSCENE', 'วีดีโอต้องเล่นก่อนการ์ดสรุปความเสียหาย');
+  engine.clearPhaseTimer();
+});
+
+test('Rider Shooting (ไดสุเกะ): วีดีโอเล่นก่อนสรุปเหมือนกัน', () => {
+  const { K, A } = setup();
+  engine.queueCutscene = saved.queueCutscene; // เหตุผลเดียวกับเทสต์ด้านบน
+  engine.useSkill(K.id, 'basic');
+  engine.useSkill(K.id, 'ultimate');
+  engine.setGameState('ATTACK');
+  engine.setAttackerId(K.id);
+  engine.doAttack(K.id, A.id);
+  assert.equal(engine.gameState, 'CUTSCENE', 'วีดีโอต้องเล่นก่อนการ์ดสรุปความเสียหาย');
   engine.clearPhaseTimer();
 });
 

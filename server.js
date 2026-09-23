@@ -5557,6 +5557,10 @@ function doAttack(byId, targetId) {
   const attackerBeat = beatActive(attacker); // Beat Mode: การโจมตีเป็นความเสียหายจริง ไม่สนเกราะ
   // คาซามะ ไดสุเกะ Rider Shooting (characters/daisuke.js): ล้างเกราะทิ้งก่อนหมัดจะลง
   //  ต้องอยู่ก่อน armorBefore ด้านล่าง ไม่งั้นเกราะที่ล้างทิ้งจะถูกนับเป็น "เกราะที่เสียจากหมัด" (Absorb shield จะดูดกลับฟรี)
+  //  ต้องจำไว้ก่อนว่าท่าอาร์มอยู่ไหม — สองตัวนี้จะล้างธงทิ้งตอนออกหมัด
+  //  ใช้ตัดสินท้ายฟังก์ชันว่าจะเล่นวีดีโอก่อนหรือหลังการ์ดสรุปความเสียหาย
+  const daisukeRiderFired = CHAR_HOOKS.daisuke.riderArmed(attacker);
+  const yagurumaStingFired = CHAR_HOOKS.yaguruma.stingArmed(attacker);
   CHAR_HOOKS.daisuke.stripArmorOnAttack(engine, attacker, target);
   CHAR_HOOKS.yaguruma.stripResistOnAttack(engine, attacker, target); // Rider Sting: เจาะ "ต้านสถานะ" ก่อน ดีบัฟที่ตามมาจึงติด
   const hpBefore = target.hp;
@@ -5831,7 +5835,7 @@ function doAttack(byId, targetId) {
   //  / อย่าอยู่เลย แกน่ะ! (ริต้า เบอร์นัล patch 2.1.6) / ฉันยัง...มองเห็นอยู่!!! กันตาย + อย่างนายน่ะ จะไปเข้าใจอะไร (สึงาชิ ทาคุโตะ patch 2.2.4):
   //  เล่นวีดีโอที่ค้างคิวก่อน แล้วค่อยขึ้นสรุปความเสียหาย
   //  (ปกติทุกท่าอื่นจะขึ้นสรุปความเสียหายก่อนแล้วค่อยเล่นวีดีโอค้างคิวตอนจบ — ท่าเหล่านี้กลับลำดับเฉพาะตัว)
-  if ((storiumAtk || phenexPurgeAtk || miyakoUltAtk || triggerMultiAtk || triggerZeperionAtk || escanorAttackVideoQueued || (beatSaveFired && target.characterId === "takuto") || takutoUlt2VideoQueued || eijiSwordFx.videoQueued || harukaPunishFx.videoQueued || (harukaCounterFx && harukaCounterFx.videoQueued) || (danCounterFx && danCounterFx.videoQueued) || (yuiCounterFx && yuiCounterFx.videoQueued) || batGunFired) && cutsceneQueue.length) runCutsceneQueue(showAttackFx);
+  if ((storiumAtk || phenexPurgeAtk || miyakoUltAtk || triggerMultiAtk || triggerZeperionAtk || escanorAttackVideoQueued || (beatSaveFired && target.characterId === "takuto") || takutoUlt2VideoQueued || eijiSwordFx.videoQueued || harukaPunishFx.videoQueued || (harukaCounterFx && harukaCounterFx.videoQueued) || (danCounterFx && danCounterFx.videoQueued) || (yuiCounterFx && yuiCounterFx.videoQueued) || batGunFired || daisukeRiderFired || yagurumaStingFired) && cutsceneQueue.length) runCutsceneQueue(showAttackFx);
   else showAttackFx();
 }
 
