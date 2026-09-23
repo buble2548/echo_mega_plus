@@ -14,6 +14,7 @@ const Z = require("./_zect");
 const ID = "yaguruma";
 
 // ---------- ท่าไม้ตาย Rider Sting ----------
+const STING_ATK = 1;          // พลังโจมตีพื้นฐาน +1 ของหมัดนั้น
 const STING_POISON_TURNS = 3; // "พิษร้าย" (Universal): ดาเมจ 1/เทิร์น + พลังโจมตี -1
 const STING_DECAY_TURNS = 2;  // "ผุพัง": เกราะฟื้นไม่ได้
 
@@ -39,6 +40,7 @@ module.exports = {
   id: ID,
   IMG,
   VIDEO,
+  STING_ATK,
   STING_POISON_TURNS,
   STING_DECAY_TURNS,
   CASS_OFF_ATK: Z.CASS_OFF_ATK,
@@ -108,11 +110,12 @@ module.exports = {
     return true;
   },
 
-  // Rider Sting ไม่เพิ่มพลังโจมตี — ความแรงอยู่ที่ดีบัฟที่ทิ้งไว้
+  // Rider Sting แรงขึ้น +1 เหมือน Rider Shooting — บวกดีบัฟที่ทิ้งไว้
   damageBonus(engine, attacker, target, ctx) {
     if (!isYaguruma(attacker)) return 0;
-    if (ctx) ctx.yagurumaSting = stingArmed(attacker);
-    return Z.sharedDamageBonus(attacker, target, ctx);
+    const sting = stingArmed(attacker);
+    if (ctx) ctx.yagurumaSting = sting;
+    return Z.sharedDamageBonus(attacker, target, ctx) + (sting ? STING_ATK : 0);
   },
 
   // ---------- Rider Sting: ล้าง "ต้านสถานะ" ก่อนดาเมจ ----------
@@ -207,7 +210,7 @@ module.exports = {
 
   armSting(engine, p) {
     p.yagurumaSting = true;
-    engine.log(`🦂 ${p.name} RIDER STING — เข็มพิษพร้อมแล้ว: หมัดถัดไปจะเจาะ "ต้านสถานะผิดปกติ" ของเป้าหมาย แล้วฝัง "พิษร้าย" ${STING_POISON_TURNS} เทิร์น + "ผุพัง" ${STING_DECAY_TURNS} เทิร์น`);
+    engine.log(`🦂 ${p.name} RIDER STING — เข็มพิษพร้อมแล้ว: หมัดถัดไปแรงขึ้น +${STING_ATK} และจะเจาะ "ต้านสถานะผิดปกติ" ของเป้าหมาย แล้วฝัง "พิษร้าย" ${STING_POISON_TURNS} เทิร์น + "ผุพัง" ${STING_DECAY_TURNS} เทิร์น`);
     return " — เข็มพิษพร้อม";
   },
 

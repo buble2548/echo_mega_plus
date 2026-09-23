@@ -1512,7 +1512,7 @@ function statusEntries(p, full) {
       : { key: "daisukeMode", v: 1, icon: "🛡️", label: `PUT ON ${d.putOnTurns}/${d.putOnEvery}`, cls: "bg-echo-armor", desc: "สวมเกราะอยู่: เกราะฟื้นได้ตามปกติ และครบ 3 เทิร์นเมื่อไรจะฟื้นพลังชีวิต +2 — กดสกิลรอง/ท่าไม้ตายไม่ได้ในโหมดนี้" });
     if (d.clockUp) out.push({ key: "daisukeClock", v: 1, icon: "⏱️", label: `CLOCK UP · หลบ ${d.dodge}%`, cls: "bg-echo-magenta", desc: "เวลาหยุดนิ่ง: คนอื่นขยับไม่ได้จนกว่าไดสุเกะจะเปิดไพ่ · สกิลติดตัว Zect ให้หลบหลีก 25% · เสียแต้มสกิล 2 หน่วยต่อเทิร์น หมดเมื่อไรก็ปิดเอง" });
     if (d.rider) out.push({ key: "daisukeRider", v: 1, icon: "🎯", label: "ไรเดอร์ชูต", cls: "bg-echo-gold text-gray-900", desc: "Rider Shooting เล็งไว้แล้ว: การโจมตีปกติครั้งถัดไปจะล้างเกราะเป้าหมาย 1 หน่วยก่อน แล้วจึงลงความเสียหาย (แรงขึ้น +1)" });
-    if (d.sting) out.push({ key: "yagurumaSting", v: 1, icon: "🦂", label: "ไรเดอร์สติง", cls: "bg-echo-magenta", desc: "Rider Sting เล็งไว้แล้ว: การโจมตีปกติครั้งถัดไปจะล้าง \"ต้านสถานะผิดปกติ\" ของเป้าหมายก่อน แล้วจึงลงความเสียหาย พร้อมฝัง \"พิษร้าย\" 3 เทิร์น และ \"ผุพัง\" 2 เทิร์น" });
+    if (d.sting) out.push({ key: "yagurumaSting", v: 1, icon: "🦂", label: "ไรเดอร์สติง", cls: "bg-echo-magenta", desc: "Rider Sting เล็งไว้แล้ว: การโจมตีปกติครั้งถัดไปจะล้าง \"ต้านสถานะผิดปกติ\" ของเป้าหมายก่อน แล้วจึงลงความเสียหาย (แรงขึ้น +1) พร้อมฝัง \"พิษร้าย\" 3 เทิร์น และ \"ผุพัง\" 2 เทิร์น" });
   }
   // อิปโป: อัตราหลบหลีกรวม + Dempsey Charge (ทุกคนเห็นได้ เป็นข้อมูลสนามเหมือน % หลบของเอจิ)
   if (p.character?.id === "ippo") {
