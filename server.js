@@ -934,6 +934,16 @@ function eijiUltFieldActive() {
   return Object.values(players).some((p) => p.alive && CHAR_HOOKS.eiji.ultActive(p));
 }
 // เวลาของเฟสจั่วการ์ดในเทิร์นนี้ (ปกติ CARD_TIME · ระหว่าง Break Beat Bark! ของเอจิเหลือ 40 วิ)
+// Clock Up เปิด/ปิด "กลางเฟสจั่วไพ่" — ต้องแก้เวลาที่เหลือของเทิร์นนั้นด้วย
+//  ⚠️ cardPhaseSeconds() มีผลแค่ตอนขึ้นเทิร์นใหม่ ส่วน pausePlayingForCutscene() จะคืนเวลาที่เหลือ
+//  "ก่อนเล่นคลิป" ให้หลังคลิปจบ — ถ้าไม่เซ็ต timeLeft ตรงนี้ เทิร์นที่กดเปิดนาฬิกาจะเดินต่อตามเดิม
+//  (แพทเทิร์นเดียวกับ reduceCardTimer ของเอจิ ที่แก้ timeLeft ตรงๆ เหมือนกัน)
+function syncClockUpPhaseTime(p) {
+  if (gameState !== "PLAYING") return;
+  const Z = CHAR_HOOKS.daisuke;
+  if (Z.clockUpOn(p)) timeLeft = Z.CLOCK_UP_SAFETY;              // เปิด: เวลาหยุดในสายตาผู้เล่น
+  else timeLeft = Math.min(timeLeft, Z.CLOCK_UP_CARD_TIME);      // ปิด: กลับสู่เวลาสั้นๆ ไม่ค้างที่ 90 วิ
+}
 function cardPhaseSeconds() {
   // คาซามะ ไดสุเกะ (Clock Up): "เวลาหยุด" = ตั้งเวลายาวมากไว้เป็นตาข่ายกันห้องค้าง
   //  แล้วให้ฝั่ง client ไม่โชว์เป็นนาฬิกา (แพทเทิร์นเดียวกับ SERAPH_PLACE_SAFETY_SECONDS)
@@ -4080,6 +4090,9 @@ function useSkill(id, tier, targets, item) {
   // ---------- คาซามะ ไดสุเกะ (characters/daisuke.js) ----------
   if (isDaisukePick) flashSuffix = CHAR_HOOKS.daisuke.applyInstantSkill(engine, p, tier) || flashSuffix;
   if (isYagurumaPick) flashSuffix = CHAR_HOOKS.yaguruma.applyInstantSkill(engine, p, tier) || flashSuffix;
+  // ไรเดอร์ Zect: กด Clock Up/Clock Over กลางเฟสจั่วไพ่ — ต้องแก้เวลาที่เหลือตอนนี้
+  //  ก่อนที่ pausePlayingForCutscene() จะอ่าน timeLeft ไปเก็บไว้คืนหลังคลิปจบ
+  if ((isDaisukePick || isYagurumaPick) && tier === "secondary") syncClockUpPhaseTime(p);
   // ---------- โทโนะ ชิกิ: มีดพับประจำตระกูล — เลือกระดับสกิลติดตัว 1-5 (กดเปลี่ยนกี่ครั้งก็ได้) (characters/tohno.js) ----------
   if (isTohnoPick) {
     flashSuffix = CHAR_HOOKS.tohno.applyBasicPick(engine, p, item);

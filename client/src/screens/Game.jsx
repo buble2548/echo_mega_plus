@@ -4706,7 +4706,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
         <div className="shrink-0 flex flex-col items-center gap-1 pt-2 px-14 min-h-[40px]">
           {(phase === "PLAYING" || phase === "ATTACK") && (
             <div className="p-chip text-base font-bold text-white bg-black/55 px-5 py-1 border-b-2" style={{ borderColor: "var(--color-p-accent-bright)" }}>
-              <span>{state.oberonCollapse ? "🐝" : state.oberonBg ? "🌑" : nightNow ? "🌙" : "☀️"} รอบที่ {state.roundNumber} · {frozenByClockUp ? <b className="text-echo-cyan">CLOCK UP</b> : <>⏱️ <TickSeconds /> วิ</>}</span>
+              <span>{state.oberonCollapse ? "🐝" : state.oberonBg ? "🌑" : nightNow ? "🌙" : "☀️"} รอบที่ {state.roundNumber} · {(frozenByClockUp || dai?.clockUp) ? <b className="text-echo-cyan">CLOCK UP</b> : <>⏱️ <TickSeconds /> วิ</>}</span>
             </div>
           )}
           {state.oberonBg && (
@@ -5065,7 +5065,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
                     <>
                       <div className="relative flex h-14">
                         <button
-                          disabled={state.deckEmpty || me.atCap || noDraw || shCharging || rgCharging || phenexTaunting || tepeuPonderLocked}
+                          disabled={state.deckEmpty || me.atCap || noDraw || shCharging || rgCharging || phenexTaunting || tepeuPonderLocked || frozenByClockUp}
                           onClick={() => { clickSound(); socket.emit("hit"); }}
                           className="flex-1 font-black text-lg text-gray-900 transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                           style={{ background: "var(--color-echo-cyan)", clipPath: "polygon(0 0,94% 0,100% 100%,0 100%)" }}
@@ -5073,6 +5073,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
                           🎴 จั่วการ์ด
                         </button>
                         <button
+                          disabled={frozenByClockUp}
                           onClick={() => { clickSound(); socket.emit("lock"); }}
                           className="flex-1 font-black text-lg text-gray-900 transition active:scale-95 -ml-3"
                           style={{ background: "var(--color-echo-gold)", clipPath: "polygon(6% 0,100% 0,100% 100%,0% 100%)" }}
@@ -5559,7 +5560,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
               {/* ปุ่มจั่ว/เปิดไพ่ — ย้ายมาไว้ใต้การ์ดแล้ว */}
               <div className="flex gap-2 mt-2">
                 <button
-                  disabled={state.deckEmpty || !(phase === "PLAYING" && me.alive && !done) || me.atCap || noDraw || shCharging || rgCharging || phenexTaunting || tepeuPonderLocked}
+                  disabled={state.deckEmpty || !(phase === "PLAYING" && me.alive && !done) || me.atCap || noDraw || shCharging || rgCharging || phenexTaunting || tepeuPonderLocked || frozenByClockUp}
                   onClick={() => { clickSound(); socket.emit("hit"); }}
                   className="p-hs-action p-hs-action-draw w-28 sm:w-32 h-14 sm:h-16 flex items-center justify-center gap-2 disabled:opacity-35 disabled:cursor-not-allowed"
                   title="จั่วการ์ด"
@@ -5568,7 +5569,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
                   <span className="text-xs font-black text-echo-cyan" style={{ fontFamily: P_DISPLAY }}>จั่ว</span>
                 </button>
                 <button
-                  disabled={!(phase === "PLAYING" && me.alive && !done)}
+                  disabled={!(phase === "PLAYING" && me.alive && !done) || frozenByClockUp}
                   onClick={() => { clickSound(); socket.emit("lock"); }}
                   className="p-hs-action p-hs-action-reveal w-28 sm:w-32 h-14 sm:h-16 flex items-center justify-center gap-2 disabled:opacity-35 disabled:cursor-not-allowed"
                   title="เปิดไพ่"

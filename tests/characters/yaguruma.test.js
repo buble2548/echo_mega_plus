@@ -216,6 +216,20 @@ test('วีดีโอ Clock Up เล่นทุกครั้งที่�
   assert.equal(cuts.filter((k) => k === 'yagurumaClockUp').length, 3, 'กดเปิด 3 ครั้ง ต้องคิวคลิป 3 ครั้ง');
 });
 
+test('Clock Up กลางเทิร์น: เวลาต้องหยุดตั้งแต่เทิร์นที่กด ไม่ใช่เทิร์นถัดไป', () => {
+  const { S } = setup();
+  engine.startPhaseTimer(60, () => {});
+  assert.equal(engine.buildStateFor(S.id).timeLeft, 60);
+  engine.useSkill(S.id, 'basic');      // CAST OFF
+  engine.useSkill(S.id, 'secondary');  // CLOCK UP
+  assert.equal(engine.buildStateFor(S.id).timeLeft, Y.CLOCK_UP_SAFETY,
+    'กดกลางเฟสจั่วไพ่แล้วเวลาต้องหยุดทันที — ไม่ใช่รอเทิร์นหน้า');
+  engine.useSkill(S.id, 'secondary');  // CLOCK OVER
+  assert.equal(engine.buildStateFor(S.id).timeLeft, Y.CLOCK_UP_CARD_TIME,
+    'กดปิดแล้วต้องไม่ค้างเวลาตาข่ายไว้ 90 วิ');
+  engine.clearPhaseTimer();
+});
+
 test('Zect ข้อ 2: ตีไรเดอร์ที่ Clock Up ด้วยกัน แรงขึ้นอีก 1', () => {
   const { S, K, A } = setup();
   Y.toggleCass(engine, S); D.toggleCass(engine, K);
