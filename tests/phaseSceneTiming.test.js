@@ -27,8 +27,9 @@ test("round banner runs exactly as long as the server's TRANSITION phase", () =>
 
 // ฉาก "เริ่มโจมตีได้" ต้องไม่ยาวกว่าเวลาที่ผู้ชนะมีให้เลือกเป้าหมาย
 test("attack call is shorter than the attack phase", () => {
+  // ย้ายไปอยู่ในคิวฉากประกาศแล้ว (SCENE_MS) — เดิมเป็น setTimeout ของตัวเอง
   const src = fs.readFileSync(path.join(root, "client", "src", "screens", "Game.jsx"), "utf8");
-  const m = /setAttackCall\(0\), (\d+)\)/.exec(src);
-  assert.ok(m, "หาเวลาปิดฉากเริ่มโจมตีใน Game.jsx ไม่เจอ");
+  const m = /const SCENE_MS = \{[^}]*atk:\s*(\d+)/.exec(src);
+  assert.ok(m, "หาเวลาของฉากเริ่มโจมตีใน SCENE_MS ไม่เจอ");
   assert.ok(Number(m[1]) / 1000 < serverSeconds("ATTACK_TIME"), "ฉากเริ่มโจมตียาวกว่าเฟสโจมตีเอง");
 });

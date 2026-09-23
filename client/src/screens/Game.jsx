@@ -812,6 +812,10 @@ function SummaryTiers({ winners, losers, compact }) {
 }
 
 // overlay ที่ใช้ร่วมกันทั้ง layout มือถือและจอใหญ่ (อนิเมชันตีกัน/ประกาศเปลี่ยนร่าง/แจ้งเตือนคัตซีน/สกิลแฟลช/แบนเนอร์กลางวันคืน)
+// ระยะเวลาของแต่ละฉากประกาศ (มิลลิวินาที) — ต้องยาวพอให้อนิเมชันใน css เล่นจบ
+//  ไม่งั้นฉากจะถูกถอดออกกลางคัน แล้วฉากถัดไปในคิวจะเด้งมาทับตอนอันเก่ายังจางไม่หมด
+const SCENE_MS = { cycle: 3500, draw: 2000, atk: 2200, shop: 3700 };
+
 function OverlayLayer({ phase, attack, csAnnounce, csSkipped, flash, notice, cycleFx, overloadForce, bylethCourse, onOpenBylethCourse }) {
   return (
     <>
@@ -3766,7 +3770,13 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
   const [msMarkSel, setMsMarkSel] = useState(false);         // ผู้สังหารเมจ: โหมดเลือกเป้าหมาย Witch Mark (เลือกตัวเองไม่ได้)
   const [msRuptureSel, setMsRuptureSel] = useState(false);   // ผู้สังหารเมจ: โหมดเลือกเป้าหมาย Mana Rupture (เลือกตัวเองไม่ได้)
   const [gunSel, setGunSel] = useState(null);                // ปืนหน่วย GUTS Select: กระสุนที่เลือกไว้ รอจิ้มเป้าหมายบนกระดาน (เลือกตัวเองไม่ได้)
-  const [cycleFx, setCycleFx] = useState(null); // แบนเนอร์สลับกลางวัน/กลางคืน
+  // ---------- คิวฉากประกาศ ----------
+  //  ฉากประกาศทุกอันกินจอเต็มใบ เดิมต่างคนต่างมีตัวตั้งเวลาของตัวเอง ไม่มีใครรู้จักกัน จึงทับกันได้
+  //  ที่ชนบ่อยที่สุด: วงจรกลางวัน-กลางคืนสลับทุก 3 เทิร์น แล้วเด้งพร้อม "เริ่มจั่วการ์ด" ที่ต้นเทิร์นพอดี
+  //  (ฉากกลางวัน-กลางคืนยาว 3.5 วิ ส่วนฉากจั่วการ์ด 2 วิ — ทับกันเต็มๆ ทุก 3 เทิร์น)
+  //  และร้านค้าที่เด้งวินาทีที่ 2.7 ก็ทับหางของฉากกลางวัน-กลางคืนอีกต่อหนึ่ง
+  //  รวมมาเข้าคิวเดียว เล่นทีละอันตามลำดับที่เข้ามา — แบนเนอร์เปลี่ยนเทิร์นผูกกับเฟส TRANSITION
+  //  จึงไม่เข้าคิว แต่ "กั้นคิว" ไว้แทน ไม่มีฉากไหนเล่นทับมันได้
   const prevCycle = useRef(null);
   const [hakunoCmdOpen, setHakunoCmdOpen] = useState(false); // คิชินามิ ฮาคุโนะ: เมนูเลือกคำสั่งอาคมบัญชาระดับ EX+
   const [statusViewId, setStatusViewId] = useState(null); // ดูสถานะผู้เล่นคนอื่น (แตะการ์ดตอนไม่ได้เลือกเป้า)
@@ -3774,21 +3784,36 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
   const [shopOpen, setShopOpen] = useState(false);
   // นับครั้งการแสดง ไม่ใช่ true/false — ค่าต้องเปลี่ยนทุกครั้งที่เข้าช่วง ไม่งั้น React ไม่ remount
   // แล้วอนิเมชันจะเล่นแค่ครั้งแรกครั้งเดียวตลอดทั้งแมตช์
-  const [attackCall, setAttackCall] = useState(0);
-  const [drawCall, setDrawCall] = useState(0);
+  const [sceneQ, setSceneQ] = useState([]);
+  const sceneSeq = useRef(0);
   const prevPhaseRef = useRef(null);
-  const callTimers = useRef({ atk: null, draw: null });
   // ประกาศช่วงละครั้งต่อเทิร์น — phase กลับมาเป็น PLAYING/ATTACK ซ้ำได้หลายรอบในเทิร์นเดียว
   //  (จบคัตซีนท่าไม้ตาย, Overload Force แจกไพ่ใหม่, หมัดต่อเนื่องของคาเยนน์/ฮิซากาว่า)
   //  ถ้าไม่กันไว้ ฉากจะเด้งซ้อนกันทุกครั้งที่กลับเข้า phase เดิม
   const announced = useRef({ draw: 0, atk: 0 });
-  const [heraldSeq, setHeraldSeq] = useState(0);
-  const [shopHerald, setShopHerald] = useState(false);   // ร้านค้ามายา: เปิดหน้าร้านค้า
   const [deckOpen, setDeckOpen] = useState(false);   // สมุดการ์ดกองกลาง: กดที่กองการ์ดกลางเพื่อดู
   const shopAutoShown = useRef(-1);                  // จำรอบร้านค้าที่เด้งอัตโนมัติไปแล้ว (กันเด้งซ้ำ)
   const vp = useViewport();
   const { flights: cardFlights, removeFlight: removeCardFlight, deckRef, selfHandRef, registerOther } = useCardFlights(state);
   const phase = state.gameState;
+
+  // ---------- ตัวขับคิวฉากประกาศ ----------
+  //  ฉากถัดไปเริ่มนับเวลาก็ต่อเมื่อฉากก่อนหน้าเล่นจบแล้วเท่านั้น
+  //  TRANSITION = ช่วงของแบนเนอร์เปลี่ยนเทิร์น · CUTSCENE = วีดีโอเต็มจอ — ทั้งคู่กั้นคิวไว้ก่อน
+  const scene = sceneQ[0] || null;
+  const sceneBlocked = phase === "TRANSITION" || phase === "CUTSCENE";
+  const pushScene = useCallback((kind, data) => {
+    sceneSeq.current += 1;
+    const entry = { kind, data, id: sceneSeq.current };
+    // ฉากจั่วการ์ดกับฉากโจมตีเป็นประกาศของคนละช่วงในเทิร์นเดียวกัน ประกาศใหม่มาแล้วอันเก่าหมดความหมาย
+    const drops = kind === "draw" ? "atk" : kind === "atk" ? "draw" : null;
+    setSceneQ((q) => [...(drops ? q.filter((x, i) => i === 0 || x.kind !== drops) : q), entry]);
+  }, []);
+  useEffect(() => {
+    if (!scene || sceneBlocked) return undefined;
+    const t = setTimeout(() => setSceneQ((q) => q.slice(1)), SCENE_MS[scene.kind] || 2000);
+    return () => clearTimeout(t);
+  }, [scene, sceneBlocked]);
   const me = state.players.find((p) => p.id === state.youId);
   const others = state.players.filter((p) => p.id !== state.youId);
   const slots = SLOTS[Math.min(others.length, 6)] || [];
@@ -3815,12 +3840,8 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
     if (announced.current.atk === state.roundNumber) return;
     announced.current.atk = state.roundNumber;
     playSfx("change_cutscene");
-    setDrawCall(0);
-    setAttackCall((n) => n + 1);
-    // ตัวตั้งเวลาปิดต้องอยู่นอก cleanup ของ effect — ผู้เล่นเลือกเป้าเร็วกว่าฉากจบได้เสมอ
-    clearTimeout(callTimers.current.atk);
-    callTimers.current.atk = setTimeout(() => setAttackCall(0), 2200);
-  }, [phase, state.roundNumber, muteScenes]);
+    pushScene("atk");
+  }, [phase, state.roundNumber, muteScenes, pushScene]);
   // ฉากบอกจำนวนเทิร์น -> เสียงเปลี่ยนช่วงเดียวกัน
   useEffect(() => {
     if (phase !== "TRANSITION") return;
@@ -3836,29 +3857,16 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
     announced.current.draw = state.roundNumber;
     // แบนเนอร์เปลี่ยนเทิร์นเพิ่งประกาศเสียงไป ไม่ต้องซ้ำอีกครั้ง
     if (prev !== "TRANSITION") playSfx("change_cutscene");
-    setAttackCall(0);
-    setDrawCall((n) => n + 1);
-    clearTimeout(callTimers.current.draw);
-    callTimers.current.draw = setTimeout(() => setDrawCall(0), 2000);
-  }, [phase, state.roundNumber, muteScenes]);
-  useEffect(() => () => {
-    clearTimeout(callTimers.current.atk);
-    clearTimeout(callTimers.current.draw);
-  }, []);
+    pushScene("draw");
+  }, [phase, state.roundNumber, muteScenes, pushScene]);
   // ร้านค้ามายา (patch 2.2 full): เด้งหน้าร้านค้าอัตโนมัติครั้งเดียวทุกครั้งที่มีสินค้าชุดใหม่ (รอบร้านค้าเปลี่ยน)
   useEffect(() => {
     const seq = state.shop?.[0]?.id?.split("_")[1];
     if (seq && shopAutoShown.current !== seq) {
       shopAutoShown.current = seq;
-      setHeraldSeq((n) => n + 1);
+      pushScene("shop"); // ไม่ต้องหน่วง 2.7 วิเองแล้ว คิวจัดลำดับให้ต่อท้ายฉากต้นเทิร์นเอง
     }
-  }, [state.shop]);
-  useEffect(() => {
-    if (!heraldSeq) return undefined;
-    const t1 = setTimeout(() => setShopHerald(true), 2700);
-    const t2 = setTimeout(() => setShopHerald(false), 6400);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [heraldSeq]);
+  }, [state.shop, pushScene]);
   // ผู้เล่นที่กำลังเปิดดูสถานะ (ข้อมูลสดจาก state ทุกครั้งที่ re-render)
   const statusView = statusViewId ? state.players.find((x) => x.id === statusViewId) : null;
   // Beat Mode (คุวากาตะ เลือด < 3): ท่าไม้ตายใช้ไม่ได้เสมอ
@@ -4583,24 +4591,17 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
   }, [tohnoOpen, phase, done]);
   // แบนเนอร์สลับกลางวัน/กลางคืน: เด้งเมื่อ cycle เปลี่ยนระหว่างแมตช์ แล้วหายเอง
   useEffect(() => {
-    if (prevCycle.current && state.cycle && prevCycle.current !== state.cycle) {
-      setCycleFx({ cycle: state.cycle, id: Date.now() });
+    if (prevCycle.current && state.cycle && prevCycle.current !== state.cycle && !muteScenes) {
+      pushScene("cycle", { cycle: state.cycle });
     }
     prevCycle.current = state.cycle;
-  }, [state.cycle]);
+  }, [state.cycle, muteScenes, pushScene]);
   // ราตรีกลืนกิน: เด้งแบนเนอร์เมื่อโอเบรอนใช้ท่าไม้ตาย 2 (ฉากหลังเปลี่ยน) แล้วหายเอง
   const prevDevour = useRef(false);
   useEffect(() => {
-    if (!prevDevour.current && state.oberonBg) setCycleFx({ cycle: "night", oberon: true, id: Date.now() });
+    if (!prevDevour.current && state.oberonBg && !muteScenes) pushScene("cycle", { cycle: "night", oberon: true });
     prevDevour.current = !!state.oberonBg;
-  }, [state.oberonBg]);
-  useEffect(() => {
-    if (!cycleFx) return;
-    // ระหว่าง CUTSCENE แบนเนอร์ยังไม่ถูกแสดง (จอวีดีโอเต็มจอ) — รอวีดีโอจบก่อนค่อยเริ่มนับถอยหลัง
-    if (phase === "CUTSCENE") return;
-    const t = setTimeout(() => setCycleFx(null), 3500);
-    return () => clearTimeout(t);
-  }, [cycleFx, phase]);
+  }, [state.oberonBg, muteScenes, pushScene]);
   useEffect(() => {
     if (hakunoCmdOpen && !hakunoCmdUsable) setHakunoCmdOpen(false);
   }, [hakunoCmdOpen, hakunoCmdUsable]);
@@ -5055,10 +5056,10 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
         )}
 
         {/* ---------- อนิเมชันเปลี่ยนเฟส ---------- */}
-        {drawCall > 0 && <DrawCall key={drawCall} />}
+        {scene?.kind === "draw" && <DrawCall key={scene.id} />}
 
         {/* ---------- overlay ที่ใช้ร่วมกับจอคอม ---------- */}
-        <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} flash={flash} notice={notice} cycleFx={cycleFx} overloadForce={state.overloadForce} bylethCourse={state.bylethFieldFx} onOpenBylethCourse={() => setBylethInfoOpen(true)} />
+        <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} flash={flash} notice={notice} cycleFx={scene?.kind === "cycle" ? { ...scene.data, id: scene.id } : null} overloadForce={state.overloadForce} bylethCourse={state.bylethFieldFx} onOpenBylethCourse={() => setBylethInfoOpen(true)} />
         <FlyingCardsLayer flights={cardFlights} onDone={removeCardFlight} />
         {state.yunaFieldFx === "beatbark" && <div className="field-fx-beatbark" />}
         {state.bylethFieldFx && <div className={`field-fx-byleth-${state.bylethFieldFx}`} />}
@@ -5072,9 +5073,9 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
         {/* ---------- แบนเนอร์รอบถัดไป ---------- */}
         {phase === "TRANSITION" && <RoundBanner round={state.roundNumber + 1} />}
 
-        {attackCall > 0 && <AttackCall key={attackCall} />}
+        {scene?.kind === "atk" && <AttackCall key={scene.id} />}
 
-        {shopHerald && <ShopHerald />}
+        {scene?.kind === "shop" && <ShopHerald key={scene.id} />}
 
         {phase === "GAMEOVER" && (
           <VictoryScreen state={state} onBackToLobby={() => socket.emit("backToLobby")} />
@@ -5583,10 +5584,10 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
       )}
 
       {/* ---------- อนิเมชันเปลี่ยนเฟส (กลางจอ) ---------- */}
-      {drawCall > 0 && <DrawCall key={drawCall} />}
+      {scene?.kind === "draw" && <DrawCall key={scene.id} />}
 
       {/* ---------- overlay ที่ใช้ร่วมกับมือถือ ---------- */}
-      <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} flash={flash} notice={notice} cycleFx={cycleFx} overloadForce={state.overloadForce} bylethCourse={state.bylethFieldFx} onOpenBylethCourse={() => setBylethInfoOpen(true)} />
+      <OverlayLayer phase={phase} attack={state.attack} csAnnounce={csAnnounce} csSkipped={csSkipped} flash={flash} notice={notice} cycleFx={scene?.kind === "cycle" ? { ...scene.data, id: scene.id } : null} overloadForce={state.overloadForce} bylethCourse={state.bylethFieldFx} onOpenBylethCourse={() => setBylethInfoOpen(true)} />
       <FlyingCardsLayer flights={cardFlights} onDone={removeCardFlight} />
       {state.yunaFieldFx === "beatbark" && <div className="field-fx-beatbark" />}
       {state.bylethFieldFx && <div className={`field-fx-byleth-${state.bylethFieldFx}`} />}
@@ -5600,9 +5601,9 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
       {/* ---------- แบนเนอร์รอบถัดไป ---------- */}
       {phase === "TRANSITION" && <RoundBanner round={state.roundNumber + 1} />}
 
-      {attackCall > 0 && <AttackCall key={attackCall} />}
+      {scene?.kind === "atk" && <AttackCall key={scene.id} />}
 
-      {shopHerald && <ShopHerald />}
+      {scene?.kind === "shop" && <ShopHerald key={scene.id} />}
 
       {phase === "GAMEOVER" && (
         <VictoryScreen state={state} onBackToLobby={() => socket.emit("backToLobby")} />
