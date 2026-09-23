@@ -2280,20 +2280,24 @@ function OtherPlayer({ p, phase, slot, targetable, onAttack, picked, onInspect, 
             </div>
           </>
         )}
-        <TeamBadge teamId={p.teamId} className="absolute -top-3 -right-3 z-20" />
         {targetable && <TargetLock />}
-        {targetable && (
-          <span className="p-target-badge absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] px-2 py-0.5 rounded-full text-white whitespace-nowrap z-10">
-            🎯 เป้าหมาย
-          </span>
-        )}
-        {picked && <span className="absolute -top-2 -left-2 text-2xl z-10">🎤</span>}
         {!p.alive && <span className="absolute inset-0 grid place-items-center text-3xl z-10">💀</span>}
-        {p.isWinner && summary && <span className="absolute -top-2 -right-2 text-xl z-10">👑</span>}
-        {phase === "PLAYING" && p.locked && p.alive && (
-          <span className="pc-ready absolute -top-2 right-1.5 z-10" title="พร้อมแล้ว">✓ พร้อม</span>
-        )}
       </div>
+      {/* ป้ายที่ลอยพ้นขอบการ์ดต้องอยู่ "นอก" .pc-card — clip-path ของการ์ดตัดลูกหลานทุกตัวทิ้ง
+          ไม่สนใจ z-index หรือ overflow ถ้าวางไว้ข้างในจะหายทั้งใบ เหลือแต่เงาที่เล็ดลอดออกมา
+          (กรอบนอกกว้างเท่ากันและไม่มี clip-path จึงวางตำแหน่งเดิมได้เป๊ะ) */}
+      <TeamBadge teamId={p.teamId} className="absolute -top-3 -right-3 z-20" />
+      {targetable && (
+        <span className="p-target-badge absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] px-2 py-0.5 rounded-full text-white whitespace-nowrap z-10">
+          🎯 เป้าหมาย
+        </span>
+      )}
+      {picked && <span className="absolute -top-2 -left-2 text-2xl z-10">🎤</span>}
+      {p.isWinner && summary && <span className="absolute -top-2 -right-2 text-xl z-10">👑</span>}
+      {/* กลางบน: ไม่ชนกับตราทีม (ขวาบน) หรือ 🎤 (ซ้ายบน) และป้าย 🎯/👑 อยู่คนละเฟสกันอยู่แล้ว */}
+      {phase === "PLAYING" && p.locked && p.alive && (
+        <span className="pc-ready absolute -top-2 left-1/2 -translate-x-1/2 z-10" title="เปิดไพ่แล้ว">✓ พร้อม</span>
+      )}
       {twin && (
         <div className="flex flex-col items-center gap-1 w-full">
           <TwinVitals p={p} compact />
@@ -2329,9 +2333,6 @@ function MobileOpponent({ p, phase, targetable, onAttack, picked, onInspect, hos
         {targetable && <TargetLock />}
         {!p.alive && <span className="absolute inset-0 grid place-items-center text-2xl">💀</span>}
         {p.isWinner && summary && <span className="absolute -top-2 -right-1 text-lg">👑</span>}
-        {phase === "PLAYING" && p.locked && p.alive && (
-          <span className="absolute -bottom-1 -right-1 bg-emerald-600 rounded-full w-5 h-5 grid place-items-center text-xs">✓</span>
-        )}
       </div>
       <div className="min-w-0 flex-1">
         <div className="truncate text-base font-black" style={{ color: p.color, fontFamily: "var(--font-p-display)" }}>
@@ -2342,6 +2343,10 @@ function MobileOpponent({ p, phase, targetable, onAttack, picked, onInspect, hos
         {p.hisakawa ? <TwinVitals p={p} compact /> : <LifeBar p={p} sm className="mt-0.5" />}
         {!p.hisakawa && <StatusChips p={p} left compact max={4} />}
       </div>
+      {/* เปิดไพ่แล้ว: เดิมมีแต่วงกลมเขียวติ๊กถูกเล็กๆ บนรูป ไม่มีคำบอกว่าหมายถึงอะไร */}
+      {phase === "PLAYING" && p.locked && p.alive && (
+        <span className="pc-ready shrink-0" title="เปิดไพ่แล้ว">✓ พร้อม</span>
+      )}
       {targetable && (
         <span className="p-target-badge shrink-0 text-[10px] px-2 py-0.5 rounded-full text-white whitespace-nowrap">
           🎯 เป้า
