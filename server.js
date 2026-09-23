@@ -2161,8 +2161,10 @@ function buildStateFor(viewerId) {
   const oberonCollapse = !!CHAR_HOOKS.oberon.swarmHost(engine);
   // คาซามะ/โซ (Clock Up): ไรเดอร์ที่ยังแช่สนามอยู่ (เปิดอยู่และยังไม่ได้เปิดไพ่)
   //  มากกว่า 1 คน = สนาม FULL FORCE (เพลง + เอฟเฟกต์ความเร็วรอบจอ)
-  const clockUpFreezers = CHAR_HOOKS.daisuke.freezeHosts(engine);
-  const clockUpFreezeBy = clockUpFreezers.length ? clockUpFreezers[0].id : null;
+  //  ส่งเป็น "คนที่ดูอยู่ถูกแช่ไหม" — ไม่ใช่ id ของไรเดอร์คนแรกแล้วให้ client ไปเทียบเอง
+  //  ⚠️ มีไรเดอร์เปิด Clock Up พร้อมกันหลายคนได้ — การเทียบกับคนแรกคนเดียว
+  //  ทำให้ไรเดอร์คนที่สองโดนม่านบังทั้งที่ตัวเองก็เป็นเจ้าของท่า — จึงต้องใช้กติกาเดียวกับฝั่ง server ตรงๆ
+  const clockUpFrozen = CHAR_HOOKS.daisuke.actionBlocked(engine, players[viewerId]);
   const fullForce = CHAR_HOOKS.daisuke.clockUpHosts(engine).length > 1;
   // ราตรีกลืนกิน (ฝันร้ายยามค่ำคืน): ฉากหลังกลางคืนกลายเป็นวีดีโอ oberon_background.mp4
   const oberonBg = (nightNow && oberonDevour > 0) || oberonCollapse;
@@ -2268,7 +2270,7 @@ function buildStateFor(viewerId) {
     seraph: Seraph.stateFor(engine, viewerId),
     oberonBg,
     oberonCollapse, // ยุคล่มสลาย: client วาดฉากแมลงมีพิษโทนแดง-ดำทับฉากหลังเดิม
-    clockUpFreezeBy, // Clock Up: id ของไรเดอร์ที่ยังแช่สนาม (null = ไม่มี) — client เอาไปวาดม่านแจ้งเตือน
+    clockUpFrozen,   // Clock Up: ผู้ชมคนนี้ถูกแช่อยู่ไหม (ไรเดอร์ที่เปิด Clock Up เองจะเป็น false เสมอ)
     fullForce,       // มีไรเดอร์ Clock Up พร้อมกันมากกว่า 1 คน
     hisakawaBg, // ฝันของเหล่าฝาแฝด: ฉากหลัง O-KU-RI-MO-NO-Sunday
     bardBg,   // มิติมายาบรรเลง (Bard): "blood" | "soul" | null

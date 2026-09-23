@@ -3975,9 +3975,10 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
   const daisukeSecLocked = !!dai && (!dai.cassOff || (!dai.clockUp && (me?.skillPoints || 0) < 2));
   const daisukeUltLocked = !!dai && (!dai.cassOff || zectArmed);
   // Clock Up ของคนอื่น = จอเราถูกแช่ (เจ้าของท่าไม่เห็นเอฟเฟกต์นี้ ตามสเปก "เห็นแค่ผู้เล่นอื่น")
-  //  server คำนวณให้แล้วว่าใคร "ยังแช่สนามอยู่" = เปิด Clock Up และยังไม่ได้กดเปิดไพ่
-  //  พอไรเดอร์ที่เปิดอยู่กดเปิดไพ่ครบทุกคน ธงนี้เป็น null ม่านก็หายทันทีในเทิร์นนั้น
-  const frozenByClockUp = !!state.clockUpFreezeBy && state.clockUpFreezeBy !== state.youId;
+  //  server ตัดสินมาให้เลยว่า "เราถูกแช่ไหม" — ห้ามคำนวณเองจาก id ของไรเดอร์
+  //  เพราะมีไรเดอร์เปิด Clock Up พร้อมกันได้หลายคน การเทียบกับคนใดคนหนึ่งจะทำให้
+  //  เจ้าของท่าอีกคนโดนม่านบังเองทั้งที่ตัวเองก็ขยับได้ (เคยพลาดมาแล้ว)
+  const frozenByClockUp = !!state.clockUpFrozen;
   // ---------- โอเบรอน rework 3 ----------
   const oberonUltCd = isOberon ? (me?.oberonUltCd || 0) : 0;          // จุดจบของความฝัน: คูลดาวน์ 5 เทิร์น (โชว์เป็นเลขบนการ์ด)
   const oberonSwarmOn = isOberon && !!me?.oberonSwarm;                 // อยู่ในร่างฝูงแมลง

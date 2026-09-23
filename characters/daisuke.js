@@ -179,7 +179,7 @@ module.exports = {
     p.zectClockUp = !!on;
     p.transformAt = engine.nextTransformCounter();
     if (on) {
-      engine.triggerCutscene(p, "daisukeClockUp"); // คลิปเล่นทุกครั้งที่เปิด
+      engine.queueCutscene(p, "daisukeClockUp"); // เล่นทุกครั้งที่กดเปิด — ห้ามใช้ triggerCutscene เพราะมันเล่นคลิปเต็มแค่ครั้งแรกต่อเกม
       engine.log(`⏱️ ${p.name} CLOCK UP — โลกหยุดนิ่ง ทุกคนขยับไม่ได้จนกว่าเขาจะเปิดไพ่ (แต้มสกิล -${Z.CLOCK_UP_DRAIN}/เทิร์น)`);
       return " — CLOCK UP";
     }

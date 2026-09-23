@@ -191,6 +191,31 @@ test('Clock Up สองคน: ต้องเปิดไพ่ครบทุ
   assert.equal(Y.actionBlocked(engine, A), false);
 });
 
+test('ม่าน CLOCK UP: ไรเดอร์ที่เปิดเองต้องไม่โดนม่านบัง แม้จะมีอีกคนเปิดพร้อมกัน', () => {
+  const { S, K, A } = setup();
+  Y.toggleCass(engine, S); D.toggleCass(engine, K);
+  Y.setClockUp(engine, S, true);
+  D.setClockUp(engine, K, true);
+  //  ธงนี้คือสิ่งที่ client ใช้วาดม่าน — ต้องเป็น per-viewer ไม่ใช่ id ของไรเดอร์คนแรก
+  //  (บักเดิม: เทียบ id คนแรก ทำให้ไรเดอร์คนที่สองโดนม่านบังเอง)
+  assert.equal(engine.buildStateFor(S.id).clockUpFrozen, false, 'ไรเดอร์คนที่สองต้องไม่โดนม่านบัง');
+  assert.equal(engine.buildStateFor(K.id).clockUpFrozen, false);
+  assert.equal(engine.buildStateFor(A.id).clockUpFrozen, true, 'คนนอกต้องเห็นม่าน');
+  assert.equal(engine.buildStateFor(A.id).fullForce, true, 'สองคนเปิดพร้อมกัน = FULL FORCE');
+  engine.clearPhaseTimer();
+});
+
+test('วีดีโอ Clock Up เล่นทุกครั้งที่กดเปิด ไม่ใช่แค่ครั้งแรก', () => {
+  const { S } = setup();
+  Y.toggleCass(engine, S);
+  cuts.length = 0;
+  for (let i = 0; i < 3; i++) {
+    Y.setClockUp(engine, S, true);
+    Y.setClockUp(engine, S, false);
+  }
+  assert.equal(cuts.filter((k) => k === 'yagurumaClockUp').length, 3, 'กดเปิด 3 ครั้ง ต้องคิวคลิป 3 ครั้ง');
+});
+
 test('Zect ข้อ 2: ตีไรเดอร์ที่ Clock Up ด้วยกัน แรงขึ้นอีก 1', () => {
   const { S, K, A } = setup();
   Y.toggleCass(engine, S); D.toggleCass(engine, K);
