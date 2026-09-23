@@ -303,6 +303,8 @@ module.exports = {
     for (const o of Object.values(engine.players)) {
       if (!o.oberonSwarmFragile) continue;
       o.oberonSwarmFragile = false;
+      //  เปราะบางที่ยาวกว่าที่ฝูงแมลงต่ออายุไว้ = มาจากแหล่งอื่น (เช่นคีตกวี) — ปล่อยให้เดินต่อเอง
+      if ((o.statuses.fragile || 0) > SWARM_FRAGILE_TURNS) continue;
       delete o.statuses.fragile;
       if (o.statusAmt) delete o.statusAmt.fragile;
     }
@@ -416,7 +418,9 @@ module.exports = {
       for (const p of engine.alivePlayers()) {
         if (p.characterId !== ID) continue;
         if (swarmOn(p)) continue; // ร่างฝูงแมลงค้างร่างกลางคืนไว้ ไม่สลับตามเวลา
-        if (night) engine.triggerCutscene(p, "oberonNight");
+        //  queueCutscene ไม่ใช่ triggerCutscene — การสลับร่างคือเหตุการณ์ของสนาม ไม่ใช่ท่าที่กดเอง
+        //  คืนที่ 2 เป็นต้นไปจึงต้องเห็นการเปลี่ยนร่างเหมือนกัน (คลิป 6 วิ)
+        if (night) engine.queueCutscene(p, "oberonNight");
         else engine.notifyTransform(p, "oberonDay");
       }
     }

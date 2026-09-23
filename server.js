@@ -2331,7 +2331,9 @@ function buildStateFor(viewerId) {
       let basicPub = pub(nightNow && ch.basicNight ? ch.basicNight : ch.basic);
       if (basicPub && p.characterId === "appleguy") basicPub.img = (CHAR_HOOKS.appleguy.ITEMS[p.appleItem] || CHAR_HOOKS.appleguy.ITEMS.drink).img;
       let secondaryPub = pub(nightNow && ch.secondaryNight ? ch.secondaryNight : ch.secondary);
-      let ultimatePub = pub(nightNow && ch.ultimateNight ? ch.ultimateNight : ch.ultimate);
+      //  โอเบรอน: อยู่ในร่างฝูงแมลง = ช่องท่าไม้ตายคือ "คืนร่าง" เสมอ แม้ฟ้าจะสางแล้ว
+      const obSwarmSlot = CHAR_HOOKS.oberon.swarmOn(p);
+      let ultimatePub = pub((nightNow || obSwarmSlot) && ch.ultimateNight ? ch.ultimateNight : ch.ultimate);
       // เรียวกิ ชิกิ: ท่าไม้ตายตามที่เลือกไว้ตอนเลือกตัว + ระหว่างความตายที่โรยรา ปกสกิล 1 เปลี่ยน
       if (ch.id === "shiki") {
         ultimatePub = pub((p.shikiUlt || "deatheye") === "wither" ? ch.ultimate2 : ch.ultimate);
@@ -3668,6 +3670,8 @@ function useSkill(id, tier, targets, item) {
   const isTriggerSkill = p.characterId === "ultraman_trigger";
   // โอเบรอน/โคโตเนะ: สกิลสลับตามช่วงเวลา — กลางคืนใช้เวอร์ชันกลางคืนแทน
   if (tier === "ultimate" && ch.ultimateNight && isNightRound(roundNumber)) skill = ch.ultimateNight;
+  //  โอเบรอน: อยู่ในร่างฝูงแมลง ค้างข้ามมาถึงกลางวันได้ — ช่องท่าไม้ตายคือ "คืนร่าง" เสมอ แม้ฟ้าจะสางแล้ว
+  if (tier === "ultimate" && ch.ultimateNight && CHAR_HOOKS.oberon.swarmOn(p)) skill = ch.ultimateNight;
   if (tier === "secondary" && ch.secondaryNight && isNightRound(roundNumber)) skill = ch.secondaryNight;
   if (tier === "basic" && ch.basicNight && isNightRound(roundNumber)) skill = ch.basicNight;
   // ฟุจิตะ โคโตเนะ (rework 2.3): ร่าง [พร้อมลุย] ทับปุ่มทั้ง 3 ช่อง — ต้องอยู่ "หลัง" การสลับกลางคืนด้านบน
@@ -3810,6 +3814,8 @@ function useSkill(id, tier, targets, item) {
   const isOberonPick = p.characterId === "oberon";
   if (isOberonPick && !CHAR_HOOKS.oberon.canUseSkill(engine, p, tier)) return;
   const oberonNight = isOberonPick && isNightRound(roundNumber);
+  //  อยู่ในร่างฝูงแมลงอยู่แล้ว -> ช่องท่าไม้ตายคือการคืนร่างเสมอ ไม่งั้นพอฟ้าสางจะกลายเป็นจุดจบของความฝัน แล้วออกจากร่างไม่ได้อีกเลย
+  const oberonSwarmNow = isOberonPick && CHAR_HOOKS.oberon.swarmOn(p);
   const isVeil = isOberonPick && tier === "basic";
   // พี่จ๋าอยู่ไหน (อาริมะ มิยาโกะ): กดซ้ำไม่ได้จนกว่าจะได้โจมตี
   if (p.characterId === "miyako" && tier === "basic" && (p.statuses.miyakoHeal || 0) > 0) return;
@@ -3825,14 +3831,14 @@ function useSkill(id, tier, targets, item) {
   // ฝันร้ายยามค่ำคืน (สกิลรองกลางคืน): self-buff ไม่มีเป้าหมาย — กล่อมคนที่ติดยามฟ้าสางให้หลับ
   const isNightmare = isOberonPick && tier === "secondary" && oberonNight;
   // จุดจบของความฝัน (ท่าไม้ตายกลางวัน): เลือกเป้าหมาย 1 คน (ตัวเองได้)
-  const isDreamEnd = isOberonPick && tier === "ultimate" && !oberonNight;
+  const isDreamEnd = isOberonPick && tier === "ultimate" && !oberonNight && !oberonSwarmNow;
   let dreamEndTarget = null;
   if (isDreamEnd) {
     dreamEndTarget = CHAR_HOOKS.oberon.prepareDreamEndTarget(engine, targets);
     if (!dreamEndTarget) return;
   }
   // Lie Like Vortigern (ท่าไม้ตายกลางคืน): toggle ร่างฝูงแมลง — กดซ้ำเพื่อยกเลิก (ฟรี)
-  const isSwarm = isOberonPick && tier === "ultimate" && oberonNight;
+  const isSwarm = isOberonPick && tier === "ultimate" && (oberonNight || oberonSwarmNow);
   // เอาไปสิ (Apple guy สกิลรอง, characters/appleguy.js): เลือกผู้เล่น 1 คน (คนอื่นเท่านั้น) มอบของที่เลือกไว้ทันทีก่อนเปิดการ์ด
   const isAppleGive = p.characterId === "appleguy" && tier === "secondary";
   let appleTarget = null;

@@ -3986,8 +3986,9 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
   // ร่างฝูงแมลง: กดอะไรไม่ได้เลย นอกจากท่าไม้ตาย (ไว้กดยกเลิก)
   const oberonBasicLocked = oberonSwarmOn;
   const oberonSecLocked = isOberon && (oberonSwarmOn || (nightNow && oberonNightmareOn));
-  // กลางคืน: ท่าไม้ตายต้องอยู่ระหว่างฝันร้าย (หรืออยู่ในร่างแล้วเพื่อกดยกเลิก) / กลางวัน: ติดคูลดาวน์
-  const oberonUltLocked = isOberon && (nightNow ? !(oberonNightmareOn || oberonSwarmOn) : oberonUltCd > 0);
+  // อยู่ในร่างฝูงแมลง: ช่องท่าไม้ตายคือปุ่ม "คืนร่าง" เสมอ — กดได้ทั้งกลางวันและกลางคืน ไม่ติดคูลดาวน์
+  // กลางคืน: ท่าไม้ตายต้องอยู่ระหว่างฝันร้าย / กลางวัน: ติดคูลดาวน์
+  const oberonUltLocked = isOberon && !oberonSwarmOn && (nightNow ? !oberonNightmareOn : oberonUltCd > 0);
   // ---------- Apple guy ----------
   const isApple = ch?.id === "appleguy"; // สกิลพื้นฐานไม่นับเป็นการใช้สกิลของเทิร์น (ใช้แล้วยังใช้สกิลอื่นได้)
   const isMuimi = ch?.id === "muimi"; // เสบียงฉุกเฉินไม่นับเป็นการใช้สกิลหลักของเทิร์น
@@ -4230,7 +4231,8 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
     }
     // ท่าไม้ตายโอเบรอนกลางวัน (จุดจบของความฝัน): เลือกเป้าหมาย 1 คนก่อน (เลือกตัวเองได้)
     //  กลางคืน (Lie Like Vortigern) เป็น toggle ไม่ต้องเลือกใคร — ตกไปที่ path ปกติด้านล่าง
-    if (tier === "ultimate" && ch?.id === "oberon" && !nightNow) {
+    //  ร่างฝูงแมลง: กดช่องนี้คือการคืนร่าง ไม่ต้องเลือกเป้าหมาย แม้ฟ้าจะสางแล้ว
+    if (tier === "ultimate" && ch?.id === "oberon" && !nightNow && !oberonSwarmOn) {
       setDreamSel(true);
       setSkillOpen(false);
       return;
