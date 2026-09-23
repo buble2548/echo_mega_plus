@@ -854,6 +854,7 @@ function ModalMounts({
   statusView, statusViewIsSelf, onCloseStatus,
   shopOpen, shop, onCloseShop,
   bagOpen, onCloseBag, players, gameState, roundNumber, onPickGunAmmo,
+  frozen, // Clock Up: ถูกแช่อยู่ — ซื้อของ/ใช้ของไม่ได้
   skillConfirm, onConfirmSkill, onCancelSkill,
 }) {
   return (
@@ -873,8 +874,8 @@ function ModalMounts({
       {allyBreakAsk && me?.alive && <AllyBreakModal ask={allyBreakAsk} onAnswer={onAnswerAllyBreak} />}
       {allyFinalAsk && me?.alive && <AllyFinalModal ask={allyFinalAsk} onAnswer={onAnswerAllyFinal} />}
       {statusView && <StatusModal p={statusView} statusOnly={statusViewIsSelf} onClose={onCloseStatus} />}
-      {shopOpen && <ShopModal shop={shop} me={me} onClose={onCloseShop} />}
-      {bagOpen && <InventoryModal me={me} players={players} gameState={gameState} roundNumber={roundNumber} onPickGunAmmo={onPickGunAmmo} onClose={onCloseBag} />}
+      {shopOpen && <ShopModal shop={shop} me={me} frozen={frozen} onClose={onCloseShop} />}
+      {bagOpen && <InventoryModal me={me} players={players} gameState={gameState} roundNumber={roundNumber} frozen={frozen} onPickGunAmmo={onPickGunAmmo} onClose={onCloseBag} />}
       {skillConfirm && <SkillConfirmModal confirm={skillConfirm} onConfirm={onConfirmSkill} onCancel={onCancelSkill} />}
       <GutsVideoPreloader me={me} players={players} />
     </>
@@ -1890,7 +1891,7 @@ function ShopHerald() {
   );
 }
 
-function ShopModal({ shop, me, onClose }) {
+function ShopModal({ shop, me, frozen, onClose }) {
   const list = shop;
   const hasGun = (me?.inventory || []).some((i) => i.type === "gutsGun");
   const isIgnis = me?.characterId === "ignis";
@@ -1924,10 +1925,10 @@ function ShopModal({ shop, me, onClose }) {
                     <div className="av-label" style={{ fontSize: "0.7rem" }}>🪙 {it.price}</div>
                     <AvButton
                       className="w-full py-1.5 text-xs px-2"
-                      disabled={sold || owned || !afford}
+                      disabled={sold || owned || !afford || frozen}
                       onClick={() => { playSfx("buy_something"); socket.emit("buyShopItem", { itemId: it.id }); }}
                     >
-                      {sold ? "ขายแล้ว" : owned ? "มีแล้ว" : afford ? "ซื้อ" : "เหรียญไม่พอ"}
+                      {frozen ? "⏱️ CLOCK UP" : sold ? "ขายแล้ว" : owned ? "มีแล้ว" : afford ? "ซื้อ" : "เหรียญไม่พอ"}
                     </AvButton>
                   </div>
                 </div>
@@ -1940,7 +1941,7 @@ function ShopModal({ shop, me, onClose }) {
   );
 }
 
-function InventoryModal({ me, players, gameState, roundNumber, onPickGunAmmo, onClose }) {
+function InventoryModal({ me, players, gameState, roundNumber, frozen, onPickGunAmmo, onClose }) {
   const items = me?.inventory || [];
   // ยาเปลี่ยนสีการ์ด: ต้องเลือกการ์ด 1 ใบในมือก่อน ค่อยเลือกสีเป้าหมาย — เก็บ uid ของไอเทมที่กำลังเลือกอยู่ + index การ์ดที่เลือกแล้ว
   const [colorPickUid, setColorPickUid] = useState(null);
@@ -1960,7 +1961,8 @@ function InventoryModal({ me, players, gameState, roundNumber, onPickGunAmmo, on
   const hasReadyDarkKey = ammoItems.some((it) => it.ammo === "trigger_dark_key") && isIgnisUser && blackSparklenceCooldown <= 0 && !(me?.statuses?.triggerDarkForm > 0);
   // เหตุผลที่ยิงไม่ได้ (โชว์ให้เห็นเลย ไม่ปล่อยให้กดแล้วเงียบ)
   const fireBlock =
-    gameState !== "PLAYING" ? "ยิงได้เฉพาะช่วงจั่วไพ่"
+    frozen ? "⏱️ CLOCK UP — เวลาหยุดนิ่ง ยิงไม่ได้"
+    : gameState !== "PLAYING" ? "ยิงได้เฉพาะช่วงจั่วไพ่"
     : me?.locked ? "เปิดไพ่ไปแล้ว — ยิงไม่ได้"
     : (me?.gutsShotTurn || 0) === roundNumber ? "ยิงไปแล้วในเทิร์นนี้ (1 นัด/เทิร์น)"
     : hasBlackSparklence && blackSparklenceCooldown > 0 ? "Black Sparklence ใช้งานไม่ได้อีก " + blackSparklenceCooldown + " เทิร์น"
@@ -2019,7 +2021,7 @@ function InventoryModal({ me, players, gameState, roundNumber, onPickGunAmmo, on
                         {picking ? "ยกเลิก" : "ใช้"}
                       </AvButton>
                     ) : (
-                      <AvButton className="px-4 py-1.5 text-xs shrink-0" onClick={() => applyItem(it.uid)}>ใช้</AvButton>
+                      <AvButton className="px-4 py-1.5 text-xs shrink-0" disabled={frozen} onClick={() => applyItem(it.uid)}>{frozen ? "⏱️" : "ใช้"}</AvButton>
                     )}
                   </div>
                   {isGun && !gunOpen && fireBlock && <div className="text-[11px]" style={{ color: "#e06a78" }}>⚠️ {fireBlock}</div>}
@@ -3523,9 +3525,9 @@ const KAI_COMBO_IMG = {
   cp: "/characters/kai/kai_passive2.jpg", // รังสรรค์+ลงทัณฑ์ = ตาชั่งแห่งความเท่าเทียม
   pp: "/characters/kai/kai_passive3.jpg", // ลงทัณฑ์+ลงทัณฑ์ = โทสะระงับด้วยโทสะ
 };
-function KaiOverhaulSlot({ me }) {
+function KaiOverhaulSlot({ me, frozen }) {
   const slots = me.kaiOverhaulSlots || [];
-  const ready = slots.length >= 2;
+  const ready = slots.length >= 2 && !frozen;
   // คำนวณคอมโบฝั่ง client ล้วนๆ จากเนื้อหา kaiOverhaulSlots เอง (ไม่ต้องมี field เพิ่มจาก server)
   const comboKey = ready ? (slots[0].status === "kaiCreation" ? (slots[1].status === "kaiCreation" ? "cc" : "cp") : (slots[1].status === "kaiPunishment" ? "pp" : "cp")) : null;
   const comboLabel = { cc: "สวรรค์ประทานพร", cp: "ตาชั่งแห่งความเท่าเทียม", pp: "โทสะระงับด้วยโทสะ" }[comboKey] || "";
@@ -3999,7 +4001,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
   // ---------- เอจิ (patch 2.4 new) ----------
   //  กลโกง Ordinal Scale: ปุ่มเฉพาะตัว ไม่นับเป็นการใช้สกิลของเทิร์น -> กดพร้อมสกิลอื่นได้ และกดซ้ำได้จนครบ 5 ครั้ง
   const isEiji = ch?.id === "eiji";
-  const eijiOrdinalUsable = !!(isEiji && phase === "PLAYING" && me?.alive && !done && !me?.locked &&
+  const eijiOrdinalUsable = !!(isEiji && phase === "PLAYING" && me?.alive && !done && !me?.locked && !frozenByClockUp &&
     (me?.eijiOrdinal || 0) < (me?.eijiOrdinalMax || 5) && (me?.skillPoints || 0) >= 1);
   const useEijiOrdinal = () => { socket.emit("eijiOrdinalScale"); };
   // ---------- มิซึซาว่า ฮารุกะ (patch 2.5 new) ----------
@@ -5001,7 +5003,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
                   <SkillSlot label="สกิลรอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || (me.skillUsed && !isByleth && !isBard && !isDoomguy && !isKai && !isTakumi && !isSup) || bylethSecLocked || bylethBudgetLocked || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || oberonSecLocked || daisukeSecLocked || (frozenByClockUp && !dai) || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked || batKarmaLocked || psSealLocked || harukaSecLocked || muimiSecLocked || burdenCooldown || ippoSecCd > 0 || supBudgetLocked || arjunaSecLocked || brianSecLocked || lumiSecLocked || caySecLocked || daichiSecLocked} onUse={requestSkillUse} cooldown={burdenCd || ippoSecCd} ammo={isApple ? me.appleGiveUses : isCay ? cayState.ammo : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : undefined} />
                 </div>
                 <div className="translate-y-1.5">
-                  {isBard ? <BardComposeSlot me={me} /> : isKai ? <KaiOverhaulSlot me={me} /> : <SkillSlot label="ท่าไม้ตาย" tier="ultimate" skill={ch?.ultimate} points={me.skillPoints} disabled={(done || phase !== "PLAYING" || noSkill || moonCellOn || beatMe || (me.skillUsed && !isByleth && !isSup && !isBrianN2O) || bylethUltLocked || bylethBudgetLocked || ultimateActive || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || takumiBudgetLocked || fourthLocked || doomUltLocked || takutoUltLockedNow || tepeuCookLocked || tepeuPonderLocked || offerLocked || ktUltLocked || shUltLocked || shCharging || rgCharging || phenexTaunting || hikaruUltLocked || shidoUltLocked || oberonUltLocked || daisukeUltLocked || frozenByClockUp || eijiUltLocked || muimiUltLocked || ippoUltLocked || supBudgetLocked || supUltCd > 0 || arjunaUltCd > 0 || brianUltLocked || lumiUltLocked || cayUltLocked || daichiUltLocked)} onUse={requestSkillUse} ammo={isCay ? cayState.ammo : undefined} cooldown={oberonUltCd || shidoUltCd || eijiUltCd || muimiUltCd || ippoUltCd || supUltCd || arjunaUltCd} cost={undefined} />}
+                  {isBard ? <BardComposeSlot me={me} /> : isKai ? <KaiOverhaulSlot me={me} frozen={frozenByClockUp} /> : <SkillSlot label="ท่าไม้ตาย" tier="ultimate" skill={ch?.ultimate} points={me.skillPoints} disabled={(done || phase !== "PLAYING" || noSkill || moonCellOn || beatMe || (me.skillUsed && !isByleth && !isSup && !isBrianN2O) || bylethUltLocked || bylethBudgetLocked || ultimateActive || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || takumiBudgetLocked || fourthLocked || doomUltLocked || takutoUltLockedNow || tepeuCookLocked || tepeuPonderLocked || offerLocked || ktUltLocked || shUltLocked || shCharging || rgCharging || phenexTaunting || hikaruUltLocked || shidoUltLocked || oberonUltLocked || daisukeUltLocked || frozenByClockUp || eijiUltLocked || muimiUltLocked || ippoUltLocked || supBudgetLocked || supUltCd > 0 || arjunaUltCd > 0 || brianUltLocked || lumiUltLocked || cayUltLocked || daichiUltLocked)} onUse={requestSkillUse} ammo={isCay ? cayState.ammo : undefined} cooldown={oberonUltCd || shidoUltCd || eijiUltCd || muimiUltCd || ippoUltCd || supUltCd || arjunaUltCd} cost={undefined} />}
                 </div>
               </div>
               {noSkill && phase === "PLAYING" && !done && (
@@ -5038,7 +5040,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
                   <Button
                     variant={me.nanayaEyeOn ? "danger" : "ghost"}
                     className="w-full py-3 text-base"
-                    disabled={me.nanayaToggleUsed}
+                    disabled={me.nanayaToggleUsed || frozenByClockUp}
                     onClick={nanayaToggleEye}
                   >
                     👁️ Mystic eye of death perception — {me.nanayaEyeOn ? "เปิดอยู่ (กดเพื่อปิด)" : "ปิดอยู่ (กดเพื่อเปิด)"}
@@ -5167,7 +5169,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
           allyFinalAsk={state.allyFinalAsk} onAnswerAllyFinal={(k) => socket.emit("allyFinalAnswer", { keep: k })}
           statusView={statusView} statusViewIsSelf={statusViewId === state.youId} onCloseStatus={() => setStatusViewId(null)}
           shopOpen={shopOpen} shop={state.shop} onCloseShop={() => setShopOpen(false)}
-          bagOpen={bagOpen} onCloseBag={() => setBagOpen(false)} players={state.players} gameState={state.gameState} roundNumber={state.roundNumber} onPickGunAmmo={startGunPick}
+          bagOpen={bagOpen} onCloseBag={() => setBagOpen(false)} players={state.players} gameState={state.gameState} roundNumber={state.roundNumber} frozen={frozenByClockUp} onPickGunAmmo={startGunPick}
           skillConfirm={skillConfirm} onConfirmSkill={confirmSkillUse} onCancelSkill={cancelSkillConfirm}
         />
         {lumiIdolOpen && me && <LumiIdolModal me={me} onPick={pickLumiIdol} onClose={() => { clickSound(); setLumiIdolOpen(false); }} />}
@@ -5594,7 +5596,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
                     <SkillSlot size="lg" label="รอง" tier="secondary" skill={ch?.secondary} points={me.skillPoints} disabled={done || phase !== "PLAYING" || noSkill || moonCellOn || miyakoComboPending || hakunoSecondaryPending || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || (me.skillUsed && !isByleth && !isBard && !isDoomguy && !isKai && !isTakumi && !isSup) || bylethSecLocked || bylethBudgetLocked || (isKai && (me.kaiSkillUsesRound || 0) >= 2) || takumiBudgetLocked || shCharging || rgCharging || phenexTaunting || bardNoteLocked || ohgerLocked || lanLocked || ktSecLocked || oberonSecLocked || daisukeSecLocked || (frozenByClockUp && !dai) || skSecLocked || banagherAssaultLocked || doomNoEffectLocked || takutoSecPending || takutoNotApprivoiseLocked || monsterMe || tepeuPonderLocked || tepeuCookLocked || batKarmaLocked || psSealLocked || harukaSecLocked || muimiSecLocked || burdenCooldown || ippoSecCd > 0 || supBudgetLocked || arjunaSecLocked || brianSecLocked || lumiSecLocked || caySecLocked || daichiSecLocked} onUse={requestSkillUse} cooldown={burdenCd || ippoSecCd} ammo={isApple ? me.appleGiveUses : isCay ? cayState.ammo : me.beamAmmo} cost={isGambler && goldenOn ? halfCost(ch?.secondary) : undefined} />
                   </div>
                   <div className="w-40 sm:w-48">
-                    {isBard ? <BardComposeSlot me={me} /> : isKai ? <KaiOverhaulSlot me={me} /> : <SkillSlot size="lg" label="ท่าไม้ตาย" tier="ultimate" skill={ch?.ultimate} points={me.skillPoints} disabled={(done || phase !== "PLAYING" || noSkill || moonCellOn || beatMe || (me.skillUsed && !isByleth && !isSup && !isBrianN2O) || bylethUltLocked || bylethBudgetLocked || ultimateActive || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || takumiBudgetLocked || monsterMe || fourthLocked || doomUltLocked || takutoUltLockedNow || tepeuCookLocked || tepeuPonderLocked || offerLocked || ktUltLocked || shUltLocked || shCharging || rgCharging || phenexTaunting || shidoUltLocked || oberonUltLocked || daisukeUltLocked || frozenByClockUp || eijiUltLocked || muimiUltLocked || ippoUltLocked || supBudgetLocked || supUltCd > 0 || arjunaUltCd > 0 || brianUltLocked || lumiUltLocked || cayUltLocked || daichiUltLocked)} onUse={requestSkillUse} ammo={isCay ? cayState.ammo : undefined} cooldown={oberonUltCd || shidoUltCd || eijiUltCd || muimiUltCd || ippoUltCd || supUltCd || arjunaUltCd} cost={undefined} />}
+                    {isBard ? <BardComposeSlot me={me} /> : isKai ? <KaiOverhaulSlot me={me} frozen={frozenByClockUp} /> : <SkillSlot size="lg" label="ท่าไม้ตาย" tier="ultimate" skill={ch?.ultimate} points={me.skillPoints} disabled={(done || phase !== "PLAYING" || noSkill || moonCellOn || beatMe || (me.skillUsed && !isByleth && !isSup && !isBrianN2O) || bylethUltLocked || bylethBudgetLocked || ultimateActive || triggerCircleLocked || triggerMultiLocked || triggerZeperionLocked || takumiBudgetLocked || monsterMe || fourthLocked || doomUltLocked || takutoUltLockedNow || tepeuCookLocked || tepeuPonderLocked || offerLocked || ktUltLocked || shUltLocked || shCharging || rgCharging || phenexTaunting || shidoUltLocked || oberonUltLocked || daisukeUltLocked || frozenByClockUp || eijiUltLocked || muimiUltLocked || ippoUltLocked || supBudgetLocked || supUltCd > 0 || arjunaUltCd > 0 || brianUltLocked || lumiUltLocked || cayUltLocked || daichiUltLocked)} onUse={requestSkillUse} ammo={isCay ? cayState.ammo : undefined} cooldown={oberonUltCd || shidoUltCd || eijiUltCd || muimiUltCd || ippoUltCd || supUltCd || arjunaUltCd} cost={undefined} />}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -5617,7 +5619,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
                 {ch?.id === "nanaya" && phase === "PLAYING" && me.alive && !done && (
                   <button
                     onClick={nanayaToggleEye}
-                    disabled={me.nanayaToggleUsed}
+                    disabled={me.nanayaToggleUsed || frozenByClockUp}
                     className={`text-[10px] font-bold rounded-lg px-2 py-1 border ${me.nanayaEyeOn ? "bg-echo-hp/30 border-echo-hp" : "bg-white/5 border-white/20"} disabled:opacity-40`}
                     title="Mystic eye of death perception"
                   >
@@ -5707,7 +5709,7 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
         allyFinalAsk={state.allyFinalAsk} onAnswerAllyFinal={(k) => socket.emit("allyFinalAnswer", { keep: k })}
         statusView={statusView} statusViewIsSelf={statusViewId === state.youId} onCloseStatus={() => setStatusViewId(null)}
         shopOpen={shopOpen} shop={state.shop} onCloseShop={() => setShopOpen(false)}
-        bagOpen={bagOpen} onCloseBag={() => setBagOpen(false)} players={state.players} gameState={state.gameState} roundNumber={state.roundNumber} onPickGunAmmo={startGunPick}
+        bagOpen={bagOpen} onCloseBag={() => setBagOpen(false)} players={state.players} gameState={state.gameState} roundNumber={state.roundNumber} frozen={frozenByClockUp} onPickGunAmmo={startGunPick}
         skillConfirm={skillConfirm} onConfirmSkill={confirmSkillUse} onCancelSkill={cancelSkillConfirm}
       />
       {lumiIdolOpen && me && <LumiIdolModal me={me} onPick={pickLumiIdol} onClose={() => { clickSound(); setLumiIdolOpen(false); }} />}

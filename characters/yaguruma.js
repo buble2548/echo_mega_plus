@@ -85,7 +85,11 @@ module.exports = {
     return queued;
   },
 
+  // ห้องนี้ถูกเรียกจาก server.js ทั้ง daisuke และ yaguruma กับผู้เล่นทุกคน
+  //  แกน Zect มอง "ไรเดอร์ทุกคน" เหมือนกัน ถ้าไม่กันไว้ตรงนี้ ค่า Clock Up จะถูกหักสองรอบ (4/เทิร์น)
+  //  และตัวนับ PUT ON จะเดินสองเท่า (ฟื้นเลือดทุกๆ 1.5 เทิร์นแทนที่จะเป็น 3)
   onRoundStartTick(engine, p) {
+    if (!isYaguruma(p)) return;
     Z.onRoundStartTick(engine, p, (e, q, on, why) => this.setClockUp(e, q, on, why));
   },
 

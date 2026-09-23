@@ -938,11 +938,14 @@ function eijiUltFieldActive() {
 //  ⚠️ cardPhaseSeconds() มีผลแค่ตอนขึ้นเทิร์นใหม่ ส่วน pausePlayingForCutscene() จะคืนเวลาที่เหลือ
 //  "ก่อนเล่นคลิป" ให้หลังคลิปจบ — ถ้าไม่เซ็ต timeLeft ตรงนี้ เทิร์นที่กดเปิดนาฬิกาจะเดินต่อตามเดิม
 //  (แพทเทิร์นเดียวกับ reduceCardTimer ของเอจิ ที่แก้ timeLeft ตรงๆ เหมือนกัน)
-function syncClockUpPhaseTime(p) {
+//  ⚠️ ต้องตัดสินจาก "สนามยังถูกแช่อยู่ไหม" ไม่ใช่ "ไรเดอร์คนที่เพิ่งกดเปิด/ปิด"
+//  ไม่งั้นพอไรเดอร์สองคนเปิด Clock Up ซ้อนกัน พอคนหนึ่งกดปิด เวลาจะเด้งกลับมา  10 วิ
+//  ทั้งที่อีกคนยังแช่สนามอยู่ (บัคที่เจอจริงตอนไรเดอร์สองคนสู้กัน)
+function syncClockUpPhaseTime() {
   if (gameState !== "PLAYING") return;
   const Z = CHAR_HOOKS.daisuke;
-  if (Z.clockUpOn(p)) timeLeft = Z.CLOCK_UP_SAFETY;              // เปิด: เวลาหยุดในสายตาผู้เล่น
-  else timeLeft = Math.min(timeLeft, Z.CLOCK_UP_CARD_TIME);      // ปิด: กลับสู่เวลาสั้นๆ ไม่ค้างที่ 90 วิ
+  if (Z.freezeHosts(engine).length) timeLeft = Z.CLOCK_UP_SAFETY; // ยังมีไรเดอร์แช่สนามอยู่: เวลาหยุดในสายตาผู้เล่น
+  else timeLeft = Math.min(timeLeft, Z.CLOCK_UP_CARD_TIME);      // คลายหมดแล้ว: กลับสู่เวลาสั้นๆ ไม่ค้างที่ 90 วิ
 }
 function cardPhaseSeconds() {
   // คาซามะ ไดสุเกะ (Clock Up): "เวลาหยุด" = ตั้งเวลายาวมากไว้เป็นตาข่ายกันห้องค้าง
@@ -3515,6 +3518,7 @@ function lock(id) {
 function nanayaToggleEye(id) {
   const p = players[id];
   if (gameState !== "PLAYING" || !p || !p.alive || p.locked) return;
+  if (CHAR_HOOKS.daisuke.actionBlocked(engine, p)) return; // Clock Up: ปุ่มเฉพาะตัวก็กดไม่ได้ — เวลาหยุดหมายถึงทุกอย่าง
   if (p.characterId !== "nanaya") return;
   if (!CHAR_HOOKS.nanaya.toggleEye(engine, p)) return;
   io.emit("skillFlash", {
@@ -3528,6 +3532,7 @@ function nanayaToggleEye(id) {
 function eijiOrdinalScale(id) {
   const p = players[id];
   if (gameState !== "PLAYING" || !p || !p.alive || p.locked) return;
+  if (CHAR_HOOKS.daisuke.actionBlocked(engine, p)) return; // Clock Up: ปุ่มเฉพาะตัวก็กดไม่ได้ — เวลาหยุดหมายถึงทุกอย่าง
   if (p.characterId !== "eiji") return;
   if (!CHAR_HOOKS.eiji.pressOrdinal(engine, p)) return;
   io.emit("skillFlash", {
@@ -4102,7 +4107,7 @@ function useSkill(id, tier, targets, item) {
   if (isYagurumaPick) flashSuffix = CHAR_HOOKS.yaguruma.applyInstantSkill(engine, p, tier) || flashSuffix;
   // ไรเดอร์ Zect: กด Clock Up/Clock Over กลางเฟสจั่วไพ่ — ต้องแก้เวลาที่เหลือตอนนี้
   //  ก่อนที่ pausePlayingForCutscene() จะอ่าน timeLeft ไปเก็บไว้คืนหลังคลิปจบ
-  if ((isDaisukePick || isYagurumaPick) && tier === "secondary") syncClockUpPhaseTime(p);
+  if ((isDaisukePick || isYagurumaPick) && tier === "secondary") syncClockUpPhaseTime();
   // ---------- โทโนะ ชิกิ: มีดพับประจำตระกูล — เลือกระดับสกิลติดตัว 1-5 (กดเปลี่ยนกี่ครั้งก็ได้) (characters/tohno.js) ----------
   if (isTohnoPick) {
     flashSuffix = CHAR_HOOKS.tohno.applyBasicPick(engine, p, item);
@@ -4415,6 +4420,7 @@ function kaiOverhaul(id) {
   const p = players[id];
   if (!p || !p.alive || p.characterId !== "kai") return;
   if (gameState !== "PLAYING" || p.locked) return;
+  if (CHAR_HOOKS.daisuke.actionBlocked(engine, p)) return; // Clock Up: ปุ่มเฉพาะตัวก็กดไม่ได้ — เวลาหยุดหมายถึงทุกอย่าง
   const ownSlots = kaiOverhaulSlots.filter((slot) => slot.ownerId === p.id);
   if (ownSlots.length < 2) return;
   const [a, b] = ownSlots.slice(0, 2);
@@ -6731,7 +6737,8 @@ const engine = {
   //  ใช้กัน Clock Up เปิดซ้อนกับการแช่ของคนอื่น — ใครเปิดก่อนได้ก่อน
   fieldFreezeByOther(p) {
     return CHAR_HOOKS.conner.chaseActive(engine) || CHAR_HOOKS.brian.duelActive(engine)
-      || !!(CHAR_HOOKS.daisuke.clockUpHost(engine) && CHAR_HOOKS.daisuke.clockUpHost(engine).id !== (p && p.id));
+      //  clockUpHost (เอกพจน์) ไม่เคยมีอยู่จริง — แกน Zect มีแต่ clockUpHosts ที่คืนไรเดอร์ทุกคนที่เปิดอยู่
+      || CHAR_HOOKS.daisuke.clockUpHosts(engine).some((h) => h.id !== (p && p.id));
   },
   startMatch,
   endTurn,
