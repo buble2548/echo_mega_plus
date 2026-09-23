@@ -10,7 +10,9 @@
 // ============================================================
 
 // ตัวละครที่ใช้แกนนี้ — เพิ่มไรเดอร์ตัวใหม่ต้องมาต่อที่นี่ด้วย
-const ZECT_IDS = new Set(["daisuke", "yaguruma"]);
+const ZECT_IDS = new Set(["daisuke", "yaguruma", "kagami"]);
+// ไรเดอร์ที่ท่าไม้ตายเป็น "การชาร์จหลายขั้น" — ต้องกดซ้ำได้ในเทิร์นเดียว ช่องท่าไม้ตายจึงไม่กินโควตาสกิลด้วย
+const ZECT_CHARGE_IDS = new Set(["kagami"]);
 
 // ---------- CAST OFF / PUT ON ----------
 const CASS_OFF_ATK = 1;      // CAST OFF: พลังโจมตีพื้นฐาน +1 (เกราะไม่ฟื้นระหว่างนี้)
@@ -140,10 +142,15 @@ function sharedDamageBonus(attacker, target, ctx) {
 }
 
 // สองสกิลแรกเป็น "สวิตช์" ไม่กินโควตาสกิลของเทิร์น — กดแล้วยังต่อท่าไม้ตายได้
-function skipsTurnQuota(p, tier) { return isZect(p) && (tier === "basic" || tier === "secondary"); }
+function skipsTurnQuota(p, tier) {
+  if (!isZect(p)) return false;
+  if (tier === "basic" || tier === "secondary") return true;
+  return tier === "ultimate" && ZECT_CHARGE_IDS.has(p.characterId);
+}
 
 module.exports = {
   ZECT_IDS,
+  ZECT_CHARGE_IDS,
   CASS_OFF_ATK,
   PUT_ON_HEAL,
   PUT_ON_EVERY,

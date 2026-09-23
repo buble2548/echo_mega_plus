@@ -102,7 +102,7 @@ const BASIC_DEBUFF_CLEAR = ["discord", "sleep", "stun", "nodraw", "noskill", "we
   "energy",       // เครื่องดื่มชูกำลัง: เสียพลัง 1 หน่วยต่อเทิร์น
   "harukaPunish"]; // จงไปสู่สุขติ (ฮารุกะ): เป้าหมายที่เลือดไหล >= 3 โดนระเบิดเลือดไหลใส่
 // ดีบัฟที่ยังไม่เกิดผลทันที (ยามฟ้าสาง / เส้นชีวิต): โดนล้าง = ลดลงทีละ 1 หน่วย ไม่หายทั้งหมด
-const SOFT_DEBUFF_STEP = ["dawn", "deathline", "curse"];
+const SOFT_DEBUFF_STEP = ["dawn", "deathline", "curse", "shock"];
 
 function cleanseDebuffs(p) {
   let purged = 0;
@@ -154,6 +154,33 @@ function tickPoison(engine, p) {
     if (!p.alive) engine.log(`💀 ${p.name} พิษร้ายกัดกินจนเลือดหมด ตกรอบ!`);
   }
   return 1;
+}
+
+// ---------- "ช็อต" (shock, สถานะ Universal patch 4.4) ----------
+//  ดีบัฟแบบพิเศษ: ตัวมันเองไม่ทำอะไร แต่ทุกต้นเทิร์นที่มันยังติดอยู่ จะโรลใหม่ว่าปีนี้ไฟจะกำเริบหรือไม่
+//  จุดที่ต่างจากดีบัฟทั่วไป: ผลของมันเกิด "ทีหลัง" ได้ ดังนั้นเป้าหมายที่เพิ่งได้
+//  "ต้านสถานะผิดปกติ" หลังติดช็อตไปแล้ว ยังกันสตั้นได้กลางทาง — การเช็ค resist จึงอยู่ที่จังหวะโรล ไม่ใช่ตอนแปะ
+//  อยู่ใน SOFT_DEBUFF_STEP: โดนล้างสถานะ = ลดทีละ 1 เทิร์น ไม่หายทั้งก้อน
+const SHOCK_STUN_CHANCE = 15; // % ต่อเทิร์น
+const SHOCK_STUN_TURNS = 1;   // โรลติดแล้วสตั้นกี่เทิร์น
+
+function applyShock(p, turns) {
+  if (resistActive(p)) return false;
+  applyBuff(p, "shock", null, turns);
+  return true;
+}
+
+// ต้นเทิร์น — ต้องเรียก "ก่อน" บล็อกเช็คสตั้นของ startRound() ไม่งั้นสตั้นจะเลื่อนไปมีผลเทิร์นถัดไป
+//  (แพทเทิร์นเดียวกับ ippo.applyPendingStun / oberon.applyPendingStun)
+function tickShock(engine, p) {
+  if (!p || !p.alive || !(((p.statuses && p.statuses.shock) || 0) > 0)) return false;
+  if (Math.random() * 100 >= SHOCK_STUN_CHANCE) return false;
+  if (!applyDebuff(p, "stun", null, SHOCK_STUN_TURNS)) {
+    engine.log(`⚡ ${p.name} กระแสไฟกำเริบ แต่ "ต้านสถานะผิดปกติ" กันสตั้นไว้ทัน`);
+    return false;
+  }
+  engine.log(`⚡ ${p.name} ไฟฟ้าช็อตกำเริบ (${SHOCK_STUN_CHANCE}%) — ติดสตั้น ${SHOCK_STUN_TURNS} เทิร์น! (ช็อตเหลืออีก ${p.statuses.shock} เทิร์น)`);
+  return true;
 }
 
 // ---------- "คำสาป" (curse, สถานะ Universal patch 4.2) ----------
@@ -434,6 +461,10 @@ module.exports = {
   applyPoison,
   poisonAtkPenalty,
   tickPoison,
+  SHOCK_STUN_CHANCE,
+  SHOCK_STUN_TURNS,
+  applyShock,
+  tickShock,
   applyCurse,
   tickCurseOnSkill,
   MEND_MAX_TURNS,

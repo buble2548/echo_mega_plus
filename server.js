@@ -51,6 +51,8 @@ const {
   applyPoison,
   poisonAtkPenalty,
   tickPoison,
+  applyShock,
+  tickShock,
   applyCurse,
   tickCurseOnSkill,
   MEND_MAX_TURNS,
@@ -1501,6 +1503,7 @@ function displayImg(p, unmasked) {
   // คาซามะ ไดสุเกะ: ร่างบนสนามสลับตามโหมด CAST OFF / PUT ON
   if (p.characterId === "daisuke") { const kimg = CHAR_HOOKS.daisuke.displayImg(p); if (kimg) return kimg; }
   if (p.characterId === "yaguruma") { const yimg = CHAR_HOOKS.yaguruma.displayImg(p); if (yimg) return yimg; }
+  if (p.characterId === "kagami") { const gimg = CHAR_HOOKS.kagami.displayImg(p); if (gimg) return gimg; }
   // โอเบรอน: ร่างสลับตามช่วงเวลากลางวัน/กลางคืนเสมอ
   // โอเบรอน (characters/oberon.js)
   if (p.characterId === "oberon") {
@@ -2040,6 +2043,7 @@ function resetCombat(p) {
   CHAR_HOOKS.oberon.resetCombat(p); // โอเบรอน: คูลดาวน์/ฝันร้าย/ร่างฝูงแมลง/เปลือกจอมหลอกลวง/แรงสะท้อนรุ่งอรุณ
   CHAR_HOOKS.daisuke.resetCombat(p); // คาซามะ ไดสุเกะ: โหมด CAST OFF/PUT ON / Clock Up / ไรเดอร์ชูต
   CHAR_HOOKS.yaguruma.resetCombat(p);
+  CHAR_HOOKS.kagami.resetCombat(p); // คากามิ อาราตะ: โหมด CAST OFF/PUT ON / Clock Up / ชาร์จ Rider Kick
   p.sleepFresh = false; // หลับไหล: เทิร์นที่เพิ่งโดนกล่อมยังไม่เริ่มนับ/ยังโจมตีได้
   p.curseHitRound = 0;  // "คำสาป": เทิร์นล่าสุดที่คำสาปกินเลือดไป (1 ครั้ง/เทิร์น)
   p.appleItem = "drink"; // Apple guy: ของส่งมอบที่เลือกอยู่ (ค่าเริ่มต้น เครื่องดื่มชูกำลัง)
@@ -2415,6 +2419,8 @@ function buildStateFor(viewerId) {
       // ไบรอัน: ระหว่าง "การแข่งที่มีเดิมพัน" ช่องท่าไม้ตายกลายเป็น N2O — ต้องคิดสูตรเดียวกับ useSkill()
       //  ไม่งั้นปุ่มจะโชว์ชื่อ/ราคา/ภาพของท่าไม้ตาย 1 ทั้งที่กดแล้วได้ N2O
       if (ch.id === "brian" && CHAR_HOOKS.brian.n2oSlot(engine, p)) ultimatePub = pub(ch.ultimate2);
+      // // คากามิ อาราตะ: ราคาบนการ์ดท่าไม้ตายต้องเป็นราคาของ "ขั้นถัดไป" ไม่ใช่ค่าคงที่ใน characters.js
+      if (ch.id === "kagami" && ultimatePub) ultimatePub.cost = CHAR_HOOKS.kagami.ultimateCost(p);
       if (ch.id === "doomguy") {
         const w = DOOM_WEAPONS[p.doomWeapon] || DOOM_WEAPONS.shotgun;
         const effDesc = {
@@ -2546,6 +2552,7 @@ function buildStateFor(viewerId) {
         // คาซามะ ไดสุเกะ: โหมด/Clock Up/ไรเดอร์ชูต/นับเทิร์น PUT ON (ข้อมูลสนาม ทุกคนเห็นได้)
         daisuke: p.characterId === "daisuke" ? CHAR_HOOKS.daisuke.publicState(p) : undefined,
         yaguruma: p.characterId === "yaguruma" ? CHAR_HOOKS.yaguruma.publicState(p) : undefined,
+        kagami: p.characterId === "kagami" ? CHAR_HOOKS.kagami.publicState(p) : undefined,
         appleItem: p.appleItem || "drink", // Apple guy: ของส่งมอบที่เลือกอยู่
         appleAtk: p.appleAtkBuffs ? p.appleAtkBuffs.length : 0, // Apple guy: บัฟพลังโจมตีจากการมอบของ (ซ้อนทับได้สูงสุด 2 หน่วย)
         appleGiveUses: p.appleGiveUses != null ? p.appleGiveUses : CHAR_HOOKS.appleguy.GIVE_USES, // Apple guy: จำนวนใช้ เอาไปสิ คงเหลือ
@@ -2832,7 +2839,8 @@ function startMatch() {
   // คาซามะ ไดสุเกะ: วีดีโอเปิดตัวเล่นครั้งเดียวก่อนเทิร์นแรก (ไม่มีคำบรรยาย)
   const daisukeIntro = CHAR_HOOKS.daisuke.maybeQueueIntro(engine);
   const yagurumaIntro = CHAR_HOOKS.yaguruma.maybeQueueIntro(engine);
-  if (connerIntro || miyakoIntro || daisukeIntro || yagurumaIntro) {
+  const kagamiIntro = CHAR_HOOKS.kagami.maybeQueueIntro(engine);
+  if (connerIntro || miyakoIntro || daisukeIntro || yagurumaIntro || kagamiIntro) {
     // พักคิวไว้ก่อนจนกว่าฉากเปิดตัวผู้เล่นจะจบ — อยู่ในเฟส CUTSCENE แต่ยังไม่มีคลิป
     //  (cutsceneInfo = null -> client วาดกระดานปกติไว้ใต้ม่าน GameIntro ซึ่งบังอยู่แล้ว)
     cutsceneInfo = null;
@@ -3220,6 +3228,7 @@ function dealRound() {
     CHAR_HOOKS.oberon.onRoundStartTick(engine, p);
     CHAR_HOOKS.daisuke.onRoundStartTick(engine, p); // ค่าแต้มสกิลของ Clock Up + การฟื้นฟูของ PUT ON
     CHAR_HOOKS.yaguruma.onRoundStartTick(engine, p);
+    CHAR_HOOKS.kagami.onRoundStartTick(engine, p);
 
     // ---------- ซาโตรุ อาเคฟุ (patch 2.0.8.2): ดาเมจต่อเนื่องทุก 2 เทิร์น ----------
     //  สิ่งแปลกปลอม (Obla Di, Obla Da): ดาเมจ 1 / [Calamity]: ดาเมจตามเลเวล — ทำงานตอนเวลาคงเหลือเป็นเลขคี่
@@ -3293,6 +3302,8 @@ function dealRound() {
     // ---------- เลือดไหล (hbleed, สถานะ Universal patch 2.5): ดาเมจ 1/เทิร์น สะสมสูงสุด 6 (ฮารุกะฟื้นเลือดแทน) ----------
     tickBleed(engine, p);
     tickPoison(engine, p); // พิษร้าย (โซ ยากุรุมะ): ดาเมจต้นเทิร์น — ส่วนพลังโจมตีหักที่ computeAttackBase
+    // "ช็อต" (// คากามิ อาราตะ): โรล 15% ติดสตั้น — ต้องอยู่ก่อนบล็อกเช็คสตั้นด้านล่าง ไม่งั้นสตั้นจะเลื่อนไปมีผลเทิร์นถัดไป
+    tickShock(engine, p);
     // ---------- [โดนดูด] (doomDrain, Plasma Rifle — DoomGuy): ดาเมจ 1/เทิร์น 3 เทิร์น เจาะเกราะก่อน ----------
     CHAR_HOOKS.doomguy.tickDrain(engine, p);
     p.cards = [];
@@ -3689,6 +3700,9 @@ function useSkill(id, tier, targets, item) {
   if (isIgnisSkill && !CHAR_HOOKS.ignis.canUseSkill(engine, p, tier, skill)) return;
 
   let cost = skill.cost;
+  // // คากามิ อาราตะ: Rider Kick เป็นการชาร์จ 3 ขั้น ราคาต่างกัน (1 / 1 / 3)
+  //  แทนราคาฐานตรงนี้ก่อนตัวปรับทุกตัว (กระแสเวท/ภาระเวท) — ต้องตรงกับ ultimatePub ใน buildStateFor
+  if (p.characterId === "kagami" && tier === "ultimate") cost = CHAR_HOOKS.kagami.ultimateCost(p);
   // กลางคืน (patch 2.1.7): สกิลที่สุ่มโดนคืนนี้ (พื้นฐาน/รอง อย่างใดอย่างหนึ่ง) ใช้แต้มมากขึ้น +1 — ไม่มีผลกับท่าไม้ตาย
   //  (เพดาน SKILL_COST_MAX คิดรวมทีเดียวกับภาระเวทด้านล่าง)
   const nightTax = p.nightTaxTier === tier ? 1 : 0;
@@ -3816,6 +3830,8 @@ function useSkill(id, tier, targets, item) {
   if (isDaisukePick && !CHAR_HOOKS.daisuke.canUseSkill(engine, p, tier)) return;
   const isYagurumaPick = p.characterId === "yaguruma";
   if (isYagurumaPick && !CHAR_HOOKS.yaguruma.canUseSkill(engine, p, tier)) return;
+  const isKagamiPick = p.characterId === "kagami";
+  if (isKagamiPick && !CHAR_HOOKS.kagami.canUseSkill(engine, p, tier)) return;
   const isOberonPick = p.characterId === "oberon";
   if (isOberonPick && !CHAR_HOOKS.oberon.canUseSkill(engine, p, tier)) return;
   const oberonNight = isOberonPick && isNightRound(roundNumber);
@@ -4105,9 +4121,10 @@ function useSkill(id, tier, targets, item) {
   // ---------- คาซามะ ไดสุเกะ (characters/daisuke.js) ----------
   if (isDaisukePick) flashSuffix = CHAR_HOOKS.daisuke.applyInstantSkill(engine, p, tier) || flashSuffix;
   if (isYagurumaPick) flashSuffix = CHAR_HOOKS.yaguruma.applyInstantSkill(engine, p, tier) || flashSuffix;
+  if (isKagamiPick) flashSuffix = CHAR_HOOKS.kagami.applyInstantSkill(engine, p, tier) || flashSuffix;
   // ไรเดอร์ Zect: กด Clock Up/Clock Over กลางเฟสจั่วไพ่ — ต้องแก้เวลาที่เหลือตอนนี้
   //  ก่อนที่ pausePlayingForCutscene() จะอ่าน timeLeft ไปเก็บไว้คืนหลังคลิปจบ
-  if ((isDaisukePick || isYagurumaPick) && tier === "secondary") syncClockUpPhaseTime();
+  if ((isDaisukePick || isYagurumaPick || isKagamiPick) && tier === "secondary") syncClockUpPhaseTime();
   // ---------- โทโนะ ชิกิ: มีดพับประจำตระกูล — เลือกระดับสกิลติดตัว 1-5 (กดเปลี่ยนกี่ครั้งก็ได้) (characters/tohno.js) ----------
   if (isTohnoPick) {
     flashSuffix = CHAR_HOOKS.tohno.applyBasicPick(engine, p, item);
@@ -5443,6 +5460,7 @@ function doAttack(byId, targetId) {
   // Zect (characters/daisuke.js): ระหว่าง Clock Up หลบการโจมตีได้ 25%
   if (CHAR_HOOKS.daisuke.tryAttackDodge(engine, attacker, target)) return;
   if (CHAR_HOOKS.yaguruma.tryAttackDodge(engine, attacker, target)) return;
+  if (CHAR_HOOKS.kagami.tryAttackDodge(engine, attacker, target)) return;
   // เท็นโนจิ โคทาโร่ (rewrite): ความจุพลังชีวิตที่หายไปทุก 1 หน่วย = หลบ +5% (สูงสุด 30%)
   if (CHAR_HOOKS.kotarou.tryAttackDodge(engine, attacker, target)) return;
   // เอจิ สกิลติดตัว 1 (ผู้เล่นอันดับ 2): ผู้ชนะไปตีคนอื่นที่ไม่ใช่เอจิ -> 25% ขัดจังหวะแล้วสวนคืน
@@ -5577,8 +5595,11 @@ function doAttack(byId, targetId) {
   //  ใช้ตัดสินท้ายฟังก์ชันว่าจะเล่นวีดีโอก่อนหรือหลังการ์ดสรุปความเสียหาย
   const daisukeRiderFired = CHAR_HOOKS.daisuke.riderArmed(attacker);
   const yagurumaStingFired = CHAR_HOOKS.yaguruma.stingArmed(attacker);
+  const kagamiKickFired = CHAR_HOOKS.kagami.kickArmed(attacker);
   CHAR_HOOKS.daisuke.stripArmorOnAttack(engine, attacker, target);
   CHAR_HOOKS.yaguruma.stripResistOnAttack(engine, attacker, target); // Rider Sting: เจาะ "ต้านสถานะ" ก่อน ดีบัฟที่ตามมาจึงติด
+  // Rider Kick (// คากามิ อาราตะ): เป้าหมายกาง "ต้านสถานะ" ไว้ -> แลกดีบัฟทั้งชุดเป็นหมัดทะลุเกราะเพดาน 3
+  const kagamiKickPierce = CHAR_HOOKS.kagami.prepareKickOnAttack(engine, attacker, target);
   const hpBefore = target.hp;
   const armorBefore = target.armor;
   const shieldBefore = target.shield;
@@ -5594,7 +5615,8 @@ function doAttack(byId, targetId) {
     !!(DOOM_WEAPONS[attacker.doomWeapon] || DOOM_WEAPONS.shotgun).pierce;
   const ippoArmorBefore = target.armor; // อิปโป Uper Cut: ตัดสินจากเกราะ "ก่อน" โดนหมัดนี้
   const cayPendingBefore = CHAR_HOOKS.cayenne.pendingTotal(target); // คาเยนน์ ทหารผ่านศึก: หมัดนี้ถูกเลื่อนไปเทิร์นหน้าไหม
-  if (attackerBeat || phenexPurgeAtk || doomPierceAtk) dealDirect(target, dmg, true); // กันตายทะลุเกราะ / อย่าอยู่เลย แกน่ะ!: ทะลุเกราะเข้าเลือดจริง
+  if (kagamiKickPierce) dmg = Math.min(dmg, CHAR_HOOKS.kagami.KICK_PIERCE_CAP); // เพดานรวมของหมัดนั้น ไม่ใช่โบนัสที่บวกทีหลัง
+  if (attackerBeat || phenexPurgeAtk || doomPierceAtk || kagamiKickPierce) dealDirect(target, dmg, true); // กันตายทะลุเกราะ / อย่าอยู่เลย แกน่ะ!: ทะลุเกราะเข้าเลือดจริง
   else dealMixed(target, dmg, true);               // กฎปกติ: ลดเกราะก่อน ถ้าไม่มีเกราะจึงเข้าเลือดจริง
   CHAR_HOOKS.escanor.onNormalAttackReceived(engine, attacker, target, escanorFormBeforeHit);
   // คาเยนน์ (characters/cayenne.js): เปราะบาง 50% (เกพาร์ด — มีผลตั้งแต่ครั้งถัดไป) · ปืนพกฟื้นเลือด
@@ -5611,6 +5633,8 @@ function doAttack(byId, targetId) {
   CHAR_HOOKS.kotone.onAttackConsumeLove(engine, attacker);
   // เอจิ (characters/eiji.js): Smile for You ลงตัวเอง -> ฟื้นเลือด · Delete ลงเป้าหมาย -> มอบ "ผุพัง"
   CHAR_HOOKS.eiji.onAttackLanded(engine, attacker, target);
+  // Rider Kick (// คากามิ อาราตะ): ฝัง "ช็อต" + "ชา" แล้วล้างการชาร์จทิ้ง (หมัดทะลุเกราะไม่ฝังดีบัฟ)
+  CHAR_HOOKS.kagami.resolveKickOnAttack(engine, attacker, target, kagamiKickPierce);
   // ฮารุกะ (characters/haruka.js): โอเมก้า — การโจมตีปกติแปะ "เลือดไหล" ให้เป้าหมาย 2 หน่วย
   const harukaBleedApplied = CHAR_HOOKS.haruka.onAttackLanded(engine, attacker, target);
   // มุยมิ: ดาบเก่าๆ/ดาบสะบั้นฟื้นฟูเมื่อโจมตีปกติ และใจที่ไม่ยอมแพ้ยืดเวลาท่าไม้ตาย
@@ -5851,7 +5875,7 @@ function doAttack(byId, targetId) {
   //  / อย่าอยู่เลย แกน่ะ! (ริต้า เบอร์นัล patch 2.1.6) / ฉันยัง...มองเห็นอยู่!!! กันตาย + อย่างนายน่ะ จะไปเข้าใจอะไร (สึงาชิ ทาคุโตะ patch 2.2.4):
   //  เล่นวีดีโอที่ค้างคิวก่อน แล้วค่อยขึ้นสรุปความเสียหาย
   //  (ปกติทุกท่าอื่นจะขึ้นสรุปความเสียหายก่อนแล้วค่อยเล่นวีดีโอค้างคิวตอนจบ — ท่าเหล่านี้กลับลำดับเฉพาะตัว)
-  if ((storiumAtk || phenexPurgeAtk || miyakoUltAtk || triggerMultiAtk || triggerZeperionAtk || escanorAttackVideoQueued || (beatSaveFired && target.characterId === "takuto") || takutoUlt2VideoQueued || eijiSwordFx.videoQueued || harukaPunishFx.videoQueued || (harukaCounterFx && harukaCounterFx.videoQueued) || (danCounterFx && danCounterFx.videoQueued) || (yuiCounterFx && yuiCounterFx.videoQueued) || batGunFired || daisukeRiderFired || yagurumaStingFired) && cutsceneQueue.length) runCutsceneQueue(showAttackFx);
+  if ((storiumAtk || phenexPurgeAtk || miyakoUltAtk || triggerMultiAtk || triggerZeperionAtk || escanorAttackVideoQueued || (beatSaveFired && target.characterId === "takuto") || takutoUlt2VideoQueued || eijiSwordFx.videoQueued || harukaPunishFx.videoQueued || (harukaCounterFx && harukaCounterFx.videoQueued) || (danCounterFx && danCounterFx.videoQueued) || (yuiCounterFx && yuiCounterFx.videoQueued) || batGunFired || daisukeRiderFired || yagurumaStingFired || kagamiKickFired) && cutsceneQueue.length) runCutsceneQueue(showAttackFx);
   else showAttackFx();
 }
 
@@ -6786,6 +6810,8 @@ const engine = {
   applyDebuff,
   applyPoison,     // "พิษร้าย" (สถานะ Universal): ดาเมจ 1/เทิร์น + พลังโจมตี -1 (เคารพต้านสถานะผิดปกติ)
   tickPoison,
+  applyShock,      // "ช็อต" (สถานะ Universal): จุดเดียวที่ทุกตัวละครใช้ใส่สถานะนี้ (เคารพต้านสถานะผิดปกติ)
+  tickShock,       // โรลต้นเทิร์น 15% -> สตั้น (เช็ค resist ตอนโรล ไม่ใช่ตอนแปะ)
   poisonAtkPenalty, // พลังโจมตีที่หายไปจากพิษ — computeAttackBase อ่านคู่กับ "อ่อนแอ"
   applyCurse,      // "คำสาป" (สถานะ Universal): จุดเดียวที่ทุกตัวละครใช้ใส่สถานะนี้ (เคารพต้านสถานะผิดปกติ)
   tickCurseOnSkill,

@@ -18,7 +18,8 @@ const cayChar = require("./cayenne");
 const daichiChar = require("./daichi");
 const kotarouChar = require("./kotarou"); // เท็นโนจิ โคทาโร่: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร     // ไดจิ โอโซระ: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร      // คาเยนน์ ซูซูชิโระ: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร
 const daisukeChar = require("./daisuke");
-const yagurumaChar = require("./yaguruma"); // โซ ยากุรุมะ: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร // คาซามะ ไดสุเกะ: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร
+const yagurumaChar = require("./yaguruma");
+const kagamiChar = require("./kagami"); // คากามิ อาราตะ: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร // โซ ยากุรุมะ: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร // คาซามะ ไดสุเกะ: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร
 const BAT_CAR_IMG = "/characters/bat_ben/bat_update/bat_ben_car.webp";
 const BAT_SHOT_IMG = "/characters/bat_ben/bat_update/skill1.2/bat_ben_skill1.2.jpg";
 const BAT_GUN_IMG = "/characters/bat_ben/bat_update/skill2.2/bat_ben_skill2.2.png";
@@ -42,6 +43,20 @@ module.exports = function buildTransforms(img) {
     yagurumaClockUp:  { img: yagurumaChar.IMG.skill2, video: yagurumaChar.VIDEO.clockUp, title: "CLOCK UP", label: "หยุดเวลาทั้งสนาม", seconds: 5, music: null, afterReveal: false },
     yagurumaClockOver:{ img: yagurumaChar.IMG.skill2, video: null,                       title: "CLOCK OVER", label: "เวลาเดินต่อ", seconds: 0, music: null, afterReveal: false },
     yagurumaSting:    { img: yagurumaChar.IMG.skill3, video: yagurumaChar.VIDEO.sting,   title: "RIDER STING", label: "ปล่อยท่าไม้ตาย", seconds: 13, music: null, afterReveal: false },
+
+    // ---------- คากามิ อาราตะ (patch 4.4 new) ----------
+    //  เวลา seconds วัดจาก mvhd จริงของไฟล์ แล้วปัดขึ้น — ห้ามเดา คลิปจะโดนตัดกลางคัน
+    //  kagamiIntro: เล่นครั้งเดียวตอนเริ่มแมตช์ — ไม่มีคำบรรยายตามสเปค (title/label ว่าง)
+    kagamiIntro:     { img: kagamiChar.IMG.base,   video: kagamiChar.VIDEO.intro,     title: "", label: "", seconds: 9, music: null, afterReveal: false },
+    kagamiCassOff:   { img: kagamiChar.IMG.skill1, video: kagamiChar.VIDEO.cassOff,   title: "CAST OFF", label: "ปลดเกราะทิ้ง", seconds: 15, music: null, afterReveal: false },
+    kagamiPutOn:     { img: kagamiChar.IMG.putOn,  video: null,                       title: "PUT ON",  label: "สวมเกราะกลับ", seconds: 0, music: null, afterReveal: false },
+    kagamiClockUp:   { img: kagamiChar.IMG.skill2, video: kagamiChar.VIDEO.clockUp,   title: "CLOCK UP", label: "หยุดเวลาทั้งสนาม", seconds: 3, music: null, afterReveal: false },
+    kagamiClockOver: { img: kagamiChar.IMG.skill2, video: null,                       title: "CLOCK OVER", label: "เวลาเดินต่อ", seconds: 0, music: null, afterReveal: false },
+    // ชาร์จ Rider Kick: ขั้น 1 มีคลิปสั้น · ขั้น 2 แจ้งเตือนเฉยๆ (video: null) · ขั้น 3 มีคลิป
+    kagamiKickOne:   { img: kagamiChar.IMG.skill3, video: kagamiChar.VIDEO.kickOne,   title: "RIDER KICK", label: "ชาร์จขั้นที่ 1", seconds: 2, music: null, afterReveal: false },
+    kagamiKickTwo:   { img: kagamiChar.IMG.skill3, video: null,                       title: "RIDER KICK", label: "ชาร์จขั้นที่ 2", seconds: 0, music: null, afterReveal: false },
+    kagamiKickThree: { img: kagamiChar.IMG.skill3, video: kagamiChar.VIDEO.kickThree, title: "RIDER KICK", label: "ชาร์จครบ — พร้อมออกหมัด", seconds: 3, music: null, afterReveal: false },
+    kagamiKickFinal: { img: kagamiChar.IMG.skill3, video: kagamiChar.VIDEO.kickFinal, title: "RIDER KICK", label: "ปล่อยท่าไม้ตาย", seconds: 8, music: null, afterReveal: false },
     // ---------- เท็นโนจิ โคทาโร่ (patch 4.1 new) ----------
     //  ทุกคลิปคิวเองจากโค้ด จึงต้อง afterReveal: false (ไม่งั้นลูปกลางใน afterResolve() จะไล่หาสถานะชื่อเดียวกับคีย์แล้วเล่นซ้ำ)
     //  เพลง kotarou_theme มาจาก activeMusic ของตัวละคร (คลอตลอดเทิร์นที่ย้อนมา) ไม่ใช่ฟิลด์ music ตรงนี้

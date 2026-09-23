@@ -45,6 +45,7 @@ const daichi = require("./daichi");
 const kotarou = require("./kotarou");
 const daisuke = require("./daisuke");
 const yaguruma = require("./yaguruma");
+const kagami = require("./kagami");
 
 const CHARACTER_MODULES = [
   tohno,
@@ -88,6 +89,7 @@ const CHARACTER_MODULES = [
   kotarou,
   daisuke,
   yaguruma,
+  kagami,
 ];
 
 const CHAR_HOOKS = {};

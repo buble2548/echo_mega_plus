@@ -1251,6 +1251,7 @@ const STATUS_INFO = {
   sleep:     { icon: "💤", label: "หลับไหล", cls: "bg-echo-hp", desc: "หลับไหล: ออกการกระทำใดๆ ไม่ได้ และเสียเลือด 1/เทิร์นไม่สนเกราะ (ไม่ถึงตาย — ค้างที่ 1) — หายไปทันทีเมื่อเข้าเช้า" },
   oberonSickle: { icon: "🌘", label: "เคียวยมทูต", cls: "bg-echo-magenta", desc: "เคียวยมทูต: การโจมตีปกติใส่เป้าหมายที่กำลังหลับไหลจะแรงขึ้น +2 หน่วย — กดซ้ำไม่ได้ระหว่างมีผล" },
   poison:    { icon: "🧪", label: "พิษร้าย", cls: "bg-echo-magenta", desc: "พิษร้าย: ต้นเทิร์นเสียพลังชีวิต 1 หน่วย (ลดเกราะก่อน) และตลอดเวลาที่ติดอยู่ พลังโจมตีที่ทำได้ -1 · ต้าน/ล้างออกได้ด้วยต้านสถานะผิดปกติ" },
+  shock:     { icon: "⚡", label: "ช็อต", cls: "bg-echo-gold text-gray-900", desc: "ช็อต: ทุกต้นเทิร์นที่ยังติดอยู่ มีโอกาส 15% ที่จะติดสถานะ \"สตั้น\" 1 เทิร์นทันที — ถ้ามี \"ต้านสถานะผิดปกติ\" อยู่ตอนโรล ก็กันได้ · ถูกล้างสถานะจะลดทีละ 1 เทิร์น ไม่หายทั้งก้อน" },
   curse:     { icon: "🕸️", label: "คำสาป", cls: "bg-echo-magenta", desc: "คำสาป: ทุกครั้งที่ใช้สกิลสำเร็จ จะเสียพลังชีวิต 1 หน่วย (ลดเกราะก่อน ถึงตายได้) — มีผล 1 ครั้ง/เทิร์น ไม่กดสกิลก็หมดอายุไปเอง · ถูกล้างออกจะลดลงทีละ 1 เทิร์น" },
   vortarmor: { icon: "🛡️", label: "เกราะราตรี", cls: "bg-echo-armor", desc: "Lie Like Vortigern: เพดานเกราะ +1 ชั่วคราว" },
   // ---------- Apple guy (patch 1.8) ----------
@@ -1506,13 +1507,15 @@ function statusEntries(p, full) {
     out.push({ key: "muimiUltCd", v: p.muimiUltCd, icon: "⏳", label: `ดาบสะบั้นพักฟื้น ${p.muimiUltCd} เทิร์น`, cls: "bg-white/20", desc: "ดาบสะบั้นหมดเวลาแล้ว — ต้องรอให้ครบ 5 เทิร์นจึงใช้ดาบสะบั้นหอคอยสวรรค์ซ้ำได้ (ตัวเลขนี้ขึ้นทับบนการ์ดสกิลด้วย) · คุณเห็นอยู่คนเดียว" });
   }
   // คาซามะ ไดสุเกะ: โหมด / Clock Up / ไรเดอร์ชูต (ข้อมูลสนาม ทุกคนเห็นได้)
-  if (p.daisuke || p.yaguruma) {
-    const d = p.daisuke || p.yaguruma;
+  if (p.daisuke || p.yaguruma || p.kagami) {
+    const d = p.daisuke || p.yaguruma || p.kagami;
     out.push(d.cassOff
       ? { key: "daisukeMode", v: 1, icon: "⚡", label: "CAST OFF", cls: "bg-echo-hp", desc: "ปลดเกราะทิ้ง: พลังโจมตีพื้นฐาน +1 แต่เกราะจะไม่ฟื้นอีกเลย — เป็นเงื่อนไขปลดล็อก Clock Up และ Rider Shooting" }
       : { key: "daisukeMode", v: 1, icon: "🛡️", label: `PUT ON ${d.putOnTurns}/${d.putOnEvery}`, cls: "bg-echo-armor", desc: "สวมเกราะอยู่: เกราะฟื้นได้ตามปกติ และครบ 3 เทิร์นเมื่อไรจะฟื้นพลังชีวิต +2 — กดสกิลรอง/ท่าไม้ตายไม่ได้ในโหมดนี้" });
     if (d.clockUp) out.push({ key: "daisukeClock", v: 1, icon: "⏱️", label: `CLOCK UP · หลบ ${d.dodge}%`, cls: "bg-echo-magenta", desc: "เวลาหยุดนิ่ง: คนอื่นขยับไม่ได้จนกว่าไดสุเกะจะเปิดไพ่ · สกิลติดตัว Zect ให้หลบหลีก 25% · เสียแต้มสกิล 2 หน่วยต่อเทิร์น หมดเมื่อไรก็ปิดเอง" });
     if (d.rider) out.push({ key: "daisukeRider", v: 1, icon: "🎯", label: "ไรเดอร์ชูต", cls: "bg-echo-gold text-gray-900", desc: "Rider Shooting เล็งไว้แล้ว: การโจมตีปกติครั้งถัดไปจะล้างเกราะเป้าหมาย 1 หน่วยก่อน แล้วจึงลงความเสียหาย (แรงขึ้น +1)" });
+    if (d.charge > 0 && !d.kick) out.push({ key: "kagamiCharge", v: d.charge, icon: "⚡", label: `ชาร์จ Rider Kick ${d.charge}/${d.chargeMax}`, cls: "bg-echo-gold text-gray-900", desc: `Rider Kick ชาร์จไว้ ${d.charge} จาก ${d.chargeMax} ขั้น — การชาร์จค้างข้ามเทิร์นได้ ขั้นถัดไปใช้ ${d.nextCost} แต้ม` });
+    if (d.kick) out.push({ key: "kagamiKick", v: 1, icon: "🦵", label: "ไรเดอร์คิ๊ก", cls: "bg-echo-gold text-gray-900", desc: "Rider Kick ชาร์จครบแล้ว: การโจมตีปกติครั้งถัดไปแรงขึ้น +1 แล้วฝัง \"ช็อต\" 5 เทิร์น + \"ชา\" 3 เทิร์น · ถ้าเป้าหมายมี \"ต้านสถานะผิดปกติ\" จะกลายเป็นหมัดทะลุเกราะแทน (เพดานรวม 3 หน่วย)" });
     if (d.sting) out.push({ key: "yagurumaSting", v: 1, icon: "🦂", label: "ไรเดอร์สติง", cls: "bg-echo-magenta", desc: "Rider Sting เล็งไว้แล้ว: การโจมตีปกติครั้งถัดไปจะล้าง \"ต้านสถานะผิดปกติ\" ของเป้าหมายก่อน แล้วจึงลงความเสียหาย (แรงขึ้น +1) พร้อมฝัง \"พิษร้าย\" 3 เทิร์น และ \"ผุพัง\" 2 เทิร์น" });
   }
   // อิปโป: อัตราหลบหลีกรวม + Dempsey Charge (ทุกคนเห็นได้ เป็นข้อมูลสนามเหมือน % หลบของเอจิ)
@@ -3970,8 +3973,8 @@ export default function Game({ state, lowQ, skillConfirmOn = true, muteScenes = 
   const veilLocked = isOberon && !!me?.statuses?.veil;
   // ---------- คาซามะ ไดสุเกะ ----------
   //  ไดสุเกะกับยากุรุมะใช้แกน Zect ตัวเดียวกัน เงื่อนไขปุ่มจึงคำนวณรวมทีเดียว
-  const dai = me?.daisuke || me?.yaguruma || null;
-  const zectArmed = !!(me?.daisuke?.rider || me?.yaguruma?.sting);  // ท่าไม้ตายอาร์มค้างอยู่
+  const dai = me?.daisuke || me?.yaguruma || me?.kagami || null;
+  const zectArmed = !!(me?.daisuke?.rider || me?.yaguruma?.sting || me?.kagami?.kick);  // ท่าไม้ตายอาร์มค้างอยู่
   const daisukeBasicLocked = !!dai && !!dai.clockUp;               // สลับโหมดระหว่าง Clock Up ไม่ได้
   //  กดเปิด Clock Up ต้อง CAST OFF และมีแต้มพอจ่ายค่าต่อเทิร์น (กดปิดทำได้เสมอ)
   const daisukeSecLocked = !!dai && (!dai.cassOff || (!dai.clockUp && (me?.skillPoints || 0) < 2));
