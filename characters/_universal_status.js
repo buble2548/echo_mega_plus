@@ -13,6 +13,7 @@
 //         invert (ผกผัน: กลับด้านบัฟ/การฟื้นฟูทั้งหมด) / hburn (ลุกไหม้: ดาเมจ 1/เทิร์น สะสมได้ — ดู tickBurn)
 //         hbleed (เลือดไหล: ดาเมจ 1/เทิร์น สะสมได้ เหมือนลุกไหม้ + ทำให้การฟื้นพลังชีวิตเหลือครึ่ง — ดู tickBleed/bleedHealPenalty)
 //         chaa (สภาพชา: กดจั่วการ์ด 1 ครั้ง ได้ไพ่ 2 ใบ — จุดทำงานจริงอยู่ใน hit() ของ server.js)
+//         curse (คำสาป: กดสกิลเมื่อไหร่เสียพลังชีวิต 1 หน่วย — 1 ครั้ง/เทิร์น ไม่กดสกิลก็หมดอายุไปเอง — ดู applyCurse/tickCurseOnSkill)
 //  บัฟ (ต่อ): netramana (เนตรมณะ: โจมตีปกติมีโอกาสสังหารทันที NETRAMANA_KILL_CHANCE — ดู netramanaActive)
 //  จำนวน (amount) ของสถานะเก็บแยกใน p.statusAmt[key] — p.statuses[key] เก็บจำนวนเทิร์น/ครั้งตามเดิม
 //
@@ -100,7 +101,7 @@ const BASIC_DEBUFF_CLEAR = ["discord", "sleep", "stun", "nodraw", "noskill", "we
   "energy",       // เครื่องดื่มชูกำลัง: เสียพลัง 1 หน่วยต่อเทิร์น
   "harukaPunish"]; // จงไปสู่สุขติ (ฮารุกะ): เป้าหมายที่เลือดไหล >= 3 โดนระเบิดเลือดไหลใส่
 // ดีบัฟที่ยังไม่เกิดผลทันที (ยามฟ้าสาง / เส้นชีวิต): โดนล้าง = ลดลงทีละ 1 หน่วย ไม่หายทั้งหมด
-const SOFT_DEBUFF_STEP = ["dawn", "deathline"];
+const SOFT_DEBUFF_STEP = ["dawn", "deathline", "curse"];
 
 function cleanseDebuffs(p) {
   let purged = 0;
@@ -120,6 +121,38 @@ function cleanseDebuffs(p) {
     }
   }
   return purged;
+}
+
+// ---------- "คำสาป" (curse, สถานะ Universal patch 4.2) ----------
+//  ดีบัฟที่เอาคืนไม่ได้ด้วยการอยู่เฉยๆ: กดสกิลเมื่อไหร่เสียพลังชีวิต 1 หน่วย (ลดเกราะก่อน ถึงตายได้)
+//  แต่ถ้าอดใจไม่กดสกิลเลย มันก็หมดอายุไปเองตามจำนวนเทิร์น — เป็นการบีบให้เลือก ไม่ใช่ดาเมจตายตัว
+//  p.statuses.curse = จำนวนเทิร์นที่เหลือ (ลดเองทุกจบเทิร์นตามลูปกลาง)
+//  อยู่ใน SOFT_DEBUFF_STEP: โดนล้างสถานะ = ลดทีละ 1 เทิร์น ไม่หายทั้งก้อน (เหมือนเส้นชีวิต)
+function applyCurse(p, turns) {
+  if (resistActive(p)) return false;  // ต้านสถานะผิดปกติกันได้
+  applyBuff(p, "curse", null, turns);
+  return true;
+}
+
+// เรียกจาก useSkill() ของ server.js — หลังหักแต้มสกิลสำเร็จแล้ว
+//  1 ครั้ง/เทิร์น: ตัวละครที่กดสกิลได้หลายช่องต่อเทิร์น (ไบเลธ/ไค/ผู้วิงวอน) จะเสียเลือดแค่หน่วยเดียว
+function tickCurseOnSkill(engine, p) {
+  if (!p || !p.alive || !(((p.statuses && p.statuses.curse) || 0) > 0)) return false;
+  if (p.curseHitRound === engine.roundNumber) return false; // เทิร์นนี้กินไปแล้ว
+  p.curseHitRound = engine.roundNumber;
+  p._statusDamage = true;  // ดาเมจจากสถานะ ไม่ใช่จากสกิล/การโจมตี (แพทเทิร์นเดียวกับ tickBurn)
+  engine.dealMixed(p, 1); // ไม่ทะลุเกราะ — ลดเกราะก่อน หมดเกราะจึงเข้าเลือดจริง
+  engine.log(`🕸️ ${p.name} ต้องคำสาป — การใช้สกิลดึงเอาพลังชีวิตไป -1 (เหลืออีก ${p.statuses.curse} เทิร์น)`);
+  p._statusDamage = false;
+  // คำสาปฆ่าได้ — ท่อตายชุดเดียวกับลุกไหม้/เลือดไหล
+  engine.maybeBeatSave(p);
+  engine.maybeBeatMode(p);
+  engine.maybeWakeKotone(p);
+  if (p.alive && p.hp <= 0) {
+    engine.instantDeath(p);
+    if (!p.alive) engine.log(`💀 ${p.name} ต้องคำสาปจนเลือดหมด ตกรอบ!`);
+  }
+  return true;
 }
 
 // ---------- "เยียวยา" (mend, สถานะ Universal patch 3.4) ----------
@@ -365,6 +398,8 @@ module.exports = {
   cleanseDebuffs,
   cleanseOneStep,
   coolReduction,
+  applyCurse,
+  tickCurseOnSkill,
   MEND_MAX_TURNS,
   applyMend,
   tickMend,

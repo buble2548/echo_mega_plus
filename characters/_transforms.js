@@ -174,11 +174,16 @@ module.exports = function buildTransforms(img) {
     takutoLance: { img: "/characters/takuto/upadate/tauburn_un.jpg", video: "/characters/takuto/upadate2/takuto_lance.mp4", title: "หอกผู้พิชิต", label: "เอฟเฟกต์พิเศษ", seconds: 2, music: null, afterReveal: false },
     takutoLanceHit: { img: "/characters/takuto/upadate/tauburn_un.jpg", video: "/characters/takuto/upadate2/takuto_lance_hit.mp4", title: "หอกผู้พิชิต", label: "ใช้สกิล", seconds: 13, music: null, afterReveal: false },
     // ---------- โอเบรอน (patch 1.7) ----------
-    // lai: ท่าไม้ตายกลางวัน — วีดีโอ 13 วิ | vortigern (Rework 2): ทำงานทันทีก่อนเปิดการ์ดแล้ว (ดู CHAR_HOOKS.oberon.applyVortigernEffect) ไม่ใช่ afterReveal อีกต่อไป
+    // lai (rework 3): ท่ากลางวันถูกแทนด้วย "จุดจบของความฝัน" ที่ไม่มีคัตซีน — พักคิวไว้ก่อน ยังไม่มีใครเรียก
     // (ฉากหลัง "ราตรีกลืนกิน" ไม่ผูกกับท่าไม้ตาย — ทำงานเองทุกครั้งที่เข้ากลางคืนขณะมีโอเบรอนอยู่ในเกม)
     lai:       { img: "/characters/oberon/oberon_skill3_morning.webp", video: "/characters/oberon/oberon_final_morning.mp4", title: "LAI RHYME GOODFELLOW", label: "ปล่อยท่าไม้ตาย", seconds: 14, music: null, afterReveal: true },
-    vortigern: { img: "/characters/oberon/oberon_skill3_night.jpg", video: "/characters/oberon/oberon_final_night.mp4", title: "LIE LIKE VORTIGERN", label: "ปล่อยท่าไม้ตาย", seconds: 17, music: null, afterReveal: false },
-    // oberonChange: ต่อจากวีดีโอ Vortigern — ราตรีกลืนกิน (16 วิ) แล้วฉากหลังกลางคืนกลายเป็น oberon_background.mp4
+    // oberonNightmare (rework 3): คลิปเดิมของ Lie Like Vortigern ย้ายมาเป็นของ "ฝันร้ายยามค่ำคืน" (สกิลรองกลางคืน) ตามผลที่ย้ายไป
+    //  ↑ ชื่อ/รูป/ป้ายจึงต้องเป็นของ "สกิลรอง" — ไม่งั้นกดสกิลรองแล้วจอขึ้นชื่อท่าไม้ตาย (บักเดิม)
+    //  เล่นก่อน แล้วต่อด้วย oberonChange (ราตรีกลืนกิน) — ดู applyNightmare ใน characters/oberon.js
+    oberonNightmare: { img: "/characters/oberon/oberon_skill2_night.jpg", video: "/characters/oberon/oberon_final_night.mp4", title: "ฝันร้ายยามค่ำคืน", label: "สกิลรองยามราตรี", seconds: 17, music: null, afterReveal: false },
+    // oberonSwarm (rework 3): ท่าไม้ตายกลางคืนใหม่ — กลายร่างเป็นฝูงแมลง เล่นวีดีโอทันทีที่กด
+    oberonSwarm: { img: "/characters/oberon/oberon_skill3_night.jpg", video: "/characters/oberon/oberon_skill3.2_update.mp4", title: "LIE LIKE VORTIGERN", label: "ปล่อยท่าไม้ตาย", seconds: 17, music: null, afterReveal: false },
+    // oberonChange: ต่อจากคลิปของฝันร้ายยามค่ำคืน — ราตรีกลืนกิน แล้วฉากหลังกลางคืนกลายเป็น oberon_background.mp4
     oberonChange: { img: img.OBERON_NIGHT_IMG, video: "/characters/oberon/oberon_changefill.mp4", title: "ราตรีกลืนกิน", label: "ราตรีถูกครอบงำ", seconds: 17, music: null, afterReveal: false },
     // oberonNight: สลับร่างตอนเข้ากลางคืน (วีดีโอ 5 วิ) | oberonDay: กลับร่างกลางวัน = แจ้งเตือนปกติ ไม่มีวีดีโอ
     oberonNight: { img: img.OBERON_NIGHT_IMG, video: "/characters/oberon/morning_tonight.mp4", title: "ราชาแห่งการหลอกลวง", label: "สลับร่างยามราตรี", seconds: 6, music: null, afterReveal: false },

@@ -48,6 +48,8 @@ const {
   cleanseDebuffs,
   cleanseOneStep,
   coolReduction,
+  applyCurse,
+  tickCurseOnSkill,
   MEND_MAX_TURNS,
   applyMend,
   tickMend,
@@ -1250,6 +1252,8 @@ function scoreCap(p) {
   return 21;
 }
 function scoreOf(p) {
+  // โอเบรอน (ร่างฝูงแมลง): จั่วไพ่ไม่ได้ จึงนับแต้มเป็น 0 เสมอ (แพ้ทุกเทิร์น แต่ภูมิดาเมจแพ้จั่ว)
+  if (CHAR_HOOKS.oberon.swarmOn(p)) return 0;
   // แต้มมีพื้นล่างที่ 0 เสมอ — cardBonus ติดลบ (เช่น "พักผ่อน" ของไบเลธ) หักได้มากสุดจนเหลือ 0 ไม่ติดลบ
   const raw = Math.max(0, calculateScore(p.cards) + (p.cardBonus || 0));
   if (p.statuses && p.statuses.upg) return Math.min(raw, CHAR_HOOKS.hikaru.upgCap(p));
@@ -1450,7 +1454,7 @@ function positionUsedByOther(pos, sid) {
 
 // รูปที่แสดง: Beat Mode (ถาวรจนตาย) > ร่างสุดท้ายฟุจิมารุ (จนตาย) > Paradise (เหนือกว่าสกิลติดตัว NT-D)
 //  > NT-D คงอยู่จนแก้แค้น > ไคจู Black King > Ginga > สวมเกราะราชัน
-function displayImg(p) {
+function displayImg(p, unmasked) {
   if (p.characterId === "escanor" && CHAR_HOOKS.escanor.displayImg) return CHAR_HOOKS.escanor.displayImg(p);
   if (p.characterId === "ultraman_trigger") return "/characters/ultraman_trigger/trigger.webp";
   if (p.characterId === "hisakawa_sister") return CHAR_HOOKS.hisakawa_sister.displayImg(p);
@@ -1474,7 +1478,16 @@ function displayImg(p) {
   // ไดจิ โอโซระ: สวมเกราะ = ภาพเกราะ · unite = ultraman_x.webp (null = ใช้ภาพปกติ)
   if (p.characterId === "daichi") { const dimg = CHAR_HOOKS.daichi.displayImg(p); if (dimg) return dimg; }
   // โอเบรอน: ร่างสลับตามช่วงเวลากลางวัน/กลางคืนเสมอ
-  if (p.characterId === "oberon") return isNightRound(roundNumber) ? OBERON_NIGHT_IMG : OBERON_MORNING_IMG;
+  // โอเบรอน (characters/oberon.js)
+  if (p.characterId === "oberon") {
+    // จอมหลอกลวง: เปลือกที่ยืมมาครอบทุกทางที่เป็น broadcast ก้อนเดียว (การ์ดเอฟเฟกต์การโจมตี ฯลฯ)
+    //  กระดานของเจ้าตัวเองถูกเขียนทับกลับเป็นของจริงที่ buildStateFor (per-viewer)
+    const mask = unmasked ? null : CHAR_HOOKS.oberon.maskId(p);
+    if (mask && CHAR_BY_ID[mask]) return CHAR_BY_ID[mask].img;
+    // ร่างฝูงแมลง: ค้างร่างกลางคืนไว้ตลอด ไม่สลับตามช่วงเวลา
+    if (CHAR_HOOKS.oberon.swarmOn(p)) return OBERON_NIGHT_IMG;
+    return isNightRound(roundNumber) ? OBERON_NIGHT_IMG : OBERON_MORNING_IMG;
+  }
   // เรียวกิ ชิกิ: ระหว่างท่าไม้ตาย ฉันมองเห็นมันแล้ว / ความตายที่โรยรา = ภาพสถานะท่าไม้ตาย
   if (p.characterId === "shiki" && (p.statuses.wither || 0) > 0) return SHIKI_WITHER_IMG;
   if (p.characterId === "shiki" && (p.statuses.deatheye || 0) > 0) return SHIKI_DEATH_IMG;
@@ -2000,8 +2013,9 @@ function resetCombat(p) {
   p.tempHp = 0;           // แกมเบลอร์: เลือดชั่วคราวจากฮีลล้น
   p.tempHpTurns = 0;      // เลือดชั่วคราวหายเองเมื่อครบ 2 เทิร์น
   p.anataTargets = null;  // เป้าหมาย ANATA WAAAAAAAA (ลับจนกว่าจะเปิดไพ่)
-  p.sunriseDrop = 0; // โอเบรอน: จำนวนเทิร์นที่พลังชีวิตจะลดลงเทิร์นละ 1 อัตโนมัติ (หลังโดนฮีล 5)
+  CHAR_HOOKS.oberon.resetCombat(p); // โอเบรอน: คูลดาวน์/ฝันร้าย/ร่างฝูงแมลง/เปลือกจอมหลอกลวง/แรงสะท้อนรุ่งอรุณ
   p.sleepFresh = false; // หลับไหล: เทิร์นที่เพิ่งโดนกล่อมยังไม่เริ่มนับ/ยังโจมตีได้
+  p.curseHitRound = 0;  // "คำสาป": เทิร์นล่าสุดที่คำสาปกินเลือดไป (1 ครั้ง/เทิร์น)
   p.appleItem = "drink"; // Apple guy: ของส่งมอบที่เลือกอยู่ (ค่าเริ่มต้น เครื่องดื่มชูกำลัง)
   p.appleAtkBuffs = [];  // Apple guy: บัฟพลังโจมตีจากการมอบของ — 1 หน่วย/ครั้ง (สูงสุด 2 หน่วย) นับถอยหลังแยกกัน 5 เทิร์น/หน่วย
   p.chillDodge = 100;    // Apple guy: อัตราหลบขณะชิวๆครับน้องๆ (%) — รีเซ็ตเมื่อเปิดท่าไม้ตายใหม่
@@ -2130,7 +2144,10 @@ function buildStateFor(viewerId) {
   const nightNow = isNightRound(roundNumber);
   // ราตรีกลืนกิน: เปิดเมื่อโอเบรอนใช้ท่าไม้ตาย 2 (Lie Like Vortigern) — ฉากหลังกลางคืนกลายเป็น
   //  วีดีโอ oberon_background.mp4 + เพลงประจำตัวเล่นค้าง และหายไปเมื่อหมดกลางคืน
-  const oberonBg = nightNow && oberonDevour > 0;
+  // ยุค "ล่มสลาย" (Lie Like Vortigern ร่างฝูงแมลง): อยู่เหนือวงจรกลางวัน/กลางคืน — ค้างฉากไว้จนกว่าโอเบรอนจะคืนร่าง
+  const oberonCollapse = !!CHAR_HOOKS.oberon.swarmHost(engine);
+  // ราตรีกลืนกิน (ฝันร้ายยามค่ำคืน): ฉากหลังกลางคืนกลายเป็นวีดีโอ oberon_background.mp4
+  const oberonBg = (nightNow && oberonDevour > 0) || oberonCollapse;
   const hisakawaBg = Object.values(players).some((p) => p.alive && p.characterId === "hisakawa_sister" && (p.statuses.hisakawaDream || 0) > 0);
   // ฉันมองเห็นมันแล้ว (ชิกิ): ภาพ shiki_fill.png ซ้อนทับฉากหลัง | ความตายที่โรยรา: ฉากหลังวีดีโอ shiki_fill2.mp4
   //  โทโนะ ชิกิ (patch 2.1.7): มีดพับประจำตระกูล ระดับ 2 ขึ้นไป — ใช้ภาพซ้อนทับเดียวกับ "eye" (shiki_fill.png)
@@ -2229,6 +2246,7 @@ function buildStateFor(viewerId) {
     // SE.RA.PH Moon Cell — ก้อนข้อมูลของโหมด (per-viewer ทั้งก้อน ดู SERAPH_SCENES.md §8)
     seraph: Seraph.stateFor(engine, viewerId),
     oberonBg,
+    oberonCollapse, // ยุคล่มสลาย: client วาดฉากแมลงมีพิษโทนแดง-ดำทับฉากหลังเดิม
     hisakawaBg, // ฝันของเหล่าฝาแฝด: ฉากหลัง O-KU-RI-MO-NO-Sunday
     bardBg,   // มิติมายาบรรเลง (Bard): "blood" | "soul" | null
     shikiBg,  // ฉันมองเห็นมันแล้ว (ชิกิ): ซ้อน shiki_fill.png ทับฉากหลังปัจจุบัน
@@ -2391,12 +2409,17 @@ function buildStateFor(viewerId) {
       //  per-viewer: คนที่เคยเห็นตัวละครนั้นลงสนามแล้วจะเห็นตลอดไป คนที่ยังไม่เคยเห็น = ไม่มีข้อมูลเลย
       //  ชื่อ "ผู้เล่น" ไม่ใช่ความลับ — ที่ซ่อนคือ "ตัวละคร" (ภาพ/ชื่อ/สกิลทั้งชุด)
       const scHidden = Seraph.active() && !Seraph.canSee(viewer, p);
+      // ---------- โอเบรอน สกิลติดตัว "จอมหลอกลวง" ----------
+      //  คนอื่นเห็นเปลือกที่ยืมมาทั้งชุด (ชื่อ/รูป/การ์ดสกิลทั้งสามช่อง+สกิลติดตัว) — ไม่งั้นกดดูการ์ดก็รู้ทันที
+      //  เจ้าตัว (mine) เห็นของจริงเสมอ — ไม่งั้นเล่นไม่ได้
+      const obMaskId = (!mine && CHAR_HOOKS.oberon.disguised(p)) ? CHAR_HOOKS.oberon.maskId(p) : null;
+      const obMaskCh = obMaskId ? CHAR_BY_ID[obMaskId] : null;
       if (scHidden) { basicPub = null; secondaryPub = null; ultimatePub = null; }
       return {
         id: p.id,
         name: p.name,
         avatar: p.avatar,
-        img: scHidden ? null : displayImg(p),
+        img: scHidden ? null : displayImg(p, mine),
         scHidden,                                   // client วาดเป็นเงาดำ + ??? (ดู .sc-silhouette)
         scSpectator: Seraph.active() ? !!p.scSpectator : undefined,
         scEliminated: Seraph.active() ? !!p.scEliminated : undefined,
@@ -2475,7 +2498,11 @@ function buildStateFor(viewerId) {
         doomQuickSwapUsed: p.characterId === "doomguy" ? !!p.doomQuickSwapUsed : undefined, // DoomGuy: Quick Swap ใช้ไปแล้วในเทิร์นนี้หรือยัง (1 ครั้ง/เทิร์น)
         doomWeaponMarkPending: p.characterId === "doomguy" ? doomWeaponMarkPending() : undefined, // DoomGuy: [ระเบิด]/[ล็อคเป้า] ค้างอยู่ — สุ่มปืนใหม่ (Quick Swap) ไม่ได้จนกว่าจะโดนใช้
         profit: p.profit || 0,      // แกมเบลอร์: บัฟกำไรเท่าตัวโว้ยสะสม
-        sunriseDrop: p.sunriseDrop || 0, // โอเบรอน: จำนวนเทิร์นที่จะเสียเลือด 1/เทิร์นจากรุ่งอรุณแห่งวันใหม่
+        sunrisePending: (p.oberonSunriseHit || 0) > 0, // โอเบรอน: มีแรงสะท้อนรุ่งอรุณรอลงต้นเทิร์นหน้า
+        // โอเบรอน: คูลดาวน์ท่าไม้ตายกลางวัน (เลขบนการ์ดสกิล เหมือนชิโด/อิปโป) + สถานะร่าง/ฝันร้าย (ข้อมูลสนาม ทุกคนเห็นได้)
+        oberonUltCd: p.characterId === "oberon" ? CHAR_HOOKS.oberon.cooldownLeft(engine, p, "ultimate") : undefined,
+        oberonNightmare: p.characterId === "oberon" ? CHAR_HOOKS.oberon.nightmareOn(p) : undefined,
+        oberonSwarm: p.characterId === "oberon" ? CHAR_HOOKS.oberon.swarmOn(p) : undefined,
         appleItem: p.appleItem || "drink", // Apple guy: ของส่งมอบที่เลือกอยู่
         appleAtk: p.appleAtkBuffs ? p.appleAtkBuffs.length : 0, // Apple guy: บัฟพลังโจมตีจากการมอบของ (ซ้อนทับได้สูงสุด 2 หน่วย)
         appleGiveUses: p.appleGiveUses != null ? p.appleGiveUses : CHAR_HOOKS.appleguy.GIVE_USES, // Apple guy: จำนวนใช้ เอาไปสิ คงเหลือ
@@ -2606,18 +2633,18 @@ function buildStateFor(viewerId) {
         statusAmt: p.statusAmt || {}, // จำนวน (amount) ของบัฟ/ดีบัฟพื้นฐาน (patch 2.0.8)
         character: scHidden ? { id: null, img: null, name: "???", passive: null, passive2: null, passive3: null, basic: null, secondary: null, ultimate: null } : {
           // โอเบรอน: กลางคืนสลับชื่อ + สกิลรอง/ท่าไม้ตายเป็นเวอร์ชันกลางคืน (ฝันร้ายยามค่ำคืน / Lie Like Vortigern)
-          id: ch.id,
+          id: obMaskCh ? obMaskCh.id : ch.id,
           // ภาพประจำตัวละคร (ไม่ผูกกับร่าง/แฝดที่กำลังคุมอยู่) — ฉากเปิดตัวตอนแมตช์เริ่มใช้ภาพนี้
-          img: ch.img,
-          name: nightNow && ch.nightName ? ch.nightName : ch.name,
-          passive: ch.passive ? { name: ch.passive.name, desc: ch.passive.desc } : null,
+          img: obMaskCh ? obMaskCh.img : ch.img,
+          name: obMaskCh ? obMaskCh.name : (nightNow && ch.nightName ? ch.nightName : ch.name),
+          passive: obMaskCh ? (obMaskCh.passive ? { name: obMaskCh.passive.name, desc: obMaskCh.passive.desc } : null) : (ch.passive ? { name: ch.passive.name, desc: ch.passive.desc } : null),
           // บานาจ ลิงก์ (patch 2.1.2): สกิลติดตัว 2 ฉันไม่อยากให้เราต้องมาสู้กัน — ตัวอื่นเป็น null
           passive2: ch.passive2 ? { name: ch.passive2.name, desc: ch.passive2.desc } : null,
           // นานายะ ชิกิ (patch 2.1.9): สกิลติดตัว 3 พักผ่อนสักครู่ — ตัวอื่นเป็น null
           passive3: ch.passive3 ? { name: ch.passive3.name, desc: ch.passive3.desc } : null,
-          basic: basicPub,
-          secondary: secondaryPub,
-          ultimate: ultimatePub,
+          basic: obMaskCh ? pub(obMaskCh.basic) : basicPub,
+          secondary: obMaskCh ? pub(obMaskCh.secondary) : secondaryPub,
+          ultimate: obMaskCh ? pub(obMaskCh.ultimate) : ultimatePub,
         },
         dmgHp: p.dmgHp, dmgArmor: p.dmgArmor, gainedSkill: p.gainedSkill,
         wasAttacked: p.wasAttacked, isWinner: p.isWinner, isLoser: p.isLoser,
@@ -2726,6 +2753,8 @@ function startMatch() {
   }
   winningTeamId = null;
   for (const p of Object.values(players)) resetCombat(p);
+  // โอเบรอน (สกิลติดตัว จอมหลอกลวง): สุ่มเปลือกที่ยืมมา — ต้องอยู่หลัง resetCombat ทุกคน เพราะต้องรู้ว่าใครลงสนามบ้าง
+  CHAR_HOOKS.oberon.assignMasks(engine);
   roundNumber = 0;
   cycleShift = 0;
   nightResetPending = false;
@@ -2837,11 +2866,16 @@ function hasGutsWeapon(p) {
   return hasGutsGun(p) || hasBlackSparklence(p);
 }
 // ซื้อสินค้า: ใครกดก่อนได้ก่อน (Node เป็น single-thread — ประมวลผลทีละ event จึงไม่มี race condition จริง)
+// หลับไหล (Lie Like Vortigern ของโอเบรอน): "ออกการกระทำใดๆ ไม่ได้" — จั่ว/กดสกิลกันไว้ด้วย p.locked อยู่แล้ว
+//  แต่ร้านค้า/ไอเทมไม่ได้ผูกกับ p.locked ทั้งหมด (บางชนิดกดใช้นอกเฟสจั่วได้) จึงต้องมีด่านของตัวเอง
+function asleep(p) { return !!p && ((p.statuses && p.statuses.sleep) || 0) > 0; }
+
 function buyShopItem(id, itemId) {
   // SE.RA.PH: ซื้อของได้เฉพาะ "วันสืบสวน" (วันที่ 1-6) ที่ร้านสะดวกซื้อเท่านั้น
   //  วันดวลไม่มีการซื้อขาย — กันที่นี่ด้วย ไม่ใช่แค่ซ่อนปุ่มฝั่ง client
   const p = players[id];
   if (!p || !p.alive) return;
+  if (asleep(p)) return; // หลับไหล: ซื้อของไม่ได้
   if (Seraph.active() && (gameState !== "SERAPH_PLACE" || !Seraph.canShop(p))) return;
   const item = shopItems.find((it) => it.id === itemId);
   if (!item || item.sold) return;
@@ -2869,10 +2903,13 @@ function cardLabel(c) {
 function useInventoryItem(id, uid, opts = {}) {
   const p = players[id];
   if (!p || !p.alive) return;
+  if (asleep(p)) return; // หลับไหล: ใช้ไอเทมไม่ได้เลย (ยาโชคลาภ/ต้านสถานะ/แต้มสกิล/เกราะ เดิมไม่เช็ค p.locked จึงรั่ว)
+  if (CHAR_HOOKS.oberon.swarmOn(p)) return; // ร่างฝูงแมลง: ใช้ไอเทมไม่ได้ — แต่ซื้อของได้ตามปกติ (buyShopItem ไม่กัน)
   if (CHAR_HOOKS.conner.skillBlocked(engine, p)) return; // คอนเนอร์: ระหว่างการไล่ล่า ทุกคนใช้ไอเทมไม่ได้ (รวมคอนเนอร์กับเป้าหมาย)
   if (CHAR_HOOKS.brian.itemBlocked(engine)) return;      // ไบรอัน: ระหว่างการแข่ง ทุกคนใช้ไอเทมไม่ได้
   // ผู้วิงวอน (patch 3.4): "ลูกแกะน้อยรู้แจ้ง" กันการเล็งผู้วิงวอนด้วยไอเทมด้วย (เช่นกระสุน GUTS Select)
   if (opts && opts.targetId && CHAR_HOOKS.the_supplicant.targetBlocked(p, players[opts.targetId])) return;
+  if (opts && opts.targetId && CHAR_HOOKS.oberon.swarmOn(players[opts.targetId])) return; // ร่างฝูงแมลง: เล็งด้วยอาวุธ/ไอเทมไม่ได้
   const idx = (p.inventory || []).findIndex((it) => it.uid === uid);
   if (idx < 0) return;
   const item = p.inventory[idx];
@@ -3112,17 +3149,8 @@ function dealRound() {
     if (p.characterId === "nanaya") CHAR_HOOKS.nanaya.onRoundStartRest(engine, p);
 
 
-    // รุ่งอรุณแห่งวันใหม่ (โอเบรอน): เสียพลังชีวิตเทิร์นละ 1 หน่วยแบบไม่สนเกราะ (รวม 2 เทิร์น)
-    //  ผลด้านลบจากสกิลหักเลือดได้เรื่อยๆ แต่ห้ามตาย — ค้างที่พลังชีวิต 1 หน่วย
-    if ((p.sunriseDrop || 0) > 0) {
-      p.sunriseDrop--;
-      if (p.hp > 1 || (p.tempHp || 0) > 0) {
-        loseHp(p);
-        lastLog.push(`🌄 ${p.name} ผลรุ่งอรุณแห่งวันใหม่จางลง — พลังชีวิต -1${p.sunriseDrop > 0 ? ` (เหลืออีก ${p.sunriseDrop} เทิร์น)` : ""}`);
-      } else {
-        lastLog.push(`🌄 ${p.name} ผลรุ่งอรุณแห่งวันใหม่จางลง — พลังชีวิตเหลือ 1 จึงไม่ลดต่อ`);
-      }
-    }
+    // โอเบรอน (characters/oberon.js): แรงสะท้อนของรุ่งอรุณ / ค่าเสียเลือดของร่างฝูงแมลง / แปะเปราะบางซ้ำ
+    CHAR_HOOKS.oberon.onRoundStartTick(engine, p);
 
     // ---------- ซาโตรุ อาเคฟุ (patch 2.0.8.2): ดาเมจต่อเนื่องทุก 2 เทิร์น ----------
     //  สิ่งแปลกปลอม (Obla Di, Obla Da): ดาเมจ 1 / [Calamity]: ดาเมจตามเลเวล — ทำงานตอนเวลาคงเหลือเป็นเลขคี่
@@ -3251,6 +3279,8 @@ function dealRound() {
     CHAR_HOOKS.ippo.applyPendingStun(engine, p);
     // ไดจิ เกราะเอเลคิง: สตั้นที่ติดไว้เมื่อเทิร์นก่อน -> เริ่มมีผลตอนนี้ (ก่อนบล็อกเช็คสตั้นด้านล่างด้วยเหตุผลเดียวกัน)
     CHAR_HOOKS.daichi.applyPendingStun(engine, p);
+    // โอเบรอน "จุดจบของความฝัน": สตั้น 3 เทิร์นที่เป็นราคาของพลังโจมตี +4 — เหตุผลเดียวกับสองตัวข้างบน
+    CHAR_HOOKS.oberon.applyPendingStun(engine, p);
     // ---------- ผู้วิงวอน (characters/the_supplicant.js): รีเซ็ตโควตาสกิล 2 ครั้ง + ต่ออายุ "กระแสเวท" ถาวร ----------
     CHAR_HOOKS.the_supplicant.onRoundStartTick(engine, p);
     // ---------- ไบรอัน (characters/brian.js): รถกินน้ำมัน (แปลงเป็นเลือด) หรือเติมน้ำมันประจำเทิร์น ----------
@@ -3331,6 +3361,7 @@ function dealRound() {
 function hit(id) {
   const p = players[id];
   if (gameState !== "PLAYING" || !p || !p.alive || p.locked) return;
+  if (CHAR_HOOKS.oberon.swarmOn(p)) return; // ร่างฝูงแมลง: จั่วไพ่ไม่ได้
   if (centralDeck.length === 0) return; // กองร่วมหมดแล้ว ทุกคนจั่วเพิ่มไม่ได้
   if ((p.statuses.nodraw || 0) > 0) return; // อิ่มทงคัสสึเกิน: เทิร์นนี้จั่วเพิ่มไม่ได้
   if ((p.statuses.phenexTaunt || 0) > 0) return; // ไม่อยากให้ใครต้องเจ็บปวด (ริต้า เบอร์นัล): ระหว่างล่อเป้าจั่วการ์ดเพิ่มไม่ได้
@@ -3449,6 +3480,9 @@ function useSkill(id, tier, targets, item) {
   // ผู้วิงวอน (patch 3.4): คนที่ติด "ลูกแกะน้อยรู้แจ้ง" เล็งผู้วิงวอนด้วยสกิลไม่ได้เลย
   //  กันที่ปากทางจุดเดียว จึงครอบคลุมทุกท่าของทุกตัวละครที่ส่ง targets มา โดยไม่ต้องแก้ prepareXTarget ทีละตัว
   if (Array.isArray(targets) && targets.some((tid) => CHAR_HOOKS.the_supplicant.targetBlocked(p, players[tid]))) return;
+  // โอเบรอนร่างฝูงแมลง: เล็งด้วยสกิลไม่ได้ — โดนได้เฉพาะการโจมตีปกติ (doAttack) เท่านั้น
+  //  ท่าหมู่ที่โดนทุกคนพร้อมกันไม่ผ่านด่านนี้ (ไม่ได้ส่ง targets มา) จึงยังโดนตามสเปค
+  if (Array.isArray(targets) && targets.some((tid) => CHAR_HOOKS.oberon.swarmOn(players[tid]))) return;
   // คู่แฝดฮิซากาว่า — สกิลพื้นฐาน 1 (สลับตัว/ชุบแฝด) คือ "ทางหนี" ประจำตัว: อะไรก็ตามที่ทำให้กดสกิลไม่ได้
   //  (สตั้น, หลับไหล, หอกลองกินัส, MOON*CELL ฯลฯ) จะไม่มีผลกับช่องนี้ช่องเดียว เพื่อให้ยังหนีไปคุมแฝดอีกคนได้เสมอ
   //  — แต่ยังต้องอยู่ในเฟสจั่วการ์ด และยังจำกัดสลับ 1 ครั้ง/เทิร์นตามเดิม (hisakawaSwitchedRound)
@@ -3624,6 +3658,8 @@ function useSkill(id, tier, targets, item) {
   // การ์ดราชินี: ใช้สกิลไม่เสียแต้ม 1 ครั้ง — ใช้กับสกิลที่มีค่าใช้จ่ายเท่านั้น
   const blessFree = cost > 0 && (p.statuses.freecast || 0) > 0;
   if (blessFree) cost = 0;
+  // โอเบรอน: กดท่าไม้ตายซ้ำเพื่อ "คืนร่าง" จากฝูงแมลง = ไม่เสียแต้มสกิล
+  if (p.characterId === "oberon" && tier === "ultimate" && CHAR_HOOKS.oberon.ultimateIsFree(p)) cost = 0;
   if (p.skillPoints < cost) return;
 
   const st = skill.effect && !Array.isArray(skill.effect) && skill.effect.type === "status" ? skill.effect.status : null;
@@ -3689,23 +3725,35 @@ function useSkill(id, tier, targets, item) {
   if (tier === "ultimate" && p.characterId === "hikaru" && (!((p.statuses.ginga || 0) > 0) || isNightRound(roundNumber))) return;
   // Crucible (DoomGuy patch 2.2 full): ใช้ได้เมื่อชาร์จครบ 5 เท่านั้น
   if (st === "doomCrucible" && (p.doomCharge || 0) < DOOM_CRUCIBLE_CHARGE_NEED) return;
-  // ม่านแห่งราตรี (โอเบรอน): กดซ้ำไม่ได้จนกว่าผลเพิ่มพลังโจมตีจะหมด
-  const isVeil = p.characterId === "oberon" && tier === "basic";
-  if (isVeil && (p.statuses.veil || 0) > 0) return;
+  // ---------- โอเบรอน (characters/oberon.js) ----------
+  //  ด่านเงื่อนไขทั้งหมดรวมไว้ที่ canUseSkill: ม่านยังมีผล / ฝันร้ายยังมีผล /
+  //  ท่าไม้ตายกลางคืนต้องอยู่ระหว่างฝันร้าย / คูลดาวน์จุดจบของความฝัน / ร่างฝูงแมลงกดได้แค่ท่าไม้ตาย
+  const isOberonPick = p.characterId === "oberon";
+  if (isOberonPick && !CHAR_HOOKS.oberon.canUseSkill(engine, p, tier)) return;
+  const oberonNight = isOberonPick && isNightRound(roundNumber);
+  const isVeil = isOberonPick && tier === "basic";
   // พี่จ๋าอยู่ไหน (อาริมะ มิยาโกะ): กดซ้ำไม่ได้จนกว่าจะได้โจมตี
   if (p.characterId === "miyako" && tier === "basic" && (p.statuses.miyakoHeal || 0) > 0) return;
   // เพลงหมัด อาริมะ (อาริมะ มิยาโกะ): กดซ้ำไม่ได้จนกว่าจะได้โจมตี
   if (p.characterId === "miyako" && tier === "secondary" && (p.statuses.miyakoCombo || 0) > 0) return;
-  // รุ่งอรุณแห่งวันใหม่ (โอเบรอน สกิลรองกลางวัน, characters/oberon.js)
-  const isSunrise = p.characterId === "oberon" && tier === "secondary" && !isNightRound(roundNumber);
+  // รุ่งอรุณแห่งวันใหม่ (โอเบรอน สกิลรองกลางวัน): เลือกเป้าหมาย 1 คน (ตัวเองได้)
+  const isSunrise = isOberonPick && tier === "secondary" && !oberonNight;
   let sunriseTarget = null;
   if (isSunrise) {
     sunriseTarget = CHAR_HOOKS.oberon.prepareSunriseTarget(engine, targets);
     if (!sunriseTarget) return;
   }
-  // ฝันร้ายยามค่ำคืน (โอเบรอน สกิลรองกลางคืน, characters/oberon.js): self-buff ไม่มีเป้าหมาย — กดซ้ำไม่ได้ระหว่างมีผล
-  const isNightmare = p.characterId === "oberon" && tier === "secondary" && isNightRound(roundNumber);
-  if (isNightmare && (p.statuses.oberonSickle || 0) > 0) return;
+  // ฝันร้ายยามค่ำคืน (สกิลรองกลางคืน): self-buff ไม่มีเป้าหมาย — กล่อมคนที่ติดยามฟ้าสางให้หลับ
+  const isNightmare = isOberonPick && tier === "secondary" && oberonNight;
+  // จุดจบของความฝัน (ท่าไม้ตายกลางวัน): เลือกเป้าหมาย 1 คน (ตัวเองได้)
+  const isDreamEnd = isOberonPick && tier === "ultimate" && !oberonNight;
+  let dreamEndTarget = null;
+  if (isDreamEnd) {
+    dreamEndTarget = CHAR_HOOKS.oberon.prepareDreamEndTarget(engine, targets);
+    if (!dreamEndTarget) return;
+  }
+  // Lie Like Vortigern (ท่าไม้ตายกลางคืน): toggle ร่างฝูงแมลง — กดซ้ำเพื่อยกเลิก (ฟรี)
+  const isSwarm = isOberonPick && tier === "ultimate" && oberonNight;
   // เอาไปสิ (Apple guy สกิลรอง, characters/appleguy.js): เลือกผู้เล่น 1 คน (คนอื่นเท่านั้น) มอบของที่เลือกไว้ทันทีก่อนเปิดการ์ด
   const isAppleGive = p.characterId === "appleguy" && tier === "secondary";
   let appleTarget = null;
@@ -3931,6 +3979,9 @@ function useSkill(id, tier, targets, item) {
   if (!isApplePick && !isMuimiBasic && !isTohnoPick && !isDoomguyPick && !isKaiPick && !isTakumiPick && !isHarukaBasic && !isHisakawaFreeAction && !isYuiBasic && !isSupPick && !isBrianKey && !isBrianN2O && !isLumiBasic && !isCayBasic && !isDaichiBasic) p.skillUsedRound = true; // สกิลเลือก/สลับและเสบียงฉุกเฉินไม่นับโควตาสกิลหลัก
   if (isKaiPick) p.kaiSkillUsesRound = (p.kaiSkillUsesRound || 0) + 1;
   if (isTakumiPick) p.takumiSkillUsesRound = (p.takumiSkillUsesRound || 0) + 1;
+  // "คำสาป" (สถานะ Universal): กดสกิลสำเร็จแล้ว = เสียพลังชีวิต 1 หน่วย (1 ครั้ง/เทิร์น)
+  //  วางหลังหักแต้ม — กดไม่ผ่านเงื่อนไขด้านบนจะ return ไปก่อนถึงตรงนี้ คำสาปจึงไม่กินฟรี
+  tickCurseOnSkill(engine, p);
 
   // ---------- นายมีฝีมือแค่ไหนหรอ? (ชิกิ patch 2.0.6): ยกเลิกท่าไม้ตายทันทีที่มีผู้เล่นอื่นกด ----------
   //  มีชิกิถือชาร์จ godslay อยู่บนสนาม -> ท่าไม้ตายของผู้เล่นอื่นที่เพิ่งกดถูกยกเลิกทันที
@@ -3950,12 +4001,17 @@ function useSkill(id, tier, targets, item) {
   let flashSuffix = ""; // ต่อท้ายชื่อสกิลบนป้ายเด้ง เพื่อบอกผลให้ทุกคนเห็น
   // ---------- โอเบรอน: ม่านแห่งราตรี (characters/oberon.js) ----------
   if (isVeil) CHAR_HOOKS.oberon.applyBasicVeil(engine, p);
-  // ---------- โอเบรอน: รุ่งอรุณแห่งวันใหม่ / ฝันร้ายยามค่ำคืน (characters/oberon.js) ----------
+  // ---------- โอเบรอน: รุ่งอรุณ / ฝันร้าย / จุดจบของความฝัน / ร่างฝูงแมลง (characters/oberon.js) ----------
   if (isSunrise && sunriseTarget) {
     const r = CHAR_HOOKS.oberon.applySunriseEffect(engine, p, sunriseTarget, skill.name);
     if (r) flashSuffix = r;
   }
-  if (isNightmare) CHAR_HOOKS.oberon.activateNightmare(engine, p);
+  if (isNightmare) CHAR_HOOKS.oberon.applyNightmare(engine, p);
+  if (isDreamEnd && dreamEndTarget) {
+    const r = CHAR_HOOKS.oberon.applyDreamEnd(engine, p, dreamEndTarget, skill.name);
+    if (r) flashSuffix = r;
+  }
+  if (isSwarm) flashSuffix = CHAR_HOOKS.oberon.applySwarm(engine, p) || flashSuffix;
   // ---------- โทโนะ ชิกิ: มีดพับประจำตระกูล — เลือกระดับสกิลติดตัว 1-5 (กดเปลี่ยนกี่ครั้งก็ได้) (characters/tohno.js) ----------
   if (isTohnoPick) {
     flashSuffix = CHAR_HOOKS.tohno.applyBasicPick(engine, p, item);
@@ -4125,7 +4181,7 @@ function useSkill(id, tier, targets, item) {
         cleansed.push(k);
       }
     }
-    if ((p.sunriseDrop || 0) > 0) { p.sunriseDrop = 0; cleansed.push("sunriseDrop"); }
+    if ((p.oberonSunriseHit || 0) > 0) { p.oberonSunriseHit = 0; cleansed.push("sunriseDrop"); }
     lastLog.push(`🎵 ${p.name} Song for you — ใช้ทงคัสสึ ${bowls} ชาม: พลังขิง +${atk} (ล้างชามทั้งหมด)${cleansed.length ? ` และล้างสถานะผิดปกติ ${cleansed.length} อย่าง` : ""}`);
   }
 
@@ -4152,8 +4208,6 @@ function useSkill(id, tier, targets, item) {
   if (st === "miyakoUlt") CHAR_HOOKS.miyako.activateUlt(engine, p);
   // ---------- DoomGuy (characters/doomguy.js) — Crucible: แปลงร่างทันทีก่อนเปิดไพ่ทั้งหมด + บังคับทุกคนอื่นแตกทันที ----------
   if (st === "doomCrucible") CHAR_HOOKS.doomguy.activateCrucible(engine, p);
-  // ---------- โอเบรอน: Lie Like Vortigern (Rework 2 — ทำงานทันทีก่อนเปิดการ์ด, characters/oberon.js) ----------
-  if (st === "vortigern") CHAR_HOOKS.oberon.applyVortigernEffect(engine, p);
 
   // ข้อเสียโคโตเนะ (characters/kotone.js): 20% เมื่อใช้สกิลพื้นฐาน/พื้นฐาน 2/สกิลรอง -> โดนท่านประธานเซนะจังเจอตัว สตั้นตัวเอง 1 เทิร์น
   if (isKotone) CHAR_HOOKS.kotone.maybeTriggerSena(engine, p, tier, kotoneWasForm);
@@ -4173,7 +4227,7 @@ function useSkill(id, tier, targets, item) {
     //  (ฝั่ง client คุมเอง ดู ConnorPredictModal) ตอนกดยืนยันคือตอนที่คิดเสร็จแล้ว เพลงต้องหยุดพอดี
     const flashSound = (isTepeuCook || isTepeuPonder) ? "tepeu_skill1_2" : isHisakawaSkill ? CHAR_HOOKS.hisakawa_sister.skillVoice(p, tier, skill) : null;
     // อิสึกะ ชิโด "ฝากด้วยนะตัวฉัน": สกิลเงียบ — ห้ามมีแบนเนอร์ให้ใครเห็นว่าเขากดอะไรไป
-    if (!CHAR_HOOKS.shido.silentSkill(p, tier)) {
+    if (!CHAR_HOOKS.shido.silentSkill(p, tier) && !CHAR_HOOKS.oberon.silentSkill(p)) {
       io.emit("skillFlash", { name: skill.name + flashSuffix, img: flashImg, by: p.name, color: colorOf(p), sound: flashSound });
     }
   }
@@ -4182,7 +4236,7 @@ function useSkill(id, tier, targets, item) {
   CHAR_HOOKS.conner.onSkillUsed(engine, p);
   //  สกิลเงียบของชิโดไม่เข้า roundSkills ด้วย — รายการนี้ถูกอ่านโดยหลักสูตร "พิเศษ" ของไบเลธ
   //  ซึ่งจะลงโทษ "คนที่กดสกิลในเทิร์นนี้" = เป็นเบาะแสว่าชิโดกดอะไรไป
-  if (!CHAR_HOOKS.shido.silentSkill(p, tier)) roundSkills.push({ playerId: id, tier, name: skill.name, img: skill.img || null, status: st }); // tier: หลักสูตร "พิเศษ" ของไบเลธอ่านว่าใครกดสกิลระดับไหนในเทิร์นนี้
+  if (!CHAR_HOOKS.shido.silentSkill(p, tier) && !CHAR_HOOKS.oberon.silentSkill(p)) roundSkills.push({ playerId: id, tier, name: skill.name, img: skill.img || null, status: st }); // tier: หลักสูตร "พิเศษ" ของไบเลธอ่านว่าใครกดสกิลระดับไหนในเทิร์นนี้
 
   p.busted = bustedOf(p);
   if (p.busted) { voidUltimateOnBust(p); CHAR_HOOKS.mageslayer.onBustOrLoseRoll(engine, p); }
@@ -4722,6 +4776,14 @@ function resolveRound() {
         lastLog.push(`📜 ${l.name} อาคมบัญชาคุ้มครอง — ไม่รับความเสียหายจากการแพ้`);
         continue;
       }
+      // โอเบรอน (ร่างฝูงแมลง): แต้มนับเป็น 0 เสมอ = แพ้ทุกเทิร์น — แต่ไม่กินดาเมจแพ้จั่ว
+      //  (ไม่งั้นท่าจะตายเองภายใน 3-4 เทิร์น ก่อนค่าเสียเลือดของท่าเองจะทำงาน)
+      if (CHAR_HOOKS.oberon.swarmOn(l)) {
+        addSkill(l, 1);
+        firePassive(l, "lose");
+        lastLog.push(`🐝 ${l.name} เป็นฝูงแมลง — ไม่มีร่างให้ความเสียหายจากการแพ้เกาะกุมได้`);
+        continue;
+      }
       if (l.beatSaved) {
         // หลังกันตายทำงานแล้ว: ความเสียหายจากการแพ้ตอนจั่วการ์ดไม่มีผล ไม่ว่าห่าง 21 แค่ไหน
         addSkill(l, 1);
@@ -4845,8 +4907,6 @@ function afterResolve() {
       if ((p.statuses[key] || 0) > 0 && !p.seen[key]) {
         p.seen[key] = true;
         p.transformAt = ++transformCounter;
-        // Lai Rhyme Goodfellow (โอเบรอน, characters/oberon.js) — Lie Like Vortigern ย้ายไปทำงานทันทีก่อนเปิดการ์ดแล้ว (ดู useSkill()'s st === "vortigern")
-        if (key === "lai") CHAR_HOOKS.oberon.applyLaiEffect(engine, p);
         triggerCutscene(p, key);
         lastLog.push(`✨ ${p.name} ${TRANSFORMS[key].label} ${TRANSFORMS[key].title}!`);
         activated.push(p);
@@ -5744,6 +5804,8 @@ function endTurn() {
   //  ตั้งแต่ด่านหลบ ไม่ผ่าน postAttackFollowup เลย รางวัลจึงไม่มีวันจ่าย (และ luminous มีการหลบ 40%
   //  ของคาโฮะติดมาด้วย จึงเกิดบ่อยมาก) · flushBurst เป็น idempotent เรียกซ้ำไม่มีผลข้างเคียง
   CHAR_HOOKS.producer_lumi.flushBurst(engine);
+  // โอเบรอน (ร่างฝูงแมลง): ทุกเทิร์นหลังเฟสโจมตี ฝูงแมลงกัดคนเลือดน้อยสุด 1 หน่วย (characters/oberon.js)
+  CHAR_HOOKS.oberon.swarmBite(engine);
   // ถ้าเทิร์นกำลังจะจบโดยยังไม่ได้ใช้สิทธิ์โจมตีเพิ่มของไบเลธ ให้เปิดสิทธิ์ตรงนี้
   // ครอบคลุมผู้ชนะไม่ได้โจมตี, โจมตีพลาด/ถูกลบล้าง และ path ที่ไม่ผ่าน postAttackFollowup
   clearPhaseTimer();
@@ -6246,7 +6308,7 @@ io.on('connection', (socket) => {
       takutoComboReady: false, takutoUlt2VideoPending: false, takutoAwakenAt: 0,
       tonkatsu: 0, songAtk: 0, noDrawNext: 0, anataTargets: null,
       tempHp: 0, tempHpTurns: 0, noSkillNext: 0,
-      sunriseDrop: 0, sleepFresh: false,
+      sleepFresh: false,
       appleItem: "drink", appleAtkBuffs: [], chillDodge: 100, appleGiveUses: CHAR_HOOKS.appleguy.GIVE_USES,
       muimiEmergencyUses: CHAR_HOOKS.muimi.EMERGENCY_USES, muimiEmergencyUsedRound: 0,
       muimiLoseStreak: 0, muimiHeartRound: 0, muimiForcedBustRound: 0, muimiUltCasts: 0, muimiUltCastRound: 0, muimiUltLock: 0,
@@ -6490,6 +6552,7 @@ const engine = {
   get centralDeck() { return centralDeck; },
   drawFromCentralDeck, // ไบรอัน N2O: ดึงการ์ด "ค่าที่ต้องการ" ออกจากกองกลางจริง (ผ่าน predicate)
   setCentralDeck(v) { centralDeck = v; },
+  buildStateFor, // เปิดให้เทสต์พิสูจน์ payload รายผู้ชมได้ (เช่น การปลอมตัวของโอเบรอน ที่ต้องต่างกันตามคนดู)
   get kaiOverhaulSlots() { return kaiOverhaulSlots; },
   setKaiOverhaulSlots(v) { kaiOverhaulSlots = v; },
   voidUltimateOnBust,
@@ -6530,6 +6593,8 @@ const engine = {
   get effectSourceId() { return effectSourceId; },
   get roundNumber() { return roundNumber; },
   setRoundNumber(v) { roundNumber = v; },
+  get cycleShift() { return cycleShift; },
+  setCycleShift(v) { cycleShift = Number(v) || 0; }, // เทสต์ตั้งช่วงเวลาเองได้ (extendNight ของโอเบรอนเลื่อนค่านี้ข้ามเทสต์)
   get attackerId() { return attackerId; },
   setAttackerId(v) { attackerId = v; },
   get lastAttack() { return lastAttack; },
@@ -6601,6 +6666,8 @@ const engine = {
   applyOverloadOverdrawPenalty,
   applyBuff: rawApplyBuff,
   applyDebuff,
+  applyCurse,      // "คำสาป" (สถานะ Universal): จุดเดียวที่ทุกตัวละครใช้ใส่สถานะนี้ (เคารพต้านสถานะผิดปกติ)
+  tickCurseOnSkill,
   MEND_MAX_TURNS,
   applyMend, // "เยียวยา" (สถานะ Universal): จุดเดียวที่ทุกตัวละครใช้ใส่สถานะนี้ (เคารพเพดานเทิร์น)
   tickMend,

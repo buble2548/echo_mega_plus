@@ -727,3 +727,74 @@
   60% { opacity: 1; transform: scale(1); }
   100% { opacity: 0; transform: scale(1.1); }
 }
+
+/* ============================================================
+   โอเบรอน — ยุค "ล่มสลาย" (Lie Like Vortigern ร่างฝูงแมลง)
+   ซ้อนทับฉากหลัง oberon_background.mp4: ม่านแดง-ดำ + ฝูงแมลงมีพิษที่ไหลข้ามจอ
+
+   ⚠️ ทุกชั้นต้องขยับด้วย transform เท่านั้น — เคยเขียนเป็น background-position มาก่อน
+   แล้วเกมกระตุก เพราะการเลื่อน background ของ gradient เต็มจอบังคับให้ repaint ทั้งเลเยอร์
+   ทุกเฟรมบน CPU ซ้อนบนวีดีโอที่กำลังเล่นอยู่ · transform เป็นงานของ compositor ล้วน
+   (แพทเทิร์นเดียวกับชั้นอนุภาคของ ArenaBackdrop และฝูงนกของฉากสลับเวลา ที่ใช้ translate3d + will-change อยู่แล้ว)
+   หมายเหตุ: ห้ามพิมพ์ชื่อ selector แบบมีจุดนำลงในคอมเมนต์นี้ — tests/sceneQueue.test.js อ่านไฟล์
+   ด้วย regex แล้วนับข้อความก่อนปีกกาเป็น selector จึงเข้าใจผิดว่าอนุภาคนี้เป็นของฉากนั้น
+   ============================================================ */
+.oberon-collapse {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  /* ม่านพิษ: แดงเลือดหมูตรงกลาง มืดสนิทที่ขอบ — ขยับแค่ opacity (งานของ compositor) */
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(122, 8, 18, 0.55) 0%, rgba(40, 2, 8, 0.75) 45%, rgba(5, 0, 2, 0.94) 100%);
+  animation: oberonCollapseBreathe 5.5s ease-in-out infinite;
+}
+/* ฝูงแมลงสองชั้น — จุดดำขอบแดง คนละขนาด ไหลคนละทิศคนละความเร็ว = ดูเป็นฝูงจริง
+   วาดใหญ่กว่าจอ 2 เท่าแล้วเลื่อนทีละ 1 ช่องกระเบื้องพอดี ภาพจึงต่อกันสนิทตอนวนลูป */
+.oberon-collapse::before,
+.oberon-collapse::after {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background-repeat: repeat;
+  will-change: transform;
+}
+.oberon-collapse::before {
+  background-image:
+    radial-gradient(circle at 50% 50%, rgba(12, 2, 4, 0.95) 0 1.6px, rgba(190, 26, 40, 0.45) 1.6px 2.4px, transparent 2.6px),
+    radial-gradient(circle at 50% 50%, rgba(8, 1, 3, 0.9) 0 1.1px, transparent 1.4px);
+  background-size: 86px 74px, 43px 37px;
+  opacity: 0.85;
+  animation: oberonSwarmA 13s linear infinite;
+}
+.oberon-collapse::after {
+  background-image:
+    radial-gradient(circle at 50% 50%, rgba(5, 0, 2, 0.9) 0 2.4px, rgba(150, 14, 26, 0.35) 2.4px 3.4px, transparent 3.6px);
+  background-size: 137px 119px;
+  opacity: 0.6;
+  animation: oberonSwarmB 9s linear infinite;
+}
+@keyframes oberonCollapseBreathe {
+  0%, 100% { opacity: 0.92; }
+  50%      { opacity: 1; }
+}
+@keyframes oberonSwarmA {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-86px, 74px, 0); }
+}
+@keyframes oberonSwarmB {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(137px, -119px, 0); }
+}
+/* โหมดภาพต่ำ / ผู้ใช้ปิดแอนิเมชัน: คงม่านไว้ แต่หยุดฝูงแมลงทั้งหมด */
+.oberon-collapse.is-lowq,
+.oberon-collapse.is-lowq::before,
+.oberon-collapse.is-lowq::after { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .oberon-collapse,
+  .oberon-collapse::before,
+  .oberon-collapse::after { animation: none; }
+}
