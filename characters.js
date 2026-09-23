@@ -28,7 +28,8 @@ const CHARACTERS = [
     id: "hikaru",
     name: "ไรโด ฮิคารุ",
     avatar: 0,
-    difficulty: "easy", // ความยากในการเล่น: easy | medium | hard | fun (ใช้แบ่งหน้าเลือกตัวละคร)
+    difficulty: "easy", // หมวดในหน้าเลือกตัวละคร: easy | medium | hard | fun | extreme | impossible | special | zect
+    //  (คีย์ต้องตรงกับ DIFFICULTY_GROUPS ใน client/src/screens/CharacterSelect.jsx — คีย์ที่ไม่ตรงจะตกไปท้ายสุดในแท็บ "ทั้งหมด")
     img: "/characters/hikaru/hikaru_ginga.jpg",
     transformImg: "/characters/hikaru/ginga.jpg", // สลับรูปเป็นร่าง Ginga ระหว่างสกิลรอง 1 ทำงาน
     // ---------- ไรโด ฮิคารุ / อุลตร้าแมนกิงกะ — Rework (patch 2.1.3) ----------
@@ -1953,7 +1954,7 @@ const CHARACTERS = [
     id: "daisuke",
     name: "คาซามะ ไดสุเกะ",
     avatar: 0,
-    difficulty: "medium",
+    difficulty: "zect", // องค์กรZectz — ไรเดอร์ที่มี Clock Up
     img: "/characters/daisuke/daisuke.webp",
     // ---------- คาซามะ ไดสุเกะ (patch 4.3 new) — ดู characters/daisuke.js ----------
     //  แกนคือ "ปลดเกราะแลกความเร็ว": CASS OFF ปิดการฟื้นเกราะถาวรแลกพลังโจมตี +1
@@ -1991,7 +1992,7 @@ const CHARACTERS = [
     id: "yaguruma",
     name: "โซ ยากุรุมะ",
     avatar: 0,
-    difficulty: "medium",
+    difficulty: "zect", // องค์กรZectz — ไรเดอร์ที่มี Clock Up
     img: "/characters/yaguruma/yaguruma.webp",
     // ---------- โซ ยากุรุมะ (patch 4.3 new) — ดู characters/yaguruma.js ----------
     //  แกน CAST OFF / Clock Up / Zect ใช้ร่วมกับคาซามะ ไดสุเกะ (characters/_zect.js)
@@ -2029,7 +2030,7 @@ const CHARACTERS = [
     id: "kagami",
     name: "คากามิ อาราตะ",
     avatar: 0,
-    difficulty: "medium",
+    difficulty: "zect", // องค์กรZectz — ไรเดอร์ที่มี Clock Up
     img: "/characters/kagami/kagami.jpeg",
     // ---------- คากามิ อาราตะ (patch 4.4 new) — ดู characters/kagami.js ----------
     //  แกน CAST OFF / Clock Up / Zect ใช้ร่วมกับไดสุเกะและยากุรุมะ (characters/_zect.js)
