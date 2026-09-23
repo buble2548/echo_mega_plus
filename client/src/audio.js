@@ -37,7 +37,9 @@ const FILES = {
   ginga: "/characters/hikaru/ginga_song.mp3",
   gingastrium: "/characters/hikaru/hikaru_update/ginga_theme2.mp3", // เพลงระหว่างร่าง Ginga Strium (ท่าไม้ตาย patch 2.1.3) — แทนที่เพลง ginga ที่เล่นค้างจากสกิลรอง
   temari_final_theme: "/characters/temari/temari_final_theme.mp3", // เพลง ANATA WAAAAAAAA (เล่นถึงตอนเปิดไพ่)
-  oberon: "/characters/oberon/orberon theme.mp3",    // เพลงประจำตัวโอเบรอน (ระหว่าง Lie Like Vortigern)
+  oberon: "/characters/oberon/orberon theme.mp3",
+  // ไรเดอร์ Zect (คาซามะ/โซ) สองคนขึ้นไป Clock Up พร้อมกัน — เพลงสนามเปลี่ยนทั้งสนาม
+  full_force: "/theme_song/FULL FORCE.mp3",
   // ยูนะ ไอดอลประจำสนาม (patch 2.2.6): เพลงล็อกทั้งสนามตลอด 5 เทิร์นที่เอฟเฟกต์ทำงาน
   yuna_longing: "/characters/yuna/Longing.mp3",
   yuna_delete: "/characters/yuna/Delete.mp3",

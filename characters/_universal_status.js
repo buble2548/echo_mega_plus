@@ -89,6 +89,7 @@ const BASIC_DEBUFF_CLEAR = ["discord", "sleep", "stun", "nodraw", "noskill", "we
   // ผู้สังหารเมจ: ตราล่าเวท/ดูดซับเวท ถูกลบล้างได้ด้วย "ต้านทานสถานะผิดปกติ"
   //  (mageslayerMarkedId ฝั่งผู้ร่ายถูก reconcile ให้เองที่ tickWitchMark ท้ายเทิร์น — ดู characters/mageslayer.js)
   "mageslayerMark", "manaLeech",
+  "poison",       // พิษร้าย (โซ ยากุรุมะ): ดีบัฟเต็มตัว ล้าง/ต้านได้ตามปกติ
   // คอนเนอร์ RK800: "ผู้ต้องหา" เป็นเครื่องหมายล้วนๆ (ทำให้คอนเนอร์ตีแรงขึ้น +2) ต้านสถานะผิดปกติล้างได้
   "accused",
   // patch 3.4.6: ดีบัฟที่ตกหล่นจากรายการเดิม — เดิมล้าง/ต้านไม่ได้ทั้งที่เป็นดีบัฟเต็มตัว
@@ -121,6 +122,38 @@ function cleanseDebuffs(p) {
     }
   }
   return purged;
+}
+
+// ---------- "พิษร้าย" (poison, สถานะ Universal patch 4.3) ----------
+//  ดีบัฟสองทางพร้อมกัน: ต้นเทิร์นเสียพลังชีวิต 1 (ลดเกราะก่อน) และตลอดเวลาที่ติดอยู่
+//  พลังโจมตีที่ทำได้ -1 (อ่านที่ computeAttackBase คู่กับ "อ่อนแอ")
+//  ต่างจากลุกไหม้/เลือดไหลตรงที่เก็บเป็น "จำนวนเทิร์น" ไม่ใช่สแตค จึงลดเทิร์นเองตามลูปกลางของ endTurn
+function applyPoison(p, turns) {
+  if (resistActive(p)) return false;  // ต้านสถานะผิดปกติกันได้
+  applyBuff(p, "poison", null, turns);
+  return true;
+}
+
+// พลังโจมตีที่หายไปจากพิษ (อ่านที่ computeAttackBase คู่กับ "อ่อนแอ")
+function poisonAtkPenalty(p) {
+  return (((p && p.statuses && p.statuses.poison) || 0) > 0) ? 1 : 0;
+}
+
+// ติกต้นเทิร์น — ท่อตายชุดเดียวกับลุกไหม้/เลือดไหล
+function tickPoison(engine, p) {
+  if (!p || !p.alive || !(((p.statuses && p.statuses.poison) || 0) > 0)) return 0;
+  p._statusDamage = true;   // ดาเมจจากสถานะ ไม่ใช่จากสกิล/การโจมตี
+  engine.dealMixed(p, 1);   // ลดเกราะก่อน หมดเกราะจึงเข้าเลือดจริง
+  p._statusDamage = false;
+  engine.log(`🧪 ${p.name} พิษร้ายออกฤทธิ์ — เสียหาย -1 (ลดเกราะก่อน) และพลังโจมตี -1 (เหลืออีก ${p.statuses.poison} เทิร์น)`);
+  engine.maybeBeatSave(p);
+  engine.maybeBeatMode(p);
+  engine.maybeWakeKotone(p);
+  if (p.alive && p.hp <= 0) {
+    engine.instantDeath(p);
+    if (!p.alive) engine.log(`💀 ${p.name} พิษร้ายกัดกินจนเลือดหมด ตกรอบ!`);
+  }
+  return 1;
 }
 
 // ---------- "คำสาป" (curse, สถานะ Universal patch 4.2) ----------
@@ -398,6 +431,9 @@ module.exports = {
   cleanseDebuffs,
   cleanseOneStep,
   coolReduction,
+  applyPoison,
+  poisonAtkPenalty,
+  tickPoison,
   applyCurse,
   tickCurseOnSkill,
   MEND_MAX_TURNS,

@@ -48,6 +48,9 @@ const {
   cleanseDebuffs,
   cleanseOneStep,
   coolReduction,
+  applyPoison,
+  poisonAtkPenalty,
+  tickPoison,
   applyCurse,
   tickCurseOnSkill,
   MEND_MAX_TURNS,
@@ -1484,6 +1487,7 @@ function displayImg(p, unmasked) {
   if (p.characterId === "daichi") { const dimg = CHAR_HOOKS.daichi.displayImg(p); if (dimg) return dimg; }
   // คาซามะ ไดสุเกะ: ร่างบนสนามสลับตามโหมด CAST OFF / PUT ON
   if (p.characterId === "daisuke") { const kimg = CHAR_HOOKS.daisuke.displayImg(p); if (kimg) return kimg; }
+  if (p.characterId === "yaguruma") { const yimg = CHAR_HOOKS.yaguruma.displayImg(p); if (yimg) return yimg; }
   // โอเบรอน: ร่างสลับตามช่วงเวลากลางวัน/กลางคืนเสมอ
   // โอเบรอน (characters/oberon.js)
   if (p.characterId === "oberon") {
@@ -2022,6 +2026,7 @@ function resetCombat(p) {
   p.anataTargets = null;  // เป้าหมาย ANATA WAAAAAAAA (ลับจนกว่าจะเปิดไพ่)
   CHAR_HOOKS.oberon.resetCombat(p); // โอเบรอน: คูลดาวน์/ฝันร้าย/ร่างฝูงแมลง/เปลือกจอมหลอกลวง/แรงสะท้อนรุ่งอรุณ
   CHAR_HOOKS.daisuke.resetCombat(p); // คาซามะ ไดสุเกะ: โหมด CAST OFF/PUT ON / Clock Up / ไรเดอร์ชูต
+  CHAR_HOOKS.yaguruma.resetCombat(p);
   p.sleepFresh = false; // หลับไหล: เทิร์นที่เพิ่งโดนกล่อมยังไม่เริ่มนับ/ยังโจมตีได้
   p.curseHitRound = 0;  // "คำสาป": เทิร์นล่าสุดที่คำสาปกินเลือดไป (1 ครั้ง/เทิร์น)
   p.appleItem = "drink"; // Apple guy: ของส่งมอบที่เลือกอยู่ (ค่าเริ่มต้น เครื่องดื่มชูกำลัง)
@@ -2154,6 +2159,11 @@ function buildStateFor(viewerId) {
   //  วีดีโอ oberon_background.mp4 + เพลงประจำตัวเล่นค้าง และหายไปเมื่อหมดกลางคืน
   // ยุค "ล่มสลาย" (Lie Like Vortigern ร่างฝูงแมลง): อยู่เหนือวงจรกลางวัน/กลางคืน — ค้างฉากไว้จนกว่าโอเบรอนจะคืนร่าง
   const oberonCollapse = !!CHAR_HOOKS.oberon.swarmHost(engine);
+  // คาซามะ/โซ (Clock Up): ไรเดอร์ที่ยังแช่สนามอยู่ (เปิดอยู่และยังไม่ได้เปิดไพ่)
+  //  มากกว่า 1 คน = สนาม FULL FORCE (เพลง + เอฟเฟกต์ความเร็วรอบจอ)
+  const clockUpFreezers = CHAR_HOOKS.daisuke.freezeHosts(engine);
+  const clockUpFreezeBy = clockUpFreezers.length ? clockUpFreezers[0].id : null;
+  const fullForce = CHAR_HOOKS.daisuke.clockUpHosts(engine).length > 1;
   // ราตรีกลืนกิน (ฝันร้ายยามค่ำคืน): ฉากหลังกลางคืนกลายเป็นวีดีโอ oberon_background.mp4
   const oberonBg = (nightNow && oberonDevour > 0) || oberonCollapse;
   const hisakawaBg = Object.values(players).some((p) => p.alive && p.characterId === "hisakawa_sister" && (p.statuses.hisakawaDream || 0) > 0);
@@ -2187,6 +2197,9 @@ function buildStateFor(viewerId) {
     : (gameState === "PLAYING" && anataMusicSeq)
       ? { music: "temari_final_theme", at: anataMusicSeq }
       : activeSkillMusic();
+  // FULL FORCE: ไรเดอร์สองคนขึ้นไป Clock Up พร้อมกัน — เพลงสนามเปลี่ยนทั้งสนาม
+  //  อยู่ก่อน oberonBg เพราะเป็นเหตุการณ์เฉพาะกิจที่หายากกว่า — แต่ยังแพ้เพลงสกิล/ท่าไม้ตายที่กำลังเล่นอยู่
+  if (!sm && fullForce) sm = { music: "full_force", at: 0 };
   if (!sm && oberonBg) sm = { music: "oberon", at: oberonDevour }; // เพลงสกิล/ท่าไม้ตายอื่นยังทับได้
   const viewer = players[viewerId];
   let connorArrestAsk = null; // คอนเนอร์ RK800: คำขาดจับกุมขั้นเด็ดขาดที่รอผู้ชมคนนี้ตอบ
@@ -2255,6 +2268,8 @@ function buildStateFor(viewerId) {
     seraph: Seraph.stateFor(engine, viewerId),
     oberonBg,
     oberonCollapse, // ยุคล่มสลาย: client วาดฉากแมลงมีพิษโทนแดง-ดำทับฉากหลังเดิม
+    clockUpFreezeBy, // Clock Up: id ของไรเดอร์ที่ยังแช่สนาม (null = ไม่มี) — client เอาไปวาดม่านแจ้งเตือน
+    fullForce,       // มีไรเดอร์ Clock Up พร้อมกันมากกว่า 1 คน
     hisakawaBg, // ฝันของเหล่าฝาแฝด: ฉากหลัง O-KU-RI-MO-NO-Sunday
     bardBg,   // มิติมายาบรรเลง (Bard): "blood" | "soul" | null
     shikiBg,  // ฉันมองเห็นมันแล้ว (ชิกิ): ซ้อน shiki_fill.png ทับฉากหลังปัจจุบัน
@@ -2513,6 +2528,7 @@ function buildStateFor(viewerId) {
         oberonSwarm: p.characterId === "oberon" ? CHAR_HOOKS.oberon.swarmOn(p) : undefined,
         // คาซามะ ไดสุเกะ: โหมด/Clock Up/ไรเดอร์ชูต/นับเทิร์น PUT ON (ข้อมูลสนาม ทุกคนเห็นได้)
         daisuke: p.characterId === "daisuke" ? CHAR_HOOKS.daisuke.publicState(p) : undefined,
+        yaguruma: p.characterId === "yaguruma" ? CHAR_HOOKS.yaguruma.publicState(p) : undefined,
         appleItem: p.appleItem || "drink", // Apple guy: ของส่งมอบที่เลือกอยู่
         appleAtk: p.appleAtkBuffs ? p.appleAtkBuffs.length : 0, // Apple guy: บัฟพลังโจมตีจากการมอบของ (ซ้อนทับได้สูงสุด 2 หน่วย)
         appleGiveUses: p.appleGiveUses != null ? p.appleGiveUses : CHAR_HOOKS.appleguy.GIVE_USES, // Apple guy: จำนวนใช้ เอาไปสิ คงเหลือ
@@ -2755,6 +2771,14 @@ function checkLobbyReady() {
   const list = Object.values(players);
   if (list.length >= 2 && list.every((p) => p.ready)) enterModeSelect();
 }
+// ฉากเปิดตัวผู้เล่น (GameIntro ฝั่ง client) กินเวลาเท่านี้ — สูตรเดียวกันกับ client/src/components/GameIntro.jsx
+//  วีดีโอเปิดตัวของตัวละครต้องรอให้มันจบก่อน ไม่งั้นคลิปจะเล่นอยู่ใต้ม่านแล้วโดนตัดกลางคัน
+//  (เวลาของคิวเดินอยู่ใต้ม่าน พอม่านเปิดก็เหลือแต่ท้ายคลิป)
+function gameIntroHoldSeconds() {
+  const n = Math.max(1, Object.keys(players).length);
+  const perMs = Math.max(620, Math.min(1000, Math.round(4200 / n)));
+  return Math.ceil((n * perMs + 2900 + 1000) / 1000) + 1; // +1 เผื่อม่านปิด-เปิด
+}
 function startMatch() {
   if (!teamModeActive()) {
     resetTeamAssignments(false);
@@ -2790,7 +2814,15 @@ function startMatch() {
   const miyakoIntro = CHAR_HOOKS.miyako.maybeQueueRivalIntro(engine);
   // คาซามะ ไดสุเกะ: วีดีโอเปิดตัวเล่นครั้งเดียวก่อนเทิร์นแรก (ไม่มีคำบรรยาย)
   const daisukeIntro = CHAR_HOOKS.daisuke.maybeQueueIntro(engine);
-  if (connerIntro || miyakoIntro || daisukeIntro) runCutsceneQueue(dealRound);
+  const yagurumaIntro = CHAR_HOOKS.yaguruma.maybeQueueIntro(engine);
+  if (connerIntro || miyakoIntro || daisukeIntro || yagurumaIntro) {
+    // พักคิวไว้ก่อนจนกว่าฉากเปิดตัวผู้เล่นจะจบ — อยู่ในเฟส CUTSCENE แต่ยังไม่มีคลิป
+    //  (cutsceneInfo = null -> client วาดกระดานปกติไว้ใต้ม่าน GameIntro ซึ่งบังอยู่แล้ว)
+    cutsceneInfo = null;
+    gameState = "CUTSCENE";
+    startPhaseTimer(gameIntroHoldSeconds(), () => runCutsceneQueue(dealRound));
+    broadcastState();
+  }
   else dealRound();
 }
 
@@ -3166,6 +3198,7 @@ function dealRound() {
     // โอเบรอน (characters/oberon.js): แรงสะท้อนของรุ่งอรุณ / ค่าเสียเลือดของร่างฝูงแมลง / แปะเปราะบางซ้ำ
     CHAR_HOOKS.oberon.onRoundStartTick(engine, p);
     CHAR_HOOKS.daisuke.onRoundStartTick(engine, p); // ค่าแต้มสกิลของ Clock Up + การฟื้นฟูของ PUT ON
+    CHAR_HOOKS.yaguruma.onRoundStartTick(engine, p);
 
     // ---------- ซาโตรุ อาเคฟุ (patch 2.0.8.2): ดาเมจต่อเนื่องทุก 2 เทิร์น ----------
     //  สิ่งแปลกปลอม (Obla Di, Obla Da): ดาเมจ 1 / [Calamity]: ดาเมจตามเลเวล — ทำงานตอนเวลาคงเหลือเป็นเลขคี่
@@ -3238,6 +3271,7 @@ function dealRound() {
     tickBurn(engine, p);
     // ---------- เลือดไหล (hbleed, สถานะ Universal patch 2.5): ดาเมจ 1/เทิร์น สะสมสูงสุด 6 (ฮารุกะฟื้นเลือดแทน) ----------
     tickBleed(engine, p);
+    tickPoison(engine, p); // พิษร้าย (โซ ยากุรุมะ): ดาเมจต้นเทิร์น — ส่วนพลังโจมตีหักที่ computeAttackBase
     // ---------- [โดนดูด] (doomDrain, Plasma Rifle — DoomGuy): ดาเมจ 1/เทิร์น 3 เทิร์น เจาะเกราะก่อน ----------
     CHAR_HOOKS.doomguy.tickDrain(engine, p);
     p.cards = [];
@@ -3513,7 +3547,8 @@ function useSkill(id, tier, targets, item) {
   if (CHAR_HOOKS.conner.skillBlocked(engine, p)) return; // คอนเนอร์: ระหว่างการไล่ล่า ทุกคนกดสกิลไม่ได้ (รวมคอนเนอร์กับเป้าหมาย)
   // ไบรอัน: ระหว่างการแข่ง ทุกคนกดสกิลไม่ได้ — ยกเว้น N2O ของไบรอันเอง (สเปคระบุว่าไม่สนกฎของท่าไม้ตาย 1)
   if (CHAR_HOOKS.brian.skillBlocked(engine, p, tier)) return;
-  if (CHAR_HOOKS.daisuke.actionBlocked(engine, p)) return; // Clock Up: คนอื่นกดสกิลไม่ได้
+  // Clock Up: คนอื่นกดสกิลไม่ไ้ด — ยกเว้นไรเดอร์ด้วยกันที่กด Clock Up ของตัวเองสวน (สกิลติดตัว Zect ข้อ 3)
+  if (CHAR_HOOKS.daisuke.skillBlocked(engine, p, tier)) return;
   if ((p.statuses.phenexTaunt || 0) > 0) return; // ไม่อยากให้ใครต้องเจ็บปวด (ริต้า เบอร์นัล): ระหว่างล่อเป้ากดสกิลไม่ได้เลย
   if (tier === "ultimate" && (p.statuses.phenexBanUlt || 0) > 0) return; // อย่าอยู่เลย แกน่ะ! (ริต้า เบอร์นัล): ถูกแบนท่าไม้ตายชั่วคราว
   // ---------- Bard : คีตกวี — เติมโน้ตประพันธ์เพลง (ช่องที่ 3 ไม่ใช่สกิล กดใช้ไม่ได้) ----------
@@ -3754,6 +3789,8 @@ function useSkill(id, tier, targets, item) {
   //  พื้นฐาน: กดระหว่าง Clock Up ไม่ได้ · รอง/ท่าไม้ตาย: ต้องอยู่ใน CAST OFF
   const isDaisukePick = p.characterId === "daisuke";
   if (isDaisukePick && !CHAR_HOOKS.daisuke.canUseSkill(engine, p, tier)) return;
+  const isYagurumaPick = p.characterId === "yaguruma";
+  if (isYagurumaPick && !CHAR_HOOKS.yaguruma.canUseSkill(engine, p, tier)) return;
   const isOberonPick = p.characterId === "oberon";
   if (isOberonPick && !CHAR_HOOKS.oberon.canUseSkill(engine, p, tier)) return;
   const oberonNight = isOberonPick && isNightRound(roundNumber);
@@ -4040,6 +4077,7 @@ function useSkill(id, tier, targets, item) {
   if (isSwarm) flashSuffix = CHAR_HOOKS.oberon.applySwarm(engine, p) || flashSuffix;
   // ---------- คาซามะ ไดสุเกะ (characters/daisuke.js) ----------
   if (isDaisukePick) flashSuffix = CHAR_HOOKS.daisuke.applyInstantSkill(engine, p, tier) || flashSuffix;
+  if (isYagurumaPick) flashSuffix = CHAR_HOOKS.yaguruma.applyInstantSkill(engine, p, tier) || flashSuffix;
   // ---------- โทโนะ ชิกิ: มีดพับประจำตระกูล — เลือกระดับสกิลติดตัว 1-5 (กดเปลี่ยนกี่ครั้งก็ได้) (characters/tohno.js) ----------
   if (isTohnoPick) {
     flashSuffix = CHAR_HOOKS.tohno.applyBasicPick(engine, p, item);
@@ -5373,6 +5411,7 @@ function doAttack(byId, targetId) {
   if (CHAR_HOOKS.producer_lumi.tryAttackDodge(engine, attacker, target)) return;
   // Zect (characters/daisuke.js): ระหว่าง Clock Up หลบการโจมตีได้ 25%
   if (CHAR_HOOKS.daisuke.tryAttackDodge(engine, attacker, target)) return;
+  if (CHAR_HOOKS.yaguruma.tryAttackDodge(engine, attacker, target)) return;
   // เท็นโนจิ โคทาโร่ (rewrite): ความจุพลังชีวิตที่หายไปทุก 1 หน่วย = หลบ +5% (สูงสุด 30%)
   if (CHAR_HOOKS.kotarou.tryAttackDodge(engine, attacker, target)) return;
   // เอจิ สกิลติดตัว 1 (ผู้เล่นอันดับ 2): ผู้ชนะไปตีคนอื่นที่ไม่ใช่เอจิ -> 25% ขัดจังหวะแล้วสวนคืน
@@ -5427,7 +5466,8 @@ function doAttack(byId, targetId) {
   if (yunaLongingAtk > 0) dmg += yunaLongingAtk;
   const yunaBeatBark = attacker.characterId !== "ultraman_trigger" && yunaBeatBarkActive();
   if (yunaBeatBark) dmg += 1;
-  const weakAtk = statusAmtOf(attacker, "weak") + CHAR_HOOKS.the_supplicant.statusAmtBonus(attacker, "weak");
+  //  "พิษร้าย" หักพลังโจมตีเหมือน "อ่อนแอ" — ซ้อนกันได้ จึงรวมกันก่อนหักทีเดียว
+  const weakAtk = statusAmtOf(attacker, "weak") + CHAR_HOOKS.the_supplicant.statusAmtBonus(attacker, "weak") + poisonAtkPenalty(attacker);
   if (weakAtk > 0) dmg = Math.max(0, dmg - weakAtk);
   // ความตายที่โรยรา (ชิกิ patch 2.0.8): เส้นชีวิตของเป้าหมายแปรเป็นดาเมจเสริม +1 ต่อเส้น
   //  แต่พลังโจมตีรวมฝั่งผู้โจมตีไม่เกิน 5 หน่วยต่อการโจมตี
@@ -5503,6 +5543,7 @@ function doAttack(byId, targetId) {
   // คาซามะ ไดสุเกะ Rider Shooting (characters/daisuke.js): ล้างเกราะทิ้งก่อนหมัดจะลง
   //  ต้องอยู่ก่อน armorBefore ด้านล่าง ไม่งั้นเกราะที่ล้างทิ้งจะถูกนับเป็น "เกราะที่เสียจากหมัด" (Absorb shield จะดูดกลับฟรี)
   CHAR_HOOKS.daisuke.stripArmorOnAttack(engine, attacker, target);
+  CHAR_HOOKS.yaguruma.stripResistOnAttack(engine, attacker, target); // Rider Sting: เจาะ "ต้านสถานะ" ก่อน ดีบัฟที่ตามมาจึงติด
   const hpBefore = target.hp;
   const armorBefore = target.armor;
   const shieldBefore = target.shield;
@@ -5552,6 +5593,7 @@ function doAttack(byId, targetId) {
   // อิปโป (characters/ippo.js): Uper Cut ลงผลตามว่าเป้าหมาย "มีเกราะก่อนโดนหมัดนี้" หรือไม่
   const ippoUpperFx = CHAR_HOOKS.ippo.resolveUpper(engine, attacker, target, ippoArmorBefore);
   CHAR_HOOKS.daisuke.consumeRiderOnAttack(engine, attacker); // ไรเดอร์ชูตใช้ได้ครั้งเดียว — ธงหายไม่ว่ามีเกราะให้ล้างหรือไม่
+  CHAR_HOOKS.yaguruma.resolveStingOnAttack(engine, attacker, target); // ฝังพิษร้าย + ผุพัง แล้วใช้โควตาหมด
   // โปรดิวเซอร์: Mishiro 346 ขโมยของ · Tsubasa 283 ฟื้นแต้มสกิล · All star 765 จองหมัดที่ 2
   const lumiAtkFx = CHAR_HOOKS.producer_lumi.onAttackLanded(engine, attacker, target);
   // ผู้วิงวอน (characters/the_supplicant.js): ตราพิพากษาเดินหน้า — "ถูกโจมตี" และ "เป็นฝ่ายโจมตี" นับแยกกัน
@@ -6706,6 +6748,9 @@ const engine = {
   applyOverloadOverdrawPenalty,
   applyBuff: rawApplyBuff,
   applyDebuff,
+  applyPoison,     // "พิษร้าย" (สถานะ Universal): ดาเมจ 1/เทิร์น + พลังโจมตี -1 (เคารพต้านสถานะผิดปกติ)
+  tickPoison,
+  poisonAtkPenalty, // พลังโจมตีที่หายไปจากพิษ — computeAttackBase อ่านคู่กับ "อ่อนแอ"
   applyCurse,      // "คำสาป" (สถานะ Universal): จุดเดียวที่ทุกตัวละครใช้ใส่สถานะนี้ (เคารพต้านสถานะผิดปกติ)
   tickCurseOnSkill,
   MEND_MAX_TURNS,

@@ -426,6 +426,7 @@ module.exports = {
     engine.log(`🚨 ระหว่างการไล่ล่า ผู้เล่นคนอื่นถูกแช่ไว้ (ไพ่แตกทันที กดอะไรไม่ได้ แต่ไม่รับความเสียหาย) และไม่มีเทิร์นโจมตี`);
     // คาซามะ ไดสุเกะ: การไล่ล่าตัดจังหวะ Clock Up ทิ้ง (การแช่สองชั้นซ้อนกันไม่ได้)
     engine.CHAR_HOOKS.daisuke.cancelClockUpForChase(engine);
+    engine.CHAR_HOOKS.yaguruma.cancelClockUpForChase(engine);
     this.freezeOutsiders(engine, conner);
     // ตอบเองระหว่างเฟสจั่วไพ่ = พักเฟสเล่นวีดีโอทันทีแล้วกลับมาจั่วต่อด้วยเวลาที่เหลือ
     // ตอบตอนหมดเวลา (resolveRound เรียกแทน) = ปล่อยให้ afterResolve กวาดคิววีดีโอไปเล่นตามลำดับปกติ

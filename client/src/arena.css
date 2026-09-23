@@ -833,3 +833,45 @@
 @media (prefers-reduced-motion: reduce) {
   .clockup-freeze { animation: none; }
 }
+
+/* ============================================================
+   FULL FORCE — ไรเดอร์ Zect สองคนขึ้นไป Clock Up พร้อมกัน
+   เส้นความเร็วพุ่งเข้าหากลางจอรอบขอบ บอกว่า "โลกกำลังวิ่งเร็วกว่าปกติ"
+   เจาะกลางจอไว้ด้วย mask เพื่อไม่ให้บังกระดาน — ขยับด้วย transform/opacity เท่านั้น
+   ============================================================ */
+.full-force-speed {
+  position: absolute;
+  inset: 0;
+  z-index: 34;
+  pointer-events: none;
+  overflow: hidden;
+}
+.full-force-speed::before,
+.full-force-speed::after {
+  content: "";
+  position: absolute;
+  top: -25%;
+  left: -25%;
+  width: 150%;
+  height: 150%;
+  will-change: transform, opacity;
+  /* เส้นวิ่งเป็นริ้วเอียง — ใช้ repeating-linear-gradient ชั้นเดียว แล้วเจาะกลางด้วย mask */
+  background: repeating-linear-gradient(
+    115deg,
+    transparent 0 14px,
+    rgba(160, 220, 255, 0.5) 14px 16px,
+    transparent 16px 34px
+  );
+  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, transparent 0%, transparent 42%, #000 78%);
+  mask-image: radial-gradient(ellipse at 50% 50%, transparent 0%, transparent 42%, #000 78%);
+}
+.full-force-speed::before { animation: fullForceRush 0.85s linear infinite; opacity: 0.75; }
+.full-force-speed::after  { animation: fullForceRush 1.35s linear infinite reverse; opacity: 0.45; }
+@keyframes fullForceRush {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-34px, 73px, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .full-force-speed::before,
+  .full-force-speed::after { animation: none; }
+}

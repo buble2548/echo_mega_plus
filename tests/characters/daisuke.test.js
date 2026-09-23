@@ -104,7 +104,7 @@ test('PUT ON: ฟื้นพลังชีวิต 2 ทุก 3 เทิร
   daisuke.toggleCass(engine, D);
   engine.setRoundNumber(7);
   daisuke.onRoundStartTick(engine, D);
-  assert.equal(D.daisukePutOnTurns, 0, 'อยู่ CAST OFF ตัวนับต้องเป็น 0');
+  assert.equal(D.zectPutOnTurns, 0, 'อยู่ CAST OFF ตัวนับต้องเป็น 0');
 });
 
 // ============================================================
@@ -149,7 +149,10 @@ test('Clock Up: กดเปิดไพ่แล้วเวลาเดิน�
   daisuke.toggleCass(engine, D);
   daisuke.setClockUp(engine, D, true);
   assert.equal(daisuke.onHostLockIn(engine, A), false, 'คนอื่นเปิดไพ่ไม่นับ');
-  assert.equal(daisuke.onHostLockIn(engine, D), true, 'เจ้าของท่าเปิดไพ่ = ต้องตั้งเวลาใหม่');
+  D.locked = true; // ของจริง lock() ตั้ง p.locked ก่อนเรียก hook นี้
+  assert.equal(daisuke.onHostLockIn(engine, D), true, 'เจ้าของท่าเปิดไพ่ครบทุกคน = ต้องตั้งเวลาใหม่');
+  // และพอเจ้าของท่าเปิดไพ่แล้ว การแช่ต้องคลายทันทีในเทิร์นนั้น
+  assert.equal(daisuke.actionBlocked(engine, A), false, 'เปิดไพ่แล้วคนอื่นต้องขยับได้ทันที');
   assert.equal(daisuke.CLOCK_UP_CARD_TIME, 10);
 });
 
@@ -197,7 +200,7 @@ test('Rider Shooting: อาร์มแล้วกดซ้ำไม่ได�
   assert.equal(daisuke.riderArmed(D), true);
   assert.equal(daisuke.canUseSkill(engine, D, 'ultimate'), false, 'อาร์มค้างอยู่กดซ้ำไม่ได้');
   // CAST OFF 1 + ไรเดอร์ชูต 1
-  assert.equal(daisuke.damageBonus(engine, D, null, {}), daisuke.CASS_OFF_ATK + daisuke.RIDER_COST_ATK);
+  assert.equal(daisuke.damageBonus(engine, D, null, {}), daisuke.CASS_OFF_ATK + daisuke.RIDER_ATK);
 });
 
 test('Rider Shooting: ล้างเกราะ 1 ก่อนดาเมจ · เกราะที่เหลือยังกันได้ตามปกติ', () => {

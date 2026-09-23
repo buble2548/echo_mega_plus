@@ -44,6 +44,7 @@ const cayenne = require("./cayenne");
 const daichi = require("./daichi");
 const kotarou = require("./kotarou");
 const daisuke = require("./daisuke");
+const yaguruma = require("./yaguruma");
 
 const CHARACTER_MODULES = [
   tohno,
@@ -86,6 +87,7 @@ const CHARACTER_MODULES = [
   daichi,
   kotarou,
   daisuke,
+  yaguruma,
 ];
 
 const CHAR_HOOKS = {};
