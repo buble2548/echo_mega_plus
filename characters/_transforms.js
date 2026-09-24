@@ -16,7 +16,7 @@ const lumiChar = require("./producer_lumi"); // โปรดิวเซอร�
 const muimiImg = require("./muimi").IMG;   // มุยมิ: ใช้ path รูปจาก hook กลาง
 const cayChar = require("./cayenne");
 const daichiChar = require("./daichi");
-const kotarouChar = require("./kotarou"); // เท็นโนจิ โคทาโร่: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร     // ไดจิ โอโซระ: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร      // คาเยนน์ ซูซูชิโระ: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร
+// ไดจิ โอโซระ / คาเยนน์ ซูเรียโร่: path รูป/วีดีโอชุดเดียวกับไฟล์ตัวละคร
 const daisukeChar = require("./daisuke");
 const yagurumaChar = require("./yaguruma");
 const kagamiChar = require("./kagami");
@@ -70,12 +70,6 @@ module.exports = function buildTransforms(img) {
     // Rider Slash เล่นคนละคลิปต่อจังหวะ — ทั้งคู่ขึ้นก่อนการ์ดสรุปความเสียหายของจังหวะนั้น
     tsurugiSlashFirst: { img: tsurugiChar.IMG.skill3, video: tsurugiChar.VIDEO.slashFirst, title: "RIDER SLASH", label: "จังหวะแรก", seconds: 8, music: null, afterReveal: false },
     tsurugiSlashFinal: { img: tsurugiChar.IMG.skill3, video: tsurugiChar.VIDEO.slashFinal, title: "RIDER SLASH", label: "จังหวะสุดท้าย", seconds: 4, music: null, afterReveal: false },
-    // ---------- เท็นโนจิ โคทาโร่ (patch 4.1 new) ----------
-    //  ทุกคลิปคิวเองจากโค้ด จึงต้อง afterReveal: false (ไม่งั้นลูปกลางใน afterResolve() จะไล่หาสถานะชื่อเดียวกับคีย์แล้วเล่นซ้ำ)
-    //  เพลง kotarou_theme มาจาก activeMusic ของตัวละคร (คลอตลอดเทิร์นที่ย้อนมา) ไม่ใช่ฟิลด์ music ตรงนี้
-    kotarouRewind:       { img: kotarouChar.IMG.skill3, video: kotarouChar.VIDEO.rewind,        title: "กลับไปแก้ไข", label: "เขียนทับ/เริ่มใหม่", seconds: 16, music: null, afterReveal: false },
-    kotarouOverdrive:    { img: kotarouChar.IMG.skill3, video: kotarouChar.VIDEO.overdrive,     title: "ทุ่มสุดตัว",   label: "เขียนทับ/เริ่มใหม่", seconds: 3,  music: null, afterReveal: false, noIntro: true },
-    kotarouOverdriveLast:{ img: kotarouChar.IMG.skill3, video: kotarouChar.VIDEO.overdriveLast, title: "ทุ่มสุดตัว",   label: "ครั้งสุดท้าย",       seconds: 4,  music: null, afterReveal: false, noIntro: true },
     // มุยมิ: ครั้งแรกเล่นคลิปเต็ม 23.803 วิ ครั้งถัดไปเล่นคลิปสั้น 11.078 วิ
     // ปัดขึ้นเผื่อเวลาตัดฉากเพื่อให้วิดีโอเล่นจบครบ และ queueCutscene ทำให้เล่นทุกครั้งที่กด
     muimiUltimateFull:  { img: muimiImg.skill3, video: "/characters/muimi/muimi_skill3.mp4",       title: "ดาบสะบั้นหอคอยสวรรค์", label: "ปล่อยท่าไม้ตาย", seconds: 24, music: "muimi", afterReveal: false },
@@ -219,21 +213,6 @@ module.exports = function buildTransforms(img) {
     // patch 2.2.5: หอกผู้พิชิต — ดาบทั้ง 2 อันรวมเป็นหนึ่งหลังกันตายทำงานแล้ว
     takutoLance: { img: "/characters/takuto/upadate/tauburn_un.jpg", video: "/characters/takuto/upadate2/takuto_lance.mp4", title: "หอกผู้พิชิต", label: "เอฟเฟกต์พิเศษ", seconds: 2, music: null, afterReveal: false },
     takutoLanceHit: { img: "/characters/takuto/upadate/tauburn_un.jpg", video: "/characters/takuto/upadate2/takuto_lance_hit.mp4", title: "หอกผู้พิชิต", label: "ใช้สกิล", seconds: 13, music: null, afterReveal: false },
-    // ---------- โอเบรอน (patch 1.7) ----------
-    // lai (rework 3): ท่ากลางวันถูกแทนด้วย "จุดจบของความฝัน" ที่ไม่มีคัตซีน — พักคิวไว้ก่อน ยังไม่มีใครเรียก
-    // (ฉากหลัง "ราตรีกลืนกิน" ไม่ผูกกับท่าไม้ตาย — ทำงานเองทุกครั้งที่เข้ากลางคืนขณะมีโอเบรอนอยู่ในเกม)
-    lai:       { img: "/characters/oberon/oberon_skill3_morning.webp", video: "/characters/oberon/oberon_final_morning.mp4", title: "LAI RHYME GOODFELLOW", label: "ปล่อยท่าไม้ตาย", seconds: 14, music: null, afterReveal: true },
-    // oberonNightmare (rework 3): คลิปเดิมของ Lie Like Vortigern ย้ายมาเป็นของ "ฝันร้ายยามค่ำคืน" (สกิลรองกลางคืน) ตามผลที่ย้ายไป
-    //  ↑ ชื่อ/รูป/ป้ายจึงต้องเป็นของ "สกิลรอง" — ไม่งั้นกดสกิลรองแล้วจอขึ้นชื่อท่าไม้ตาย (บักเดิม)
-    //  เล่นก่อน แล้วต่อด้วย oberonChange (ราตรีกลืนกิน) — ดู applyNightmare ใน characters/oberon.js
-    oberonNightmare: { img: "/characters/oberon/oberon_skill2_night.jpg", video: "/characters/oberon/oberon_final_night.mp4", title: "ฝันร้ายยามค่ำคืน", label: "สกิลรองยามราตรี", seconds: 17, music: null, afterReveal: false },
-    // oberonSwarm (rework 3): ท่าไม้ตายกลางคืนใหม่ — กลายร่างเป็นฝูงแมลง เล่นวีดีโอทันทีที่กด
-    oberonSwarm: { img: "/characters/oberon/oberon_skill3_night.jpg", video: "/characters/oberon/oberon_skill3.2_update.mp4", title: "LIE LIKE VORTIGERN", label: "ปล่อยท่าไม้ตาย", seconds: 17, music: null, afterReveal: false },
-    // oberonChange: ต่อจากคลิปของฝันร้ายยามค่ำคืน — ราตรีกลืนกิน แล้วฉากหลังกลางคืนกลายเป็น oberon_background.mp4
-    oberonChange: { img: img.OBERON_NIGHT_IMG, video: "/characters/oberon/oberon_changefill.mp4", title: "ราตรีกลืนกิน", label: "ราตรีถูกครอบงำ", seconds: 17, music: null, afterReveal: false },
-    // oberonNight: สลับร่างตอนเข้ากลางคืน (วีดีโอ 5 วิ) | oberonDay: กลับร่างกลางวัน = แจ้งเตือนปกติ ไม่มีวีดีโอ
-    oberonNight: { img: img.OBERON_NIGHT_IMG, video: "/characters/oberon/morning_tonight.mp4", title: "ราชาแห่งการหลอกลวง", label: "สลับร่างยามราตรี", seconds: 6, music: null, afterReveal: false },
-    oberonDay:   { img: img.OBERON_MORNING_IMG, video: null, title: "ราชาแห่งภูติ", label: "กลับคืนร่างกลางวัน", seconds: 0, music: null, afterReveal: false },
     // appleguyDodge: สกิลติดตัว Apple guy — หลบการถูกเลือกโจมตีสำเร็จระหว่างชิวๆครับน้องๆ
     //  (วีดีโอ 13 วิ เล่นซ้ำได้เรื่อยๆ แต่ขึ้นเฉพาะตอนอัตราหลบ 50%/25% — จบวีดีโอค่อยขึ้นสรุปผลการตี)
     appleguyDodge: { img: "/characters/appleguy/appleguy.jpg", video: "/characters/appleguy/appleguy_final.mp4", title: "ชิวๆครับน้องๆ", label: "หลบหลีกสบายใจ", seconds: 14, music: null, afterReveal: false },

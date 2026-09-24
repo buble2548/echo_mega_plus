@@ -77,11 +77,9 @@ function Moth({ scale = 1 }) {
 export function CycleScene({ c }) {
   const night = c.cycle === "night";
   const accent = night ? "#aab4ff" : "#f6ad3c";
-  const title = night ? (c.oberon ? "ราตรีกลืนกิน" : "ราตรีมาเยือน") : "รุ่งอรุณมาถึง";
+  const title = night ? "ราตรีมาเยือน" : "รุ่งอรุณมาถึง";
   const sub = night
-    ? c.oberon
-      ? "ราชาแห่งการหลอกลวงครอบงำราตรี — จนกว่าฟ้าจะสาง"
-      : "สุ่มสกิลพื้นฐาน/สกิลรองแพงขึ้น +1 ทุกเทิร์น"
+    ? "สุ่มสกิลพื้นฐาน/สกิลรองแพงขึ้น +1 ทุกเทิร์น"
     : "จบเทิร์นได้แต้มสกิลเพิ่ม +1";
 
   const flock = useMemo(() => {

@@ -6,7 +6,6 @@
 
 const tohno = require("./tohno");
 const temari = require("./temari");
-const oberon = require("./oberon");
 const takuto = require("./takuto");
 const appleguy = require("./appleguy");
 const nanaya = require("./nanaya");
@@ -42,7 +41,6 @@ const producer_lumi = require("./producer_lumi");
 const muimi = require("./muimi");
 const cayenne = require("./cayenne");
 const daichi = require("./daichi");
-const kotarou = require("./kotarou");
 const daisuke = require("./daisuke");
 const yaguruma = require("./yaguruma");
 const kagami = require("./kagami");
@@ -51,7 +49,6 @@ const tsurugi = require("./tsurugi");
 const CHARACTER_MODULES = [
   tohno,
   temari,
-  oberon,
   takuto,
   appleguy,
   nanaya,
@@ -87,7 +84,6 @@ const CHARACTER_MODULES = [
   producer_lumi,
   cayenne,
   daichi,
-  kotarou,
   daisuke,
   yaguruma,
   kagami,

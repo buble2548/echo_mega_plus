@@ -2,7 +2,7 @@
 // ต้องตรงกับ NO_TICK_STATUS ใน characters/_universal_status.js ฝั่งเซิร์ฟเวอร์เสมอ
 // (มีเทสต์ tests/permanentStatus.test.js คอยกันไม่ให้สองฝั่งหลุดจากกัน)
 export const PERMANENT_STATUS_KEYS = new Set([
-  "brianBoost", "brianCar", "cassius", "chill", "dawn",
+  "brianBoost", "brianCar", "cassius", "chill",
   "deathline", "doomCrucible", "doomDrain", "doomExplode", "doomLockon",
   "emeraude", "empower", "escanorFlare", "escanorFlareNoon", "escanorLastStand",
   "escanorMorning", "escanorNight", "escanorNoon", "escanorPunch", "escanorRhitta",

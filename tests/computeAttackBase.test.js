@@ -32,13 +32,6 @@ test('baseline: plain attacker vs plain target = 1', () => {
 });
 
 // ---------- simple flat-status terms (Batch A candidates) ----------
-test('veilAtk (oberon "veil" status): +1, applies to ANY carrier (Oberon grants it to the whole team, not just self)', () => {
-  assert.equal(base({ characterId: 'oberon', statuses: { veil: 2 } }), 1, 'oberon carrying veil: +1 veil, -1 oberonZero = net 0 on top of base 1');
-  assert.equal(base({ characterId: 'tohno', statuses: { veil: 2 } }), 2, 'non-oberon carrying veil still gets +1');
-});
-test('oberonZero: oberon attacker gets -1 base (0 total, floored elsewhere not here)', () => {
-  assert.equal(base({ characterId: 'oberon' }), 0);
-});
 test('empowerAtk (bard Rejuvenation): +1', () => {
   assert.equal(base({ statuses: { empower: 1 } }), 2);
 });

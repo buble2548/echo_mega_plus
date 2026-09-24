@@ -37,7 +37,6 @@ const FILES = {
   ginga: "/characters/hikaru/ginga_song.mp3",
   gingastrium: "/characters/hikaru/hikaru_update/ginga_theme2.mp3", // เพลงระหว่างร่าง Ginga Strium (ท่าไม้ตาย patch 2.1.3) — แทนที่เพลง ginga ที่เล่นค้างจากสกิลรอง
   temari_final_theme: "/characters/temari/temari_final_theme.mp3", // เพลง ANATA WAAAAAAAA (เล่นถึงตอนเปิดไพ่)
-  oberon: "/characters/oberon/orberon theme.mp3",
   // ไรเดอร์ Zect (คาซามะ/โซ) สองคนขึ้นไป Clock Up พร้อมกัน — เพลงสนามเปลี่ยนทั้งสนาม
   full_force: "/theme_song/FULL FORCE.mp3",
   // ยูนะ ไอดอลประจำสนาม (patch 2.2.6): เพลงล็อกทั้งสนามตลอด 5 เทิร์นที่เอฟเฟกต์ทำงาน
@@ -139,7 +138,6 @@ const FILES = {
   cayenne_theme: "/characters/cayenne/cayenne_theme.m4a", // เพลงประจำร่างเกพาร์ด (ขึ้นหลังวีดีโอแปลงร่าง)
   cayenne_gun: "/characters/cayenne/gun_sound.mp3",       // เสียงโจมตีปกติในร่างเกพาร์ด
   daichi_theme: "/characters/daichi/daichi_theme.mp3",    // ไดจิ โอโซระ: เพลงระหว่าง unite
-  kotarou_theme: "/characters/kotarou/kotarou_theme.mp3", // เท็นโนจิ โคทาโร่: เพลงในเทิร์นที่ถูกย้อนกลับมา
   // ---------- SE.RA.PH Moon Cell (โหมดผจญภัย) — ดู SERAPH_SCENES.md §6 ----------
   //  แต่ละเพลงจำตำแหน่งของตัวเอง · วันดวลวันที่ 7 ใช้ seq ของรอบเพื่อเริ่มจากต้น
   sc_day: "/mooncell/theme/day1-4.mp3",

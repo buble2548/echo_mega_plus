@@ -10,7 +10,7 @@ const desktopAt = lines.findIndex((l) => l.includes("จอคอม/แท็�
 // Game.jsx เรนเดอร์กระดานสองชุด (มือถือ < 768px แล้วค่อยจอคอม) โมดัลที่เสียบไว้ชุดเดียว
 // จะหายไปเงียบๆ อีกชุดหนึ่ง — เคยพลาดมาแล้วทั้ง ShopHerald และหน้าต่างสกิลของโคทาโร่
 // (สาเหตุเดิม: แก้ไฟล์ด้วยการ match ข้อความที่ย่อหน้าต่างกัน แล้วไปลงบล็อกผิด)
-const MODALS = ["LumiIdolModal", "BrianKeyModal", "KotarouModal", "ConnorPredictModal", "YuiSongModal"];
+const MODALS = ["LumiIdolModal", "BrianKeyModal", "ConnorPredictModal", "YuiSongModal"];
 
 test("โมดัลเลือกของทุกตัวถูกเสียบครบทั้งกระดานมือถือและกระดานจอคอม", () => {
   assert.ok(desktopAt > 0, "หาจุดเริ่มกระดานจอคอมใน Game.jsx ไม่เจอ");

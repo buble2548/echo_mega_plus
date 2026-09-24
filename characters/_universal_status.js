@@ -46,8 +46,6 @@ const BUFF_KEYS = [
   "evade",     // หลบหลีก
   "spellflow", // กระแสเวท (ค่าสกิลถูกลง)
   "freecast",  // การ์ดราชินี
-  "veil",      // ม่านแห่งราตรี
-  "vortarmor", // เกราะราตรี
   "absorb",    // Absorb
   "awaken",    // ตื่นขึ้น
   "golden",    // 777 (เวลาทอง)
@@ -56,7 +54,7 @@ const BUFF_KEYS = [
 const BUFF_LABEL = {
   resist: "ต้านสถานะผิดปกติ", guard: "คุ้มครอง", fortune: "โชคลาภ", mend: "เยียวยา",
   might: "เสริมพลัง", empower: "เสริมพลัง", evade: "หลบหลีก", spellflow: "กระแสเวท",
-  freecast: "การ์ดราชินี", veil: "ม่านแห่งราตรี", vortarmor: "เกราะราตรี", absorb: "Absorb",
+  freecast: "การ์ดราชินี", absorb: "Absorb",
   awaken: "ตื่นขึ้น", golden: "777", promo: "เปิดแต้ม", chill: "ชิวๆ", fiber: "เน็ตแรง", tiger: "เสือนอนกิน",
 };
 // ตัวนับลำดับ — เดินหน้าอย่างเดียวทั้งเกม จึงเทียบข้ามผู้เล่นได้
@@ -161,7 +159,7 @@ const BASIC_DEBUFF_CLEAR = ["discord", "sleep", "stun", "nodraw", "noskill", "we
   "energy",       // เครื่องดื่มชูกำลัง: เสียพลัง 1 หน่วยต่อเทิร์น
   "harukaPunish"]; // จงไปสู่สุขติ (ฮารุกะ): เป้าหมายที่เลือดไหล >= 3 โดนระเบิดเลือดไหลใส่
 // ดีบัฟที่ยังไม่เกิดผลทันที (ยามฟ้าสาง / เส้นชีวิต): โดนล้าง = ลดลงทีละ 1 หน่วย ไม่หายทั้งหมด
-const SOFT_DEBUFF_STEP = ["dawn", "deathline", "curse", "shock"];
+const SOFT_DEBUFF_STEP = ["deathline", "curse", "shock"];
 
 function cleanseDebuffs(p) {
   let purged = 0;
@@ -230,7 +228,7 @@ function applyShock(p, turns) {
 }
 
 // ต้นเทิร์น — ต้องเรียก "ก่อน" บล็อกเช็คสตั้นของ startRound() ไม่งั้นสตั้นจะเลื่อนไปมีผลเทิร์นถัดไป
-//  (แพทเทิร์นเดียวกับ ippo.applyPendingStun / oberon.applyPendingStun)
+//  (แพทเทิร์นเดียวกับ ippo.applyPendingStun)
 function tickShock(engine, p) {
   if (!p || !p.alive || !(((p.statuses && p.statuses.shock) || 0) > 0)) return false;
   if (Math.random() * 100 >= SHOCK_STUN_CHANCE) return false;
@@ -488,7 +486,7 @@ function tickEvadeStacks(engine, p) {
 //  ใช้ร่วมกับแฝดที่ "พักอยู่" ของฮิซาคาว่า (characters/hisakawa_sister.js) เพื่อให้กติกาการนับเวลา
 //  ของแฝดสองคนตรงกัน — เดิมฝั่งที่พักลดเทิร์นทุก key ทำให้มาร์กถาวรสลายไปเองระหว่างพัก
 const NO_TICK_STATUS = new Set([
-  "dawn", "chill", "hburn", "hbleed", "melody", "star", "emeraude", "saphir", "lance", "takutoThirdAtk",
+  "chill", "hburn", "hbleed", "melody", "star", "emeraude", "saphir", "lance", "takutoThirdAtk",
   "doomCrucible", "doomDrain", "doomExplode", "doomLockon", "fortune", "linked", "rsHopper",
   "cassius", "yaak", "spear", "ohger", "evade", "empower", "miyakoHeal", "miyakoCombo", "miyakoUlt",
   "kotoneLove", "kotoneReady", "kready", "deathline", "tepeuCook", "tepeuPonder",
